@@ -18,6 +18,10 @@ class Tool:
     # None: runs without asking. A string or a function of the arguments: the action to confirm out
     # loud first, in words the user hears ("shut down the computer").
     confirm: str | Callable | None = None
+    # Slow tools (the network, Google) are announced before they run, with the phrase named by
+    # `wait` (a key of lang.PHRASES), so the user is not left in silence.
+    slow: bool = False
+    wait: str = "wait"
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -39,9 +43,10 @@ class Tool:
 REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None):
+def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None,
+         slow: bool = False, wait: str = "wait"):
     def register(fn: Callable) -> Callable:
-        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm)
+        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm, slow, wait)
         return fn
     return register
 

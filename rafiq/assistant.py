@@ -17,13 +17,13 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
-from .tts import Speaker
+from .tts import Speaker, SpeechStream
 
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
@@ -87,6 +87,7 @@ class Assistant:
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
         self.state = "starting"
+        self.speech: SpeechStream | None = None       # the answer being spoken while it is written
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
         self.spotter = kws.Spotter.load()
@@ -130,7 +131,8 @@ class Assistant:
 
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
-        heard = self.stt.transcribe(audio)
+        with timing.Timer("stt", model=self.stt.size):
+            heard = self.stt.transcribe(audio)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
@@ -146,6 +148,8 @@ class Assistant:
         panel's yes and no buttons answer too."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
+        if self.speech:                      # finish what was being said before asking
+            self.speech.wait()
         self.events.publish("confirm", {"action": action, "tag": tag})
         for _attempt in range(2):
             self.say(lang.phrase("confirm", tag, action=action), tag)
@@ -174,15 +178,21 @@ class Assistant:
         return False
 
     def respond(self, text: str, tag: str) -> None:
-        """Think about one request and say the answer."""
+        """Think about one request and say the answer, starting with its first sentence while the
+        rest is still being written."""
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
         self.tag = tag
         self.ctx.tag = tag
         self.set_state("thinking")
-        answer = self.brain.think(text, tag, self.ctx)
-        self.say(answer, lang.script_language(answer, tag))
+        self.speech = self.speaker.stream()
+        try:
+            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)
+            self.events.publish("said", {"text": answer, "tag": lang.script_language(answer, tag)})
+        finally:
+            self.speech.close()
+            self.speech = None
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
     # ------------------------------------------------------------------ jobs from other threads

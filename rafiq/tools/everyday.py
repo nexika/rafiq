@@ -104,7 +104,7 @@ def _get_json(url: str, params: dict) -> dict:
 
 @tool("weather", "Current weather and the forecast for the next days.",
       {"city": {"type": "string", "description": "city name; empty for the user's own city"},
-       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}})
+       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}}, slow=True, wait="wait_weather")
 def weather(city: str = "", days: int = 2, ctx=None, get=_get_json) -> str:
     city = city or (ctx.cfg.get("place", {}).get("city") if ctx else "") or ""
     if not city:

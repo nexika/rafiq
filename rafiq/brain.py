@@ -2,6 +2,9 @@
 
 Both backends get the same system prompt and the same tools. A turn loops: the model asks for tools,
 Rafiq runs them (asking the user first for any that change something), the model answers in words.
+
+With on_speech, the answer is handed over sentence by sentence while it is written (Claude streams it),
+and a slow tool is announced before it runs, so the user hears something as early as possible.
 """
 
 from __future__ import annotations
@@ -13,7 +16,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
+from . import timing
 from .tools import Tool, claude_schemas, ollama_schemas
+from .tts import Sentences
 
 MAX_STEPS = 6
 HISTORY_TURNS = 10
@@ -66,6 +71,41 @@ class BrainError(Exception):
     pass
 
 
+class Voice:
+    """What one request says out loud, through on_speech(text, tag). The voice's language is read from
+    the first sentence of the answer and kept, so one answer is spoken in one voice."""
+
+    def __init__(self, on_speech: Callable[[str, str], None] | None, tag: str):
+        self.on_speech, self.tag = on_speech, tag
+        self.sentences = Sentences()
+        self.voice_tag: str | None = None
+        self.said_anything = False
+
+    def text(self, piece: str) -> None:
+        for sentence in self.sentences.push(piece):
+            self._say(sentence)
+
+    def end(self) -> None:
+        """The text so far is complete (before a tool runs, or at the end of the answer)."""
+        rest = self.sentences.flush()
+        if rest:
+            self._say(rest)
+
+    def wait(self, key: str) -> None:
+        """Announce a slow tool, unless something was already said for this request."""
+        if self.on_speech and not self.said_anything:
+            self.said_anything = True
+            self.on_speech(lang_mod.phrase(key, self.tag), self.tag)
+
+    def _say(self, sentence: str) -> None:
+        if self.on_speech is None:
+            return
+        if self.voice_tag is None:
+            self.voice_tag = lang_mod.script_language(sentence, self.tag)
+        self.said_anything = True
+        self.on_speech(sentence, self.voice_tag)
+
+
 def system_prompt(cfg: dict) -> str:
     """The same text for every request, whatever the language, so a local model reuses its cached
     reading of it (and of the tools) instead of reading it again each time."""
@@ -100,25 +140,34 @@ class Brain:
             return ["ollama"]
         return (["claude"] if self.cfg.get("anthropic_api_key") else []) + ["ollama"]
 
-    def think(self, text: str, tag: str, ctx=None) -> str:
-        """Answer one thing the user said. Tries Claude, then Ollama in auto mode."""
+    def think(self, text: str, tag: str, ctx=None, on_speech: Callable[[str, str], None] | None = None) -> str:
+        """Answer one thing the user said. Tries Claude, then Ollama in auto mode. With on_speech, every
+        word of the answer also goes to on_speech, sentence by sentence, as soon as it is known."""
         history = self.memory.recent(self.clock(), tag)
         errors = []
+        voice = Voice(on_speech, tag)
         for backend in self.backends():
             try:
                 run = self._claude_turn if backend == "claude" else self._ollama_turn
-                answer = run(history, text, tag, ctx)
+                answer = run(history, text, tag, ctx, voice)
+                voice.end()
                 self.memory.add(text, answer, self.clock(), tag)
                 self.on_event("brain", {"backend": backend})
                 return answer
             except BrainError as exc:
                 errors.append(f"{backend}: {exc}")
+                if voice.said_anything:      # the next backend would start the answer over
+                    break
         self.on_event("error", {"brain": errors})
-        return lang_mod.phrase("brain_down", tag)
+        voice.end()
+        down = lang_mod.phrase("brain_down", tag)
+        voice.text(down)
+        voice.end()
+        return down
 
     # ------------------------------------------------------------------ tools
 
-    def _run_tool(self, name: str, args: dict, tag: str, ctx) -> str:
+    def _run_tool(self, name: str, args: dict, tag: str, ctx, voice: Voice | None = None) -> str:
         tool = self.tools.get(name)
         if tool is None:
             return f"error: there is no tool named {name}"
@@ -126,8 +175,11 @@ class Brain:
         if action and not self.confirm(action, tag):
             self.on_event("tool", {"name": name, "args": args, "result": "declined"})
             return "The user said no; it was not done. Tell them briefly that you didn't do it."
+        if tool.slow and voice is not None:
+            voice.wait(tool.wait)
         try:
-            result = tool.run(args, ctx)
+            with timing.Timer("tool", name=name):
+                result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
         self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
@@ -159,7 +211,9 @@ class Brain:
             self._claude = anthropic.Anthropic(api_key=self.cfg["anthropic_api_key"], max_retries=1, timeout=30)
         return self._claude
 
-    def _claude_turn(self, history: list[Turn], text: str, tag: str, ctx) -> str:
+    def _claude_turn(self, history: list[Turn], text: str, tag: str, ctx, voice: Voice) -> str:
+        """Streamed: each sentence goes to the voice while the next is still being written. Text the
+        model writes before a tool call ("let me check") is said too, before the tool runs."""
         import anthropic
 
         messages = ([{"role": t.role, "content": t.content} for t in history]
@@ -167,23 +221,30 @@ class Brain:
         schemas = claude_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:
-                resp = self._claude_client().messages.create(
-                    model=self.cfg["brain"]["claude_model"], max_tokens=self.cfg["brain"]["max_tokens"],
-                    system=system_prompt(self.cfg), tools=schemas, messages=messages)
+                with timing.Timer("model", backend="claude"), self._claude_client().messages.stream(
+                        model=self.cfg["brain"]["claude_model"], max_tokens=self.cfg["brain"]["max_tokens"],
+                        system=system_prompt(self.cfg), tools=schemas, messages=messages) as stream:
+                    for piece in stream.text_stream:
+                        voice.text(piece)
+                    resp = stream.get_final_message()
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
+            voice.end()
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
             calls = [b for b in resp.content if b.type == "tool_use"]
             if not calls:
                 return " ".join(b.text for b in resp.content if b.type == "text").strip()
             messages.append({"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": c.id, "content": self._run_tool(c.name, c.input or {}, tag, ctx)}
+                {"type": "tool_result", "tool_use_id": c.id,
+                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, voice)}
                 for c in calls]})
         raise BrainError("too many tool steps")
 
     # ------------------------------------------------------------------ Ollama
 
-    def _ollama_turn(self, history: list[Turn], text: str, tag: str, ctx) -> str:
+    def _ollama_turn(self, history: list[Turn], text: str, tag: str, ctx, voice: Voice) -> str:
+        """Not streamed: tool calls come whole. The answer is still spoken sentence by sentence, so
+        the first sentence's sound is made while the rest waits."""
         import httpx
 
         brain = self.cfg["brain"]
@@ -193,17 +254,20 @@ class Brain:
         schemas = ollama_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:
-                resp = httpx.post(f"{brain['ollama_url']}/api/chat", timeout=120, json={
-                    "model": brain["ollama_model"], "messages": messages, "tools": schemas, "stream": False,
-                    "keep_alive": "30m", "options": {"num_predict": brain["max_tokens"], "num_ctx": 8192}})
-                resp.raise_for_status()
+                with timing.Timer("model", backend="ollama"):
+                    resp = httpx.post(f"{brain['ollama_url']}/api/chat", timeout=120, json={
+                        "model": brain["ollama_model"], "messages": messages, "tools": schemas, "stream": False,
+                        "keep_alive": "30m", "options": {"num_predict": brain["max_tokens"], "num_ctx": 8192}})
+                    resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise BrainError(type(exc).__name__) from exc
             message = resp.json().get("message") or {}
             messages.append(message)
             calls = message.get("tool_calls") or []
             if not calls:
-                return (message.get("content") or "").strip()
+                answer = (message.get("content") or "").strip()
+                voice.text(answer)
+                return answer
             for call in calls:
                 fn = call.get("function") or {}
                 args = fn.get("arguments") or {}
@@ -213,5 +277,5 @@ class Brain:
                     except ValueError:
                         args = {}
                 messages.append({"role": "tool", "tool_name": fn.get("name", ""),
-                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx)})
+                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, voice)})
         raise BrainError("too many tool steps")

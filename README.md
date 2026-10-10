@@ -65,6 +65,11 @@ cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voic
   en_US-ryan-medium fr_FR-tom-medium es_ES-davefx-medium de_DE-thorsten-medium ar_JO-kareem-medium
 ```
 
+Rafiq starts talking with the first sentence of an answer while Claude is still writing the rest, and
+says a short "let me look that up" before a slow tool (the web, the weather, Gmail, the calendar). How
+long each stage took (speech-to-text, model, tools, voice, first sound) goes to
+`~/.config/rafiq/logs/timing.log`, without what was said; `rafiq doctor` shows the medians.
+
 ## Use it
 
 ```bash

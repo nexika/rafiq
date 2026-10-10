@@ -139,6 +139,20 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    # Said before a slow tool runs, so the user knows Rafiq heard them (see Tool.slow).
+    "wait": {"en": "One moment.", "fr": "Un instant.", "es": "Un momento.", "de": "Einen Moment.",
+             "ar": "لحظة من فضلك.", "ar-EG": "ثانية واحدة."},
+    "wait_web": {"en": "Let me look that up.", "fr": "Je regarde ça.", "es": "Déjame buscarlo.",
+                 "de": "Ich schaue mal nach.", "ar": "دعني أبحث عن ذلك.", "ar-EG": "استنى أدورلك."},
+    "wait_weather": {"en": "Let me check the weather.", "fr": "Je regarde la météo.", "es": "Miro el tiempo.",
+                     "de": "Ich schaue mir das Wetter an.", "ar": "دعني أتحقق من الطقس.",
+                     "ar-EG": "ثواني أشوفلك الجو."},
+    "wait_email": {"en": "Let me check your email.", "fr": "Je regarde tes mails.", "es": "Miro tu correo.",
+                   "de": "Ich schaue in deine E-Mails.", "ar": "دعني أتحقق من بريدك.",
+                   "ar-EG": "ثواني أشوفلك الإيميل."},
+    "wait_calendar": {"en": "Let me check your calendar.", "fr": "Je regarde ton agenda.",
+                      "es": "Miro tu calendario.", "de": "Ich schaue in deinen Kalender.",
+                      "ar": "دعني أتحقق من تقويمك.", "ar-EG": "ثواني أشوفلك المواعيد."},
 }
 
 

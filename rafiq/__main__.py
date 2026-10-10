@@ -66,10 +66,13 @@ def cmd_ask(args) -> int:
 
     scheduler = Scheduler(config.data_dir() / "alarms.json", say_alarm)
     brain = Brain(cfg, load_all(cfg), _terminal_confirm, on_event=show)
-    answer = brain.think(text, tag, Context(cfg, scheduler, tag))
-    print(answer)
-    if args.speak:
-        Speaker(cfg).say(answer, lang.script_language(answer, tag))
+    stream = Speaker(cfg).stream() if args.speak else None
+    try:
+        answer = brain.think(text, tag, Context(cfg, scheduler, tag), on_speech=stream.put if stream else None)
+        print(answer)
+    finally:
+        if stream:
+            stream.close()
     return 0
 
 
@@ -127,6 +130,9 @@ def cmd_doctor(_args) -> int:
     else:
         order = [brain["mode"]]
     print(f"  brain in order: {', '.join(order)}")
+    from . import timing
+
+    print(f"  latency: {timing.line()}")
     return 0
 
 
