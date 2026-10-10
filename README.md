@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
@@ -39,6 +40,11 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
+`rafiq doctor` lists your microphones; pick one with `[audio] device` in the settings. A microphone
+that refuses 16 kHz is opened at a rate it takes and resampled. At start-up Rafiq listens to the room
+for a second and fits its speech thresholds to the noise, so stay quiet for a moment
+(`[audio] auto_calibration = false` turns this off).
+
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 
@@ -57,9 +63,23 @@ Rafiq. The service does not see keys exported in your shell, so put them in
 - **Ollama**: free and private, used when there is no key or Claude can't be reached. On a laptop
   without a GPU, a 7B model takes about 10 to 20 seconds per answer, and it chooses tools and keeps
   the language less reliably than Claude. Rafiq warms the model up when it starts, so only the first
-  answer is slow.
+  answer is slow. It gets a smaller set of tools than Claude (fewer choices, fewer wrong ones;
+  `brain.ollama_tools = "all"` sends every tool), and a tool call with broken arguments is sent back
+  to it once to fix. `rafiq toolcheck` measures how often it picks the right tool, with every tool
+  and with its set.
 
 `rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
+
+### Modes: everyday, quality, offline
+
+- **Everyday** (the default): the fast model, `brain.claude_model`.
+- **Quality**: the strongest model, `brain.quality_model` (`claude-opus-5-5`), slower and costlier.
+- **Offline**: nothing leaves the computer: only Ollama and the Piper voices, whatever `brain.mode`
+  and `voice.engine` say. Speech-to-text is always local.
+
+Switch by voice ("Rafiq, switch to offline mode", "what mode are you in?"), with the switch at the
+top of the panel, or for a session with `rafiq run --mode quality`. `brain.profile` in the config
+sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
 
 ## The voice
 
@@ -82,6 +102,25 @@ cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voic
   en_US-ryan-medium fr_FR-tom-medium es_ES-davefx-medium de_DE-thorsten-medium ar_JO-kareem-medium
 ```
 
+## Hearing: Whisper, with the cloud for chosen languages
+
+Whisper runs on your computer and hears every language by default. For a language it hears badly,
+send that language to a cloud service; Whisper still tells the language first, on your computer:
+
+```toml
+[speech.stt_by_language]
+ar = "azure"      # Azure's Egyptian Arabic recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+```
+
+| Service | Needs |
+|---|---|
+| **Azure AI Speech** | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (the same key as the voice); `speech.azure_locales` picks the recogniser |
+| **OpenAI** (`gpt-4o-mini-transcribe`) | `OPENAI_API_KEY` |
+
+When Whisper can't run, a cloud service with a key hears everything; when the cloud can't be
+reached, Whisper does. The name "Rafiq" is always heard on your computer. `speech.stt_engine = "local"`
+or `speech.offline = true` keeps what you say on your computer.
+
 ## Use it
 
 ```bash
@@ -89,10 +128,16 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
-Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
+Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R. Add a second one
+for `rafiq mute`, such as Ctrl+Alt+M (GNOME on Wayland does not let apps grab keys themselves). While
+muted Rafiq ignores the microphone, even its name; the Talk button and `rafiq listen` still work once.
+
+Say **"go to sleep"** ("نام", "mets-toi en veille") to end a conversation at once: Rafiq stops waiting
+for a follow-up and drops a question it was asking before an action.
 
 **To interrupt Rafiq**, say "stop", "attends", "espera", "warte", "توقف" or "استنى" while it speaks.
 The microphone stays open: you must be about 1.8 times louder than Rafiq's own voice (`[interruption]
@@ -141,6 +186,9 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
+  read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
+  each request, never as instructions.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
