@@ -131,6 +131,17 @@ def cmd_doctor(_args) -> int:
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
     print(f"  mode: {modes.current(cfg)}")
+    from .stt import cloud_engines
+
+    cloud = cloud_engines(cfg)
+    speech = cfg["speech"]
+    offline = speech.get("offline", False) or modes.offline(cfg)
+    _check("cloud speech to text", bool(cloud) or offline,
+           "off (offline)" if offline else ", ".join(cloud) or
+           "set AZURE_SPEECH_KEY or OPENAI_API_KEY for languages Whisper hears badly")
+    if speech.get("stt_by_language"):
+        print("  speech to text by language: "
+              + ", ".join(f"{k} {v}" for k, v in speech["stt_by_language"].items()))
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if modes.offline(cfg):
         order = ["ollama"]

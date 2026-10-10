@@ -2,8 +2,8 @@
 
 - everyday: the fast, cheap Claude model (brain.claude_model), with Ollama as the fallback.
 - quality: the strongest Claude model (brain.quality_model), for harder questions.
-- offline: nothing leaves the computer: only the Ollama model and Piper voices. Speech-to-text is
-  always local (faster-whisper), so it needs no change.
+- offline: nothing leaves the computer: only the Ollama model, Piper voices and local
+  speech-to-text (faster-whisper), never a cloud speech service.
 
 The mode lives in the settings dict every part shares (brain.profile), so a switch takes effect on the
 next request without restarting. brain.mode (auto, claude, ollama) still picks the backend in the
