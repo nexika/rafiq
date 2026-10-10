@@ -114,7 +114,7 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
-  answer cancels.
+  answer cancels. With a voice print (`rafiq voiceid`), a spoken yes must also be in your voice.
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
@@ -122,6 +122,26 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   panel page knows; requests under another host name are refused.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+
+## Voice ID: only your voice confirms
+
+After `rafiq enroll`, run `rafiq voiceid` once. It turns your recordings into a voice print (speaker
+embeddings from WeSpeaker's ResNet34 model, about 26 MB, downloaded on first use and checked against
+its checksum). From then on, a spoken yes to an action (power off, send an email, add an event) is
+compared with your voice print. When Rafiq is not sure it was you, it says so and only the panel's
+Yes button goes ahead. A no is taken from anyone.
+
+`rafiq voiceid` reports how many of your own recordings it would refuse; add `--others DIR` with
+16 kHz `.wav` files of other people (or of a video) to count false accepts too. `rafiq voiceid --off`
+deletes the voice print. The panel shows each check's similarity next to the threshold.
+
+Tested with five synthetic voices (Piper, one per language), each enrolled with ten recordings and
+checked against the others' answers: no other voice was accepted (0 of 60). A single word ("yes",
+"oui", "نعم") is too short to recognise and was never accepted (0 of 10); "yes, go ahead" was accepted
+4 times in 5. Say a few words, or use the panel.
+
+Voice ID can be fooled by a recording or a cloned voice: it is an extra check on top of the spoken
+yes, never the only one.
 
 ## Google calendar and Gmail
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, voiceid, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -93,6 +93,9 @@ class Assistant:
         self.mel = kws.Mel() if self.spotter else None
         if self.spotter:   # (rafiq enroll --sensitivity refits the threshold)
             self.name_seconds = max(len(t) for t in self.spotter.templates) * 0.02
+        # Your voice print (`rafiq voiceid`), if any: then only your spoken yes confirms an action.
+        self.voice_print = voiceid.VoicePrint.load()
+        self.embedder = voiceid.Embedder() if self.voice_print else None
 
     # ------------------------------------------------------------------ state shown in the panel
 
@@ -143,7 +146,8 @@ class Assistant:
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
-        panel's yes and no buttons answer too."""
+        panel's yes and no buttons answer too. With a voice print, a spoken yes must be in your voice;
+        when Rafiq is not sure it is, only the panel's Yes button goes ahead."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         self.events.publish("confirm", {"action": action, "tag": tag})
@@ -163,12 +167,41 @@ class Assistant:
                     continue
                 text, _ = self.hear(audio)
                 answer = lang.yes_or_no(text)
+                if answer and not self._your_voice(audio):
+                    self.say(lang.phrase("voice_unsure", tag), tag)
+                    return self._panel_answer(tag)
                 if answer is not None:
                     self.events.publish("confirmed", {"yes": answer})
                     if not answer:
                         self.say(lang.phrase("cancelled", tag), tag)
                     return answer
                 break
+        self.events.publish("confirmed", {"yes": False})
+        self.say(lang.phrase("cancelled", tag), tag)
+        return False
+
+    def _your_voice(self, audio: np.ndarray) -> bool:
+        """Whether a spoken yes is in the enrolled voice (always, without a voice print)."""
+        if self.voice_print is None:
+            return True
+        score = self.voice_print.score(self.embedder(audio))
+        match = self.voice_print.matches(score)
+        self.events.publish("voice", {"score": round(score, 3), "threshold": round(self.voice_print.threshold, 3),
+                                      "match": match})
+        return match
+
+    def _panel_answer(self, tag: str) -> bool:
+        """Wait for the panel's Yes or No; nothing said out loud counts now."""
+        self.set_state("listening")
+        deadline = time.monotonic() + CONFIRM_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                answer = self.pending_answer.get_nowait()
+                self.events.publish("confirmed", {"yes": answer})
+                return answer
+            except queue.Empty:
+                pass
+            self.next_utterance(timeout=0.5)
         self.events.publish("confirmed", {"yes": False})
         self.say(lang.phrase("cancelled", tag), tag)
         return False
