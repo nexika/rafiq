@@ -22,7 +22,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
-from .tools import load_all
+from .tools import load_all, media
 from .tts import Speaker
 
 MIN_UTTERANCE_SECONDS = 0.35
@@ -181,7 +181,8 @@ class Assistant:
         self.tag = tag
         self.ctx.tag = tag
         self.set_state("thinking")
-        answer = self.brain.think(text, tag, self.ctx)
+        # "Put X on Netflix" and the like need no model: the page opens at once.
+        answer = media.direct(text, tag) or self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 

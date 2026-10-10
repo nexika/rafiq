@@ -139,6 +139,9 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "media_opened": {"en": "Opening {query} on {service}.", "fr": "J'ouvre {query} sur {service}.",
+                     "es": "Abro {query} en {service}.", "de": "Ich öffne {query} auf {service}.",
+                     "ar": "أفتح {query} على {service}.", "ar-EG": "حاضر، بفتحلك {query} على {service}."},
 }
 
 
