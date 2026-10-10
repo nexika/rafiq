@@ -29,14 +29,21 @@ Linux with PipeWire (Fedora, Ubuntu 22.10+), Python 3.11 or newer, `ffmpeg`.
 
 ```bash
 git clone https://github.com/nexika/rafiq.git && cd rafiq
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
-.venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
-.venv/bin/rafiq doctor
-.venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
+./install.sh
 ```
 
-The first start downloads the Whisper models (about 550 MB). Offline voices go in
-`~/.config/rafiq/data/piper/` (see below).
+`install.sh` creates `.venv`, installs Rafiq with the offline voices and Google, then starts
+`rafiq setup`, a wizard that:
+
+1. asks your name, the brain (auto, Claude or Ollama), the Claude and Azure keys (both optional, typed
+   hidden) and your city, and writes `~/.config/rafiq/config.toml`, readable only by you;
+2. downloads the offline Piper voices, the Whisper models (about 550 MB) and the Ollama model;
+3. tests the microphone level, then runs `rafiq doctor`;
+4. records the wake word (`rafiq enroll`, about two minutes) and greets you out loud.
+
+A step that fails is reported and the rest goes on; run `rafiq setup` again at any time (Enter keeps
+what you chose before). `./install.sh --no-setup` installs only; `rafiq setup --no-enroll` skips the
+recording. By hand: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"`.
 
 ## The brain: Claude, with Ollama as the fallback
 
@@ -58,7 +65,7 @@ The first start downloads the Whisper models (about 550 MB). Offline voices go i
 | **Piper** (offline) | en, fr, es, de, ar; no Egyptian voice, so Egyptian is read by the Jordanian Arabic voice | voice files in `~/.config/rafiq/data/piper/` |
 | Edge read-aloud | the same voices as Azure | nothing, but it is unofficial and Microsoft blocked it in October 2026 |
 
-Download the Piper voices once:
+`rafiq setup` downloads the Piper voices; by hand:
 
 ```bash
 cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voices \
