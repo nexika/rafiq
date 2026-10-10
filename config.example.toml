@@ -32,3 +32,6 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[privacy]
+log_days = 30                   # the log (data/logs/rafiq.log) is redacted and deleted after this many days

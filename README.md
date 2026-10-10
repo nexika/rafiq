@@ -122,6 +122,9 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   panel page knows; requests under another host name are refused.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+- The log (`~/.config/rafiq/data/logs/rafiq.log`) has email addresses, keys, phone numbers and
+  amounts replaced by a mark, and is deleted after 30 days (`[privacy] log_days`). Results from
+  background tasks are redacted the same way before they are said aloud.
 
 ## Google calendar and Gmail
 

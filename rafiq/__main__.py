@@ -8,7 +8,7 @@ import shutil
 import sys
 import threading
 
-from . import config, lang
+from . import config, lang, privacy
 
 
 def cmd_run(args) -> int:
@@ -18,6 +18,7 @@ def cmd_run(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    privacy.start_logging(config.data_dir() / "logs", int(cfg["privacy"]["log_days"]))
     print("Loading the speech models (the first start downloads them)...", flush=True)
     assistant = Assistant(cfg)
     if not args.no_panel:

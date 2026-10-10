@@ -8,6 +8,8 @@ wake-word listener for the microphone.
 
 from __future__ import annotations
 
+import json
+import logging
 import queue
 import threading
 import time
@@ -17,7 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, privacy, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -28,6 +30,8 @@ from .tts import Speaker
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -47,6 +51,9 @@ class Events:
 
     def publish(self, kind: str, data: dict) -> None:
         event = {"kind": kind, "time": time.time(), **data}
+        # The log is redacted (privacy.RedactFilter); the panel, on this computer only, is not.
+        logger.log(logging.DEBUG if kind == "state" else logging.INFO, "%s %s", kind,
+                   json.dumps(data, ensure_ascii=False, default=str))
         with self.lock:
             self.history.append(event)
             for q in list(self.listeners):
@@ -190,6 +197,10 @@ class Assistant:
     def submit(self, kind: str, **data) -> None:
         self.jobs.put((kind, data))
 
+    def announce(self, text: str, tag: str) -> None:
+        """Say the result of a background task, without the private data in it (privacy.redact)."""
+        self.submit("result", text=text, tag=tag)
+
     def _run_jobs(self) -> None:
         while True:
             try:
@@ -205,6 +216,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "result":
+                    self.say(privacy.redact(data["text"]), data["tag"])
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")

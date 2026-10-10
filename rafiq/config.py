@@ -46,6 +46,7 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "privacy": {"log_days": 30},     # the log (data/logs) is redacted and deleted after this many days
     "anthropic_api_key": "",
 }
 
