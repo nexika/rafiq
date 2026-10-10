@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | spotify-setup"""
 
 from __future__ import annotations
 
@@ -121,6 +121,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    spotify = config.home() / "spotify" / "token.json"
+    _check("Spotify", spotify.is_file() and cfg["spotify"].get("enabled", False),
+           "connected" if spotify.is_file() else "run: rafiq spotify-setup")
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
@@ -164,6 +167,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_spotify_setup(_args) -> int:
+    from .tools.spotify import setup
+
+    print(setup(config.load()))
+    print("Then set [spotify] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -191,6 +202,7 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)

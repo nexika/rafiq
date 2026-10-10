@@ -32,3 +32,8 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[spotify]
+enabled = false                 # true after `rafiq spotify-setup`
+client_id = ""                  # your Spotify developer app (or SPOTIFY_CLIENT_ID)
+port = 8888                     # the app's redirect URI must be http://127.0.0.1:8888/callback

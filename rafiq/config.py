@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
+    "spotify": {"enabled": False, "client_id": "", "port": 8888},
     "anthropic_api_key": "",
 }
 
