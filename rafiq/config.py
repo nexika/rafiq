@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # The daily brief, said once a day at the first start, in this language tag (en, fr, ..., ar-EG).
+    "brief": {"at_first_start": False, "language": "en"},
     "anthropic_api_key": "",
 }
 

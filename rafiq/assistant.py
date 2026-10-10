@@ -22,7 +22,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
-from .tools import load_all
+from .tools import brief, load_all
 from .tts import Speaker
 
 MIN_UTTERANCE_SECONDS = 0.35
@@ -205,6 +205,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "brief":
+                    self.play_brief()
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")
@@ -212,6 +214,15 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def start_of_day(self) -> None:
+        """Queue the daily brief, if it is turned on and has not been said yet today."""
+        if self.cfg["brief"]["at_first_start"] and brief.claim_today(config_mod.data_dir() / "brief.json",
+                                                                     brief.now().date()):
+            self.submit("brief")
+
+    def play_brief(self) -> None:
+        self.respond(brief.REQUEST, self.cfg["brief"]["language"])
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
@@ -269,6 +280,7 @@ class Assistant:
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
         self.set_state("idle")
+        self.start_of_day()
         try:
             while not self._stop.is_set():
                 audio = self.next_utterance(timeout=None)

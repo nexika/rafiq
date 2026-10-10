@@ -32,3 +32,7 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[brief]
+at_first_start = false          # true: say the daily brief at the first start of each day
+language = "en"                 # en, fr, es, de, ar or ar-EG
