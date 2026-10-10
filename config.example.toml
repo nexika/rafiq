@@ -30,5 +30,8 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[history]
+retention_days = 7              # what you asked and Rafiq answered, kept on this computer; 0 keeps nothing
+
 [google]
 enabled = false                 # true after `rafiq google-setup`

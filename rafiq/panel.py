@@ -1,5 +1,6 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations.
+a text box and yes/no buttons for confirmations, the history of requests (searchable, with delete) and
+whether anything leaves this computer.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -11,6 +12,7 @@ from __future__ import annotations
 import hmac
 import json
 import queue
+from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
@@ -52,10 +54,15 @@ def make_handler(assistant, token: str, port: int):
             if url.path == "/":
                 page = resources.files("rafiq").joinpath("panel.html").read_text(encoding="utf-8")
                 return self._send(200, page.replace("__TOKEN__", token).encode(), "text/html; charset=utf-8")
+            query = parse_qs(url.query)
+            if url.path in ("/events", "/api/history") and not self._token_ok((query.get("token") or [None])[0]):
+                return self._send(403, b'{"error":"token"}')
             if url.path == "/events":
-                if not self._token_ok((parse_qs(url.query).get("token") or [None])[0]):
-                    return self._send(403, b'{"error":"token"}')
                 return self._stream()
+            if url.path == "/api/history":
+                entries = assistant.history.entries((query.get("q") or [""])[0][:200])
+                body = {"entries": [asdict(e) for e in entries], "privacy": assistant.privacy()}
+                return self._send(200, json.dumps(body, ensure_ascii=False).encode())
             return self._send(404, b'{"error":"not found"}')
 
         def _stream(self) -> None:
@@ -68,6 +75,8 @@ def make_handler(assistant, token: str, port: int):
                 for event in list(assistant.events.history):
                     self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
                 self.wfile.write(f"data: {json.dumps({'kind': 'state', 'state': assistant.state})}\n\n".encode())
+                privacy = {"kind": "privacy", **assistant.privacy()}
+                self.wfile.write(f"data: {json.dumps(privacy)}\n\n".encode())
                 self.wfile.flush()
                 while True:
                     try:
@@ -100,6 +109,10 @@ def make_handler(assistant, token: str, port: int):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/stop":
                 assistant.speaker.stop()
+            elif path == "/api/history/delete" and isinstance(data.get("id"), str):
+                assistant.forget(assistant.history.delete(data["id"]))
+            elif path == "/api/history/clear":
+                assistant.forget(assistant.history.clear())
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')

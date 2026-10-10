@@ -121,6 +121,30 @@ def yes_or_no(text: str) -> bool | None:
 
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
 
+# "Forget what I just said": handled by Rafiq itself, so it works offline and never reaches a model.
+FORGET = [
+    "forget what i just said", "forget what i said", "forget that", "delete that", "delete what i just said",
+    "oublie ce que je viens de dire", "oublie ce que j'ai dit", "oublie ça", "oublie ca", "efface ça",
+    "olvida lo que acabo de decir", "olvida lo que dije", "olvida eso", "borra eso",
+    "vergiss was ich gerade gesagt habe", "vergiss was ich gesagt habe", "vergiss das", "lösch das",
+    "انس ما قلته", "انسى ما قلته", "انسى اللي قلته", "انسى اللي لسه قلته", "انسى ده", "انسى دا",
+    "امسح اللي قلته", "امسح ده", "احذف ما قلته",
+]
+# Words around the request that don't change it: the name and please.
+_POLITE = {"rafiq", "رفيق", "يا", "please", "s'il", "te", "plaît", "plait", "por", "favor", "bitte", "من",
+           "فضلك", "لو", "سمحت"}
+
+
+def is_forget(text: str) -> bool:
+    """True when the whole request is "forget what I just said" in one of Rafiq's languages, so that
+    "forget that meeting on Friday" still goes to the brain."""
+    said = [w for w in words(text) if w not in _POLITE_N]
+    return bool(said) and said in _FORGET
+
+
+_FORGET = [words(p) for p in FORGET]
+_POLITE_N = _norm(_POLITE)
+
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},
     "not_heard": {"en": "Sorry, I didn't catch that.", "fr": "Désolé, je n'ai pas compris.",
@@ -139,6 +163,11 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "forgotten": {"en": "Done, I've forgotten it.", "fr": "C'est fait, je l'ai oublié.", "es": "Hecho, lo he olvidado.",
+                  "de": "Erledigt, ich habe es vergessen.", "ar": "تم، لقد نسيته.", "ar-EG": "خلاص، نسيته."},
+    "nothing_to_forget": {"en": "There's nothing to forget.", "fr": "Il n'y a rien à oublier.",
+                          "es": "No hay nada que olvidar.", "de": "Da gibt es nichts zu vergessen.",
+                          "ar": "لا يوجد ما أنساه.", "ar-EG": "مفيش حاجة أنساها."},
 }
 
 

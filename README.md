@@ -80,6 +80,15 @@ Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 and Yes/No buttons when it asks before an action.
 
+**What did you hear?** Rafiq keeps what you asked and what it answered in
+`~/.config/rafiq/data/history.json` (readable only by you, on this computer only), for 7 days by
+default (`history.retention_days`; 0 keeps nothing). Only requests are kept: what followed the name, a
+follow-up, or what you typed; the listening for the name is never written down. The panel's
+**History** page searches it and deletes one entry or all of them. Say "forget what I just said"
+("oublie ça", "vergiss das", "انسى اللي قلته"...) to delete the last one by voice; Rafiq handles that
+itself, so it never reaches a model. A badge at the top of the panel says whether requests leave this
+computer right now: Claude, Azure or Edge voices, or fully offline with Ollama and Piper.
+
 ## The wake word
 
 **Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"

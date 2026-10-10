@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
+from . import history as history_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
@@ -45,10 +46,11 @@ class Events:
     listeners: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def publish(self, kind: str, data: dict) -> None:
+    def publish(self, kind: str, data: dict, keep: bool = True) -> None:
         event = {"kind": kind, "time": time.time(), **data}
         with self.lock:
-            self.history.append(event)
+            if keep:
+                self.history.append(event)
             for q in list(self.listeners):
                 try:
                     q.put_nowait(event)
@@ -65,6 +67,22 @@ class Events:
         with self.lock:
             if q in self.listeners:
                 self.listeners.remove(q)
+
+    def drop(self, texts: set[str]) -> None:
+        """Forget what was heard, typed or said with these texts, here and in the open panels. What was
+        heard counts with the name before it too ("Rafiq, what time is it?")."""
+        def gone(e: dict) -> bool:
+            text = e.get("text")
+            return e["kind"] in ("heard", "typed", "said") and isinstance(text, str) and (
+                text in texts or (e["kind"] == "heard" and wake.find(text)[1] in texts))
+
+        with self.lock:
+            dropped = [e["text"] for e in self.history if gone(e)]
+            kept = [e for e in self.history if not gone(e)]
+            self.history.clear()
+            self.history.extend(kept)
+        # Open panels remove these from the page; not kept, so the texts are not replayed later.
+        self.publish("forgotten", {"texts": sorted(texts | set(dropped))}, keep=False)
 
 
 class Assistant:
@@ -83,6 +101,8 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.history = history_mod.History(config_mod.data_dir() / "history.json",
+                                           self.cfg["history"]["retention_days"])
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -173,17 +193,38 @@ class Assistant:
         self.say(lang.phrase("cancelled", tag), tag)
         return False
 
-    def respond(self, text: str, tag: str) -> None:
-        """Think about one request and say the answer."""
+    def respond(self, text: str, tag: str, source: str = "voice") -> None:
+        """Think about one request, say the answer and keep both in the history."""
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
+            return
+        if lang.is_forget(text):
+            last = self.history.forget_last()
+            if last:
+                self.forget([last])
+            self.say(lang.phrase("forgotten" if last else "nothing_to_forget", tag), tag)
             return
         self.tag = tag
         self.ctx.tag = tag
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
+        self.history.add(text, answer, tag, source)
         self.say(answer, lang.script_language(answer, tag))
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    # ------------------------------------------------------------------ what was heard, and where it goes
+
+    def forget(self, entries: list[history_mod.Entry]) -> None:
+        """After entries leave the history: take them out of the panel's events and the conversation
+        the model is given next time, too."""
+        if not entries:
+            return
+        for entry in entries:
+            self.brain.memory.forget(entry.heard, entry.said)
+        self.events.drop({e.heard for e in entries} | {e.said for e in entries})
+
+    def privacy(self) -> dict:
+        return history_mod.privacy(self.brain.backends(), self.speaker.engines())
 
     # ------------------------------------------------------------------ jobs from other threads
 
@@ -200,7 +241,7 @@ class Assistant:
                 if kind == "text":
                     text = data["text"]
                     self.events.publish("typed", {"text": text})
-                    self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag))
+                    self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag), source="typed")
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "say":
@@ -268,6 +309,7 @@ class Assistant:
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
+        self.events.publish("privacy", self.privacy())
         self.set_state("idle")
         try:
             while not self._stop.is_set():

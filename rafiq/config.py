@@ -44,6 +44,8 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # What Rafiq heard and answered, kept on this computer only; 0 keeps nothing.
+    "history": {"retention_days": 7},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",
