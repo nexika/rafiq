@@ -152,6 +152,10 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
 
+Rafiq reads every calendar in your list, subscribed ones too, and adds or deletes events (after asking)
+in your primary calendar only. A token made before Rafiq read the calendar list only sees the primary
+calendar: run `rafiq google-setup` again to give it the others.
+
 ## Settings
 
 `~/.config/rafiq/config.toml` (`RAFIQ_HOME` moves the folder). See `config.example.toml`; everything is
