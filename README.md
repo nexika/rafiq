@@ -18,7 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
-| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -130,6 +130,9 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
+before Rafiq had them, run `rafiq google-setup` again.
 
 ## Settings
 
