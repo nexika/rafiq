@@ -69,7 +69,7 @@ def find_app(query: str, entries: list[dict]) -> dict | None:
 
 @tool("open_app", "Open an application by name, e.g. 'Firefox', 'Files', 'Calculator', 'Terminal'.",
       {"name": {"type": "string", "description": "the app's name, in English where possible"}},
-      required=("name",))
+      required=("name",), level="act")
 def open_app(name: str) -> str:
     app = find_app(name, desktop_entries())
     if not app:
@@ -80,7 +80,8 @@ def open_app(name: str) -> str:
 
 
 @tool("list_apps", "Names of the installed applications, to find the right one to open.",
-      {"filter": {"type": "string", "description": "only names containing this"}})
+      {"filter": {"type": "string", "description": "only names containing this"}},
+      level="safe", expose=True, card="list")
 def list_apps(filter: str = "") -> str:  # noqa: A002
     names = sorted({e["name"] for e in desktop_entries() if filter.lower() in e["name"].lower()})
     return ", ".join(names[:80]) or "none"
@@ -99,7 +100,7 @@ def parse_volume(text: str) -> tuple[int, bool]:
 @tool("volume", "Get or change the speaker volume.",
       {"level": {"type": "integer", "description": "set the volume to this percent, 0 to 100"},
        "change": {"type": "integer", "description": "raise (positive) or lower (negative) by this many percent"},
-       "mute": {"type": "boolean", "description": "true to mute, false to unmute"}})
+       "mute": {"type": "boolean", "description": "true to mute, false to unmute"}}, level="act")
 def volume(level: int | None = None, change: int | None = None, mute: bool | None = None) -> str:
     current, muted = parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
     if mute is not None:
@@ -200,7 +201,7 @@ def _outputs(sinks: list[Sink]) -> str:
 
 @tool("audio_output", "Switch where Rafiq's voice and the computer's sound play, e.g. 'headphones', 'speakers', "
       "'TV', or a name the user set; with no name, list the outputs.",
-      {"name": {"type": "string", "description": "the output as the user said it, in their language"}})
+      {"name": {"type": "string", "description": "the output as the user said it, in their language"}}, level="act")
 def audio_output(name: str = "", ctx=None) -> str:
     sinks = parse_sinks(_run(["wpctl", "status"]).stdout)
     if not name.strip():
@@ -215,7 +216,8 @@ def audio_output(name: str = "", ctx=None) -> str:
 
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.")
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.",
+      level="safe", expose=True, card="facts")
 def system_status() -> str:
     import psutil
 
@@ -239,7 +241,7 @@ def system_status() -> str:
 
 # ---------------------------------------------------------------------- lock and power
 
-@tool("lock_screen", "Lock the screen.")
+@tool("lock_screen", "Lock the screen.", level="act")
 def lock_screen() -> str:
     session = os.environ.get("XDG_SESSION_ID")
     result = _run(["loginctl", "lock-session"] + ([session] if session else []))
@@ -309,7 +311,7 @@ SHUTDOWN = DelayedShutdown()
 @tool("power", "Shut down, restart or suspend the computer. Rafiq asks the user first. A shutdown "
                "waits a little (30 seconds by default) and can be stopped with cancel_shutdown.",
       {"action": {"type": "string", "enum": list(POWER)}}, required=("action",),
-      confirm=lambda args: POWER.get(args.get("action", ""), (None, "change the power state"))[1])
+      confirm=lambda args: POWER.get(args.get("action", ""), (None, "change the power state"))[1], level="critical")
 def power(action: str, ctx=None) -> str:
     if action not in POWER:
         return f"error: action is one of {', '.join(POWER)}"
@@ -329,6 +331,6 @@ def power(action: str, ctx=None) -> str:
 
 
 @tool("cancel_shutdown", "Stop a shutdown that is counting down (\"cancel the shutdown\", \"annule "
-                         "l'extinction\", \"ألغِ إيقاف التشغيل\", \"إلغي القفل\").")
+                         "l'extinction\", \"ألغِ إيقاف التشغيل\", \"إلغي القفل\").", level="act")
 def cancel_shutdown() -> str:
     return "the shutdown is cancelled" if SHUTDOWN.cancel() else "no shutdown is pending"

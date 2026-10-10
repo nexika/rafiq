@@ -9,7 +9,7 @@ from . import tool
 @tool("set_personality", "Change how Rafiq talks from now on: neutral (plain and friendly), concise (as few "
       "words as possible) or butler (a dry, witty, polite butler). Use it when the user asks for another "
       "style, to be shorter, or to drop the jokes.",
-      {"style": {"type": "string", "enum": list(persona.PERSONAS)}}, required=("style",))
+      {"style": {"type": "string", "enum": list(persona.PERSONAS)}}, required=("style",), level="act")
 def set_personality(style: str) -> str:
     try:
         persona.choose(style)

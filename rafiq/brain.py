@@ -131,11 +131,13 @@ class Brain:
         if action and not self.confirm(action, tag):
             self.on_event("tool", {"name": name, "args": args, "result": "declined"})
             return "The user said no; it was not done. Tell them briefly that you didn't do it."
+        if tool.slow:
+            self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag})
         try:
             result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
-        self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
+        self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
         return result[:8000]
 
     def warm_up(self) -> None:
