@@ -83,8 +83,9 @@ def with_note(text: str, tag: str, now: datetime | None = None) -> str:
 
 class Brain:
     def __init__(self, cfg: dict, tools: dict[str, Tool], confirm: Callable[[str, str], bool],
-                 on_event: Callable[[str, dict], None] | None = None, clock=time.time):
-        self.cfg, self.tools, self.confirm = cfg, tools, confirm
+                 on_event: Callable[[str, dict], None] | None = None, clock=time.time, approvals=None):
+        # confirm answers True, False, or "always" (yes, and remember it in `approvals`).
+        self.cfg, self.tools, self.confirm, self.approvals = cfg, tools, confirm, approvals
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
@@ -123,9 +124,13 @@ class Brain:
         if tool is None:
             return f"error: there is no tool named {name}"
         action = tool.action(args)
-        if action and not self.confirm(action, tag):
-            self.on_event("tool", {"name": name, "args": args, "result": "declined"})
-            return "The user said no; it was not done. Tell them briefly that you didn't do it."
+        if action and not (self.approvals and self.approvals.allowed(name)):
+            answer = self.confirm(action, tag)
+            if not answer:
+                self.on_event("tool", {"name": name, "args": args, "result": "declined"})
+                return "The user said no; it was not done. Tell them briefly that you didn't do it."
+            if answer == "always" and self.approvals:
+                self.approvals.remember(name)
         try:
             result = tool.run(args, ctx)
         except Exception as exc:

@@ -78,7 +78,14 @@ rafiq listen              # make the running Rafiq listen now
 Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
-and Yes/No buttons when it asks before an action.
+and Yes/No buttons when it asks before an action. Its other pages:
+
+- **Models**: the Ollama models with what fits this computer's memory; install, benchmark, activate
+  and delete them, and pick the Whisper model that hears you. Choices are kept in
+  `~/.config/rafiq/choices.json` and win over `config.toml`.
+- **Status**: whether each part is up: Ollama, Claude, Whisper, the voice, Google, satellites.
+- **Permissions**: whether each tool runs freely or asks first, and the approvals you remembered
+  with "Always", each with a Revoke button.
 
 ## The wake word
 
@@ -114,7 +121,8 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
-  answer cancels.
+  answer cancels. The panel's Always button stops the asking for that one tool until you revoke it
+  on the Permissions page.
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.

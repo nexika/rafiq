@@ -20,6 +20,8 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .models import Models
+from .permissions import Approvals
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -82,7 +84,10 @@ class Assistant:
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.approvals = Approvals()
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish,
+                           approvals=self.approvals)
+        self.models = Models(self.cfg, on_event=self.events.publish, on_whisper=self._use_whisper)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -93,6 +98,10 @@ class Assistant:
         self.mel = kws.Mel() if self.spotter else None
         if self.spotter:   # (rafiq enroll --sensitivity refits the threshold)
             self.name_seconds = max(len(t) for t in self.spotter.templates) * 0.02
+
+    def _use_whisper(self, size: str) -> None:
+        """A new Whisper size from the panel: the next request is heard with it (it loads then)."""
+        self.stt = Transcriber(size, self.cfg["speech"]["languages"])
 
     # ------------------------------------------------------------------ state shown in the panel
 
@@ -143,7 +152,8 @@ class Assistant:
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
-        panel's yes and no buttons answer too."""
+        panel's yes and no buttons answer too, and its Always button ("always": yes, and don't ask
+        again for this tool)."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         self.events.publish("confirm", {"action": action, "tag": tag})
@@ -154,7 +164,7 @@ class Assistant:
             while time.monotonic() < deadline:
                 try:
                     answer = self.pending_answer.get_nowait()
-                    self.events.publish("confirmed", {"yes": answer})
+                    self.events.publish("confirmed", {"yes": bool(answer)})
                     return answer
                 except queue.Empty:
                     pass

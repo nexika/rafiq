@@ -1,11 +1,15 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
+Choices made in the panel (the active models) are kept in choices.json next to it and win over the
+file, so the panel never rewrites the user's own config.toml.
+
 Secrets come from the environment first (ANTHROPIC_API_KEY), then the file, and are never logged.
 """
 
 from __future__ import annotations
 
 import copy
+import json
 import os
 import secrets
 import tomllib
@@ -75,9 +79,27 @@ def load(path: Path | None = None) -> dict:
     cfg = copy.deepcopy(DEFAULTS)
     if path.is_file():
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
+    cfg = _merge(cfg, _choices())
     if os.environ.get("ANTHROPIC_API_KEY"):
         cfg["anthropic_api_key"] = os.environ["ANTHROPIC_API_KEY"]
     return cfg
+
+
+def _choices() -> dict:
+    try:
+        data = json.loads((home() / "choices.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_choice(section: str, key: str, value) -> None:
+    """Keep a setting chosen in the panel for the next start."""
+    choices = _choices()
+    choices.setdefault(section, {})[key] = value
+    path = home() / "choices.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(choices, indent=2), encoding="utf-8")
 
 
 def panel_token() -> str:

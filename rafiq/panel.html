@@ -63,9 +63,29 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
+nav { display: flex; gap: 4px; margin: -8px 0 20px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted);
+  padding: 8px 12px; }
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+body:not([data-page="talk"]) footer { display: none; }
+section[hidden] { display: none; }
+section h2 { font-size: 17px; margin: 24px 0 8px; }
+section .hint { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.row .name { font-weight: 600; overflow-wrap: anywhere; }
+.row .info { color: var(--muted); font-size: 14px; flex: 1; min-width: 160px; }
+.row button { padding: 6px 10px; font-size: 14px; }
+.badge { font-size: 12px; border-radius: 999px; padding: 2px 8px; background: var(--line); color: var(--ink); }
+.badge.on { background: var(--accent-soft); }
+.badge.warn { background: var(--warn-soft); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.dot.up { background: var(--accent); }
+.dot.down { background: var(--err); }
 </style>
 </head>
-<body>
+<body data-page="talk">
 <main>
   <header>
     <div class="orb" id="orb" data-state="offline" aria-hidden="true"></div>
@@ -74,13 +94,37 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div id="state" role="status">connecting…</div>
     </div>
   </header>
-  <div id="log" aria-live="polite">
-    <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
-  </div>
+  <nav role="tablist">
+    <button role="tab" data-page="talk" aria-selected="true">Talk</button>
+    <button role="tab" data-page="models" aria-selected="false">Models</button>
+    <button role="tab" data-page="status" aria-selected="false">Status</button>
+    <button role="tab" data-page="permissions" aria-selected="false">Permissions</button>
+  </nav>
+  <section id="page-talk">
+    <div id="log" aria-live="polite">
+      <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
+    </div>
+  </section>
+  <section id="page-models" hidden>
+    <h2>Thinking (Ollama)</h2>
+    <p class="hint" id="ollama-hint"></p>
+    <div class="rows" id="ollama"></div>
+    <h2>Hearing (Whisper)</h2>
+    <p class="hint">Bigger models understand more, Arabic especially, and answer more slowly. A model downloads the first time it is used.</p>
+    <div class="rows" id="whisper"></div>
+  </section>
+  <section id="page-status" hidden>
+    <div class="rows" id="parts"></div>
+  </section>
+  <section id="page-permissions" hidden>
+    <p class="hint">Tools that change something ask before they run. Press “Always” when Rafiq asks to stop it asking for that tool; Revoke makes it ask again.</p>
+    <div class="rows" id="tools"></div>
+  </section>
 </main>
 <div id="confirm" role="alertdialog" aria-labelledby="confirm-text">
   <p id="confirm-text"></p>
   <button class="primary" id="yes">Yes</button>
+  <button id="always" title="Yes, and don't ask again for this tool">Always</button>
   <button id="no">No</button>
 </div>
 <footer>
@@ -130,8 +174,86 @@ function handle(e) {
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
+    case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
+      if (page === "models") show("models"); break;
   }
 }
+
+// ---------------------------------------------------------------- the other pages
+let page = "talk";
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function button(label, path, name, ask) {
+  const b = el("button", "", label);
+  b.onclick = async () => {
+    if (ask && !confirm(ask)) return;
+    b.disabled = true;
+    const r = await fetch(path, { method: "POST", body: JSON.stringify({ name }),
+      headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN } });
+    if (!r.ok) alert((await r.json().catch(() => ({}))).error || "Refused (" + r.status + ")");
+    show(page);
+  };
+  return b;
+}
+function row(name, info, badges, buttons) {
+  const r = el("div", "row");
+  r.append(el("span", "name", name));
+  for (const [text, cls] of badges) r.append(el("span", "badge " + (cls || ""), text));
+  r.append(el("span", "info", info));
+  r.append(...buttons);
+  return r;
+}
+const RENDER = {
+  models(d) {
+    const o = d.ollama, list = document.getElementById("ollama");
+    document.getElementById("ollama-hint").textContent = o.reachable
+      ? "This computer has " + o.ram_gb + " GB of memory. Installing downloads the model in the background."
+      : "Ollama is not answering: start it to install or change models.";
+    list.replaceChildren(...o.models.map((m) => row(m.name,
+      [m.size_gb ? m.size_gb + " GB" : "", m.note, m.tokens_per_second != null ? m.tokens_per_second + " tokens/s" : ""]
+        .filter(Boolean).join(" · "),
+      [m.active && ["active", "on"], m.installed && !m.active && ["installed"], !m.fits && ["too big", "warn"]]
+        .filter(Boolean),
+      !o.reachable ? [] : m.installed ? [
+        button("Benchmark", "/api/models/benchmark", m.name),
+        ...(m.active ? [] : [button("Activate", "/api/models/activate", m.name),
+          button("Delete", "/api/models/delete", m.name, "Delete " + m.name + "?")])]
+      : [button("Install", "/api/models/install", m.name,
+          m.fits ? null : m.name + " may not fit in this computer's memory. Install anyway?")])));
+    document.getElementById("whisper").replaceChildren(...d.whisper.models.map((m) => row(m.name,
+      m.size_gb + " GB", [m.active && ["active", "on"], m.downloaded && !m.active && ["downloaded"]].filter(Boolean),
+      m.active ? [] : [button("Use", "/api/whisper/activate", m.name)])));
+  },
+  status(d) {
+    document.getElementById("parts").replaceChildren(...d.parts.map((p) => {
+      const r = row(p.part, p.detail, [[p.up === true ? "up" : p.up === false ? "down" : "not used",
+        p.up === true ? "on" : p.up === false ? "warn" : ""]], []);
+      const dot = el("span", "dot " + (p.up === true ? "up" : p.up === false ? "down" : ""));
+      r.prepend(dot);
+      return r;
+    }));
+  },
+  permissions(d) {
+    const LEVEL = { free: "runs freely", asks: "asks first", remembered: "approved: always" };
+    document.getElementById("tools").replaceChildren(...d.tools.map((t) => row(t.name, t.description,
+      [[LEVEL[t.level], t.level === "remembered" ? "warn" : t.level === "asks" ? "on" : ""]],
+      t.level === "remembered" ? [button("Revoke", "/api/permissions/revoke", t.name)] : [])));
+  },
+};
+async function show(name) {
+  page = name;
+  document.body.dataset.page = name;
+  for (const t of document.querySelectorAll("nav button")) t.setAttribute("aria-selected", t.dataset.page === name);
+  for (const s of document.querySelectorAll("main section")) s.hidden = s.id !== "page-" + name;
+  if (!RENDER[name]) return;
+  const r = await fetch("/api/" + name, { headers: { "X-Rafiq-Token": TOKEN } });
+  if (r.ok) RENDER[name](await r.json());
+}
+for (const t of document.querySelectorAll("nav button")) t.onclick = () => show(t.dataset.page);
 function connect() {
   const es = new EventSource("/events?token=" + encodeURIComponent(TOKEN));
   es.onmessage = (m) => handle(JSON.parse(m.data));
@@ -145,6 +267,7 @@ document.getElementById("form").onsubmit = (ev) => {
 document.getElementById("talk").onclick = () => post("/api/listen");
 document.getElementById("stop").onclick = () => post("/api/stop");
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
+document.getElementById("always").onclick = () => post("/api/confirm", { yes: true, always: true });
 document.getElementById("no").onclick = () => post("/api/confirm", { yes: false });
 connect();
 </script>
