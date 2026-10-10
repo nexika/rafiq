@@ -72,6 +72,7 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq show                # show the last answer on screen again
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
@@ -79,6 +80,11 @@ Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 and Yes/No buttons when it asks before an action.
+
+**On screen**, each answer also appears as a desktop notification, with a line for the weather, a
+timer or music when the answer used one. It never takes the focus, and the next answer replaces it.
+Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
+`[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
 
 ## The wake word
 

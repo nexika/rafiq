@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | listen | show | doctor | google-setup"""
 
 from __future__ import annotations
 
@@ -130,19 +130,28 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
-def cmd_listen(_args) -> int:
-    """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+def _post_to_running(path: str) -> int:
     import httpx
 
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/listen", json={}, timeout=5,
+        resp = httpx.post(f"http://{host}:{port}{path}", json={}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
         return 1
     return 0 if resp.status_code == 200 else 1
+
+
+def cmd_listen(_args) -> int:
+    """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+    return _post_to_running("/api/listen")
+
+
+def cmd_show(_args) -> int:
+    """Show the running Rafiq's last answer on screen again (also: say "show it again")."""
+    return _post_to_running("/api/show")
 
 
 def cmd_enroll(args) -> int:
@@ -189,6 +198,7 @@ def main(argv=None) -> int:
     enroll.set_defaults(fn=cmd_enroll)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)

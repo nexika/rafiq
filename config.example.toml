@@ -30,5 +30,10 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[overlay]
+display = "auto"                # answers on screen as desktop notifications; "off" for none
+seconds = 8                     # how long an answer stays on screen
+silent = false                  # true: answer on screen only, never out loud
+
 [google]
 enabled = false                 # true after `rafiq google-setup`

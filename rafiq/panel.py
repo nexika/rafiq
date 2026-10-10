@@ -98,6 +98,8 @@ def make_handler(assistant, token: str, port: int):
                 assistant.submit("listen")
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put(data["yes"])
+            elif path == "/api/show":
+                assistant.submit("show_again")
             elif path == "/api/stop":
                 assistant.speaker.stop()
             else:

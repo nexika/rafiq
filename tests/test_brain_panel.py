@@ -193,3 +193,9 @@ def test_another_host_name_is_refused(panel):
 def test_the_panel_will_not_listen_beyond_this_computer():
     with pytest.raises(ValueError):
         serve(FakeAssistant(), "0.0.0.0", 0, "t" * 40)
+
+
+def test_show_again_is_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/show", {})[0] == 200
+    assert assistant.jobs == [("show_again", {})]

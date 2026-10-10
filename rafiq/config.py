@@ -44,6 +44,11 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    "overlay": {
+        "display": "auto",               # auto or notify: answers as desktop notifications; off: none
+        "seconds": 8,                    # how long an answer stays on screen
+        "silent": False,                 # true: answer on screen only, never out loud
+    },
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",
