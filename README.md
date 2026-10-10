@@ -38,6 +38,11 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 
+`rafiq update` pulls the latest version with git and installs its dependencies again (keeping the extras
+you installed). `rafiq backup` saves your settings, keys and recordings to
+`~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
+uploads anything: the archive holds your keys, so keep it out of public places.
+
 ## The brain: Claude, with Ollama as the fallback
 
 - **Claude** (recommended): fast, good at tools and at all six languages. Set an API key from
