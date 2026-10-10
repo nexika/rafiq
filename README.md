@@ -28,6 +28,9 @@ would say, not formal فصحى. Timers and reminders are spoken in the language 
 
 Linux with PipeWire (Fedora, Ubuntu 22.10+), Python 3.11 or newer, `ffmpeg`.
 
+New to this? [INSTALL_WITH_AI.md](INSTALL_WITH_AI.md) ([بالعربية](INSTALL_WITH_AI.ar.md)) is a prompt
+to paste into any chatbot, which then walks you through the install one command at a time.
+
 ```bash
 git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
@@ -166,6 +169,10 @@ optional.
 ```bash
 .venv/bin/ruff check . && .venv/bin/python -m pytest -q
 ```
+
+How the code fits together, how to add a skill and how to send a pull request:
+[CONTRIBUTING.md](CONTRIBUTING.md) ([بالعربية](CONTRIBUTING.ar.md)). AI coding assistants read
+[CLAUDE.md](CLAUDE.md).
 
 ## License
 
