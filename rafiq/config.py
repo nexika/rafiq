@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
+    "hue": {"enabled": False, "rooms": {}},
     "anthropic_api_key": "",
 }
 

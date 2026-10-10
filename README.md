@@ -131,6 +131,18 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
 
+## Philips Hue lights
+
+"Turn on the living room", "kitchen at 30%", "make the bedroom blue". Rafiq talks to the Hue bridge on
+your network directly; no Hue cloud account is used.
+
+1. Run `rafiq hue-setup` (or `rafiq hue-setup --host 192.168.1.20` if it does not find the bridge) and
+   press the round link button on the bridge.
+2. Set `enabled = true` under `[hue]` in the config.
+
+Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
+Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
 ## Settings
 
 `~/.config/rafiq/config.toml` (`RAFIQ_HOME` moves the folder). See `config.example.toml`; everything is

@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | hue-setup"""
 
 from __future__ import annotations
 
@@ -121,6 +121,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    hue = config.home() / "hue.json"
+    _check("Philips Hue", hue.is_file() and cfg["hue"].get("enabled", False),
+           "paired" if hue.is_file() else "run: rafiq hue-setup")
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
@@ -164,6 +167,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_hue_setup(args) -> int:
+    from .tools import hue
+
+    print(hue.setup(args.host or ""))
+    print("Then set [hue] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -191,6 +202,9 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    hue = sub.add_parser("hue-setup", help="pair with the Philips Hue bridge (press its link button)")
+    hue.add_argument("--host", help="the bridge's address on your network (default: look for it)")
+    hue.set_defaults(fn=cmd_hue_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)

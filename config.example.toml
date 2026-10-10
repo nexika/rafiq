@@ -32,3 +32,10 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[hue]
+enabled = false                 # true after `rafiq hue-setup`
+
+[hue.rooms]                     # names you say -> the Hue app's room names, for other languages
+# "الصالة" = "Living room"
+# "chambre" = "Bedroom"
