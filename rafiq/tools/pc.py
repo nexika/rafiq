@@ -1,5 +1,5 @@
-"""This computer: open apps, volume, how it is doing, lock it, power off. Linux with PipeWire (wpctl)
-and a desktop that reads .desktop files (GNOME, KDE, ...).
+"""This computer: open apps, volume, media, how it is doing, lock it, power off. Linux with PipeWire (wpctl),
+playerctl and a desktop that reads .desktop files (GNOME, KDE, ...).
 
 Commands run as argument lists, never through a shell: no word the user says can become a command.
 """
@@ -247,6 +247,54 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
         _run(["wpctl", "set-volume", SINK, f"{target / 100:.2f}"])
         current = target
     return f"volume {current}%" + (", muted" if muted else "")
+
+
+# ---------------------------------------------------------------------- media
+
+# Any player that speaks MPRIS over D-Bus (Spotify, Firefox and Chromium videos, VLC, mpv...), through
+# playerctl. What the user asks for, and the playerctl command for it.
+MEDIA = {"play": "play", "pause": "pause", "toggle": "play-pause", "next": "next", "previous": "previous",
+         "stop": "stop"}
+MEDIA_DONE = {"play": "playing", "pause": "paused", "toggle": "toggled", "next": "skipped to the next on",
+              "previous": "went back on", "stop": "stopped"}
+
+
+def active_player(run=_run) -> tuple[str, str] | None:
+    """The player to control and its status: one that is playing, else one that is paused, else the
+    first one."""
+    result = run(["playerctl", "--list-all"])
+    players = [p.strip() for p in result.stdout.splitlines() if p.strip()] if result.returncode == 0 else []
+    statuses = [(p, run(["playerctl", "--player", p, "status"]).stdout.strip()) for p in players]
+    for wanted in ("Playing", "Paused"):
+        for player, status in statuses:
+            if status == wanted:
+                return player, status
+    return statuses[0] if statuses else None
+
+
+@tool("media", "Control whatever is playing music or video (Spotify, a browser video, VLC...): play, pause, "
+      "next, previous, or say what is playing.",
+      {"action": {"type": "string", "enum": [*MEDIA, "status"],
+                  "description": "toggle switches between play and pause; status says what is playing"}},
+      required=("action",), level="act")
+def media(action: str, run=_run) -> str:
+    if action not in MEDIA and action != "status":
+        return f"error: action is one of {', '.join([*MEDIA, 'status'])}"
+    try:
+        found = active_player(run)
+        if not found:
+            return "error: nothing is playing music or video"
+        player, status = found
+        if action == "status":
+            title = run(["playerctl", "--player", player, "metadata", "--format",
+                         "{{artist}} - {{title}}"]).stdout.strip().strip(" -")
+            return f"{player} is {status.lower()}" + (f": {title}" if title else "")
+        result = run(["playerctl", "--player", player, MEDIA[action]])
+    except FileNotFoundError:
+        return "error: playerctl is not installed"
+    if result.returncode != 0:
+        return f"error: {result.stderr.strip()[:200]}"
+    return f"{MEDIA_DONE[action]} {player}"
 
 
 # ---------------------------------------------------------------------- audio output
