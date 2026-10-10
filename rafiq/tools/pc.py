@@ -11,6 +11,7 @@ import re
 import subprocess
 import time
 from configparser import ConfigParser
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import tool
@@ -112,6 +113,102 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
         _run(["wpctl", "set-volume", SINK, f"{target / 100:.2f}"])
         current = target
     return f"volume {current}%" + (", muted" if muted else "")
+
+
+# ---------------------------------------------------------------------- audio output
+
+@dataclass
+class Sink:
+    id: int
+    name: str
+    default: bool
+
+
+def parse_sinks(text: str) -> list[Sink]:
+    """The audio outputs in `wpctl status`: the Sinks list of the Audio section."""
+    sinks, section, in_sinks = [], "", False
+    for line in text.splitlines():
+        if line and not line[0].isspace() and line[0] not in "│├└":
+            section = line.strip()
+        tree = line.strip(" │")
+        if tree.startswith(("├─", "└─")):
+            in_sinks = section == "Audio" and tree.endswith("Sinks:")
+            continue
+        m = re.match(r"(\*?)\s*(\d+)\.\s+(.+?)\s*(\[vol:.*\])?$", tree)
+        if in_sinks and m:
+            sinks.append(Sink(int(m.group(2)), m.group(3), m.group(1) == "*"))
+    return sinks
+
+
+# What people call each kind of output in the six languages, and words in the names of such devices.
+OUTPUT_WORDS = {
+    "headphones": ["headphone", "headset", "earphone", "earbud", "casque", "écouteur", "ecouteur", "auricular",
+                   "cascos", "kopfhörer", "kopfhoerer", "سماعات الرأس", "سماعة الرأس", "سماعات الأذن",
+                   "سماعات", "سماعة", "هيدفون", "هيدسيت"],
+    "speakers": ["speaker", "enceinte", "haut-parleur", "haut parleur", "altavoz", "altavoces", "bocina",
+                 "lautsprecher", "boxen", "مكبرات الصوت", "مكبر الصوت", "سبيكر", "السماعات الخارجية"],
+    "tv": ["tv", "television", "télé", "tele", "télévision", "televisión", "fernseher", "تلفزيون",
+           "تليفزيون", "شاشة"],
+}
+SINK_HINTS = {"headphones": ["headphone", "headset", "buds", "airpods"],
+              "speakers": ["speaker", "analog stereo"],
+              "tv": ["hdmi", "displayport", "tv"]}
+
+
+def _says(text: str, word: str) -> bool:
+    """`word` in `text`, at the start of a word for Latin script (so "tv" is not inside "tvoje"); anywhere
+    for Arabic, whose words take prefixes such as ال."""
+    if any("\u0600" <= c <= "\u06ff" for c in word):
+        return word in text
+    return re.search(r"(?<!\w)" + re.escape(word), text) is not None
+
+
+def output_kind(spoken: str) -> str | None:
+    """headphones, speakers or tv from what the user called the output, in any of the six languages."""
+    q = spoken.lower().strip()
+    words = sorted(((w, kind) for kind, ws in OUTPUT_WORDS.items() for w in ws), key=lambda p: -len(p[0]))
+    return next((kind for w, kind in words if _says(q, w)), None)
+
+
+def find_sink(spoken: str, sinks: list[Sink], aliases: dict) -> Sink | None:
+    """The output the user named: a name from the config ([audio.outputs], by its own name or by kind),
+    then part of the device's name, then a device that looks like that kind."""
+    q = spoken.lower().strip()
+    if not q:
+        return None
+    kind = output_kind(q)
+
+    def named(part: str) -> Sink | None:
+        return next((s for s in sinks if part.lower() in s.name.lower()), None)
+
+    for key, part in aliases.items():
+        if (_says(q, key.lower()) or key.lower() == kind) and named(str(part)):
+            return named(str(part))
+    if named(q):
+        return named(q)
+    for hint in SINK_HINTS.get(kind, []):
+        if named(hint):
+            return named(hint)
+    return None
+
+
+def _outputs(sinks: list[Sink]) -> str:
+    return ", ".join(s.name + (" (current)" if s.default else "") for s in sinks) or "none"
+
+
+@tool("audio_output", "Switch where Rafiq's voice and the computer's sound play, e.g. 'headphones', 'speakers', "
+      "'TV', or a name the user set; with no name, list the outputs.",
+      {"name": {"type": "string", "description": "the output as the user said it, in their language"}})
+def audio_output(name: str = "", ctx=None) -> str:
+    sinks = parse_sinks(_run(["wpctl", "status"]).stdout)
+    if not name.strip():
+        return "outputs: " + _outputs(sinks)
+    aliases = ctx.cfg.get("audio", {}).get("outputs", {}) if ctx else {}
+    sink = find_sink(name, sinks, aliases)
+    if not sink:
+        return f"error: no output matches {name!r}; outputs: {_outputs(sinks)}"
+    result = _run(["wpctl", "set-default", str(sink.id)])
+    return f"now playing on {sink.name}" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
 
 
 # ---------------------------------------------------------------------- status

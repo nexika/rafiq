@@ -43,6 +43,10 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "audio": {
+        # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
+        "outputs": {},
+    },
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},

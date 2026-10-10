@@ -24,6 +24,10 @@ de = "de-DE-ConradNeural"
 ar = "ar-SA-HamedNeural"
 ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 
+[audio.outputs]                 # "switch to the headphones": a name -> part of the output's name in `wpctl status`
+# headphones = "WH-1000XM4"     # headphones, speakers and tv also match "casque", "Lautsprecher", "سماعات"...
+# desk = "USB Audio"
+
 [place]
 city = ""                       # for "what's the weather?" without a city
 
