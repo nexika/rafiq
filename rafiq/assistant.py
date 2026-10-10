@@ -32,10 +32,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the language of the current request and, for a
+    request from a satellite, its room."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    room: str = ""
 
 
 @dataclass
@@ -78,6 +80,7 @@ class Assistant:
         self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
+        self.stt_lock = threading.Lock()     # satellites' requests use the same model from other threads
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.ctx = Context(self.cfg, self.scheduler)
@@ -130,10 +133,14 @@ class Assistant:
 
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
-        heard = self.stt.transcribe(audio)
+        heard = self.transcribe(audio)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
+
+    def transcribe(self, audio: np.ndarray):
+        with self.stt_lock:
+            return self.stt.transcribe(audio)
 
     # ------------------------------------------------------------------ talking
 

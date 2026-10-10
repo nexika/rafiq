@@ -20,8 +20,8 @@ HISTORY_TURNS = 10
 HISTORY_IDLE_SECONDS = 300
 
 SYSTEM = """You are Rafiq (رفيق, "companion"), a voice assistant on {user}'s Linux computer. {place}
-Each request starts with a note in brackets: the current time and the language to answer in. The note
-is not part of what the user said.
+Each request starts with a note in brackets: the current time, the room it was said in when it came
+from a device in another room, and the language to answer in. The note is not part of what the user said.
 
 You hear the user through speech-to-text and they hear you through text-to-speech, so:
 - Answer in the language the note names. For Egyptian Arabic, use natural Egyptian colloquial Arabic
@@ -73,12 +73,14 @@ def system_prompt(cfg: dict) -> str:
     return SYSTEM.format(user=cfg.get("user_name") or "the user", place=f"The user is in {city}." if city else "")
 
 
-def with_note(text: str, tag: str, now: datetime | None = None) -> str:
+def with_note(text: str, tag: str, now: datetime | None = None, room: str = "") -> str:
     """The request with the time and the answer language around it. The language is named again
-    after the request: small local models follow what comes last."""
+    after the request: small local models follow what comes last. A request from a satellite also
+    names its room, so "turn on the light" means that room's light."""
     now = now or datetime.now().astimezone()
     name = lang_mod.NAMES.get(tag, "English")
-    return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}; answer in {name}] {text}\n[Answer in {name}.]"
+    where = f"; said in the {room}" if room else ""
+    return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}{where}; answer in {name}] {text}\n[Answer in {name}.]"
 
 
 class Brain:
@@ -163,7 +165,7 @@ class Brain:
         import anthropic
 
         messages = ([{"role": t.role, "content": t.content} for t in history]
-                    + [{"role": "user", "content": with_note(text, tag)}])
+                    + [{"role": "user", "content": with_note(text, tag, room=getattr(ctx, "room", ""))}])
         schemas = claude_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:
@@ -189,7 +191,7 @@ class Brain:
         brain = self.cfg["brain"]
         messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
                     + [{"role": t.role, "content": t.content} for t in history]
-                    + [{"role": "user", "content": with_note(text, tag)}])
+                    + [{"role": "user", "content": with_note(text, tag, room=getattr(ctx, "room", ""))}])
         schemas = ollama_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:

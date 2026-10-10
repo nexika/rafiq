@@ -44,6 +44,13 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # Devices in other rooms that hear "Rafiq" and send the request here (rafiq satellite on the device).
+    # devices: name -> {token, room, blocked_tools = [...], risky = "ask" or "block"}. The hub starts
+    # only when a device is listed; set host to this computer's address on a private network, or set
+    # tls_cert and tls_key.
+    "satellites": {"host": "127.0.0.1", "port": 8766, "tls_cert": "", "tls_key": "", "devices": {}},
+    # This computer as a satellite of another Rafiq: hub = "host:port", and the name and token listed there.
+    "satellite": {"hub": "", "name": "", "token": "", "tls": False, "tls_ca": ""},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",

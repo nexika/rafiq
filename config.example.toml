@@ -30,5 +30,24 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[satellites]                    # devices in other rooms (rafiq satellite token --name kitchen)
+host = "127.0.0.1"              # this computer's address on a private network, to let satellites in
+port = 8766
+tls_cert = ""                   # with tls_key: encrypt the connection
+tls_key = ""
+
+# [satellites.devices.kitchen]
+# token = "..."
+# room = "kitchen"
+# risky = "ask"                 # or "block": no actions that need a yes from this room
+# blocked_tools = []
+
+[satellite]                     # this computer as a satellite of another Rafiq (rafiq satellite run)
+hub = ""                        # "192.168.1.10:8766"
+name = ""
+token = ""
+tls = false
+tls_ca = ""                     # for a self-signed hub certificate
+
 [google]
 enabled = false                 # true after `rafiq google-setup`
