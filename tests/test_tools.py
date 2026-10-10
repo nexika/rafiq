@@ -19,7 +19,7 @@ def test_actions_that_change_something_are_confirmed_first():
                                       "start": "2026-10-11T09:00"}), name
     assert REGISTRY["power"].action({"action": "shutdown"}) == "shut down the computer"
     assert "a@b.c" in REGISTRY["email_send"].action({"to": "a@b.c", "subject": "Hi"})
-    for name in ("get_time", "weather", "web_search", "read_page", "volume", "open_app"):
+    for name in ("get_time", "weather", "web_search", "read_page", "volume", "open_app", "audio_output"):
         assert REGISTRY[name].action({}) is None, name
 
 

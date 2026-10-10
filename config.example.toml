@@ -7,14 +7,19 @@ mode = "auto"                   # auto: Claude when ANTHROPIC_API_KEY is set, el
 claude_model = "claude-haiku-5-5"
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
+persona = "neutral"             # neutral, concise or butler (a dry, witty butler); "be more concise" switches it by voice
 
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
 
 [voice]
-engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper
-rate = "+0%"                    # speak faster ("+10%") or slower ("-10%")
+engine = "auto"                 # auto: Azure, ElevenLabs, Kokoro, then Piper, each when it is set up
+rate = "+0%"                    # speak faster ("+10%") or slower ("-10%"); Azure and Edge only
+
+[voice.elevenlabs_voices]       # ElevenLabs voice ids (set ELEVENLABS_API_KEY); default reads every language
+# default = "JBFqnCBsd6RMkjVDRZzb"
+# ar-EG = "<an Egyptian voice id from the Voice Library>"
 
 [voice.voices]                  # Azure voice names: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
 en = "en-US-AndrewNeural"

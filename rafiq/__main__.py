@@ -115,6 +115,11 @@ def cmd_doctor(_args) -> int:
     speaker = Speaker(cfg)
     _check("Azure voices (Egyptian Arabic)", bool(speaker.key and speaker.region),
            "set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION" if not speaker.key else speaker.region)
+    _check("ElevenLabs voices", bool(speaker.eleven_key),
+           speaker.cfg.get("elevenlabs_model", "") if speaker.eleven_key else "set ELEVENLABS_API_KEY")
+    kokoro = speaker.kokoro_paths()
+    _check("Kokoro offline voices (en, fr, es)", kokoro is not None,
+           "found" if kokoro else "missing (see README)")
     for tag in ("en", "fr", "es", "de", "ar"):
         path = speaker.piper_path(tag)
         _check(f"offline voice {tag}", path is not None, path.name if path else "missing")
