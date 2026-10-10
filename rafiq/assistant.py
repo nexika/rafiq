@@ -12,6 +12,7 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -32,10 +33,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the language of the current request, and a way
+    to say something later (a countdown) from another thread."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    say: Callable[[str, str], None] | None = None
 
 
 @dataclass
@@ -80,7 +83,7 @@ class Assistant:
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
+        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag))
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
