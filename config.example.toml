@@ -27,6 +27,9 @@ ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 [place]
 city = ""                       # for "what's the weather?" without a city
 
+[notes]
+folder = ""                     # empty: ~/.config/rafiq/data/notes; or a folder you choose, such as an Obsidian vault
+
 [panel]
 port = 8765
 

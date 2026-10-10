@@ -46,6 +46,7 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
     "anthropic_api_key": "",
 }
 
