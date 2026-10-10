@@ -24,6 +24,9 @@ de = "de-DE-ConradNeural"
 ar = "ar-SA-HamedNeural"
 ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 
+[tasks]                         # background research, said aloud when ready; needs Claude
+model = ""                      # empty: the brain's claude_model; each task's cost is shown in the panel
+
 [place]
 city = ""                       # for "what's the weather?" without a city
 

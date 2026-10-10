@@ -22,6 +22,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
+from .tasks import ClaudeAgent, Task, Tasks
 from .tools import load_all
 from .tts import Speaker
 
@@ -32,10 +33,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the background tasks (None without Claude) and the
+    language of the current request."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    tasks: Tasks | None = None
 
 
 @dataclass
@@ -83,6 +86,8 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
+            self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -212,6 +217,14 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def _task_done(self, task: Task) -> None:
+        """Said on this thread, between requests, like an alarm."""
+        if task.state == "done":
+            text = lang.phrase("task_done", task.tag, result=task.result)
+        else:
+            text = lang.phrase("task_failed", task.tag, goal=task.goal)
+        self.submit("say", text=text, tag=lang.script_language(text, task.tag))
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
