@@ -15,7 +15,7 @@ def _facts(ctx):
 @tool("remember", "Remember a fact about the user for later conversations, when they ask you to remember it.",
       {"text": {"type": "string", "description": "the fact as a short sentence in the user's language, "
                                                  "such as 'The user's sister is called Sara'"}},
-      required=("text",))
+      required=("text",), level="act")
 def remember(text: str, ctx=None) -> str:
     facts = _facts(ctx)
     if facts is None:
@@ -30,7 +30,7 @@ def remember(text: str, ctx=None) -> str:
 
 
 @tool("recall", "What you remember about the user: facts matching some words, or everything.",
-      {"query": {"type": "string", "description": "words to look for; empty for everything"}})
+      {"query": {"type": "string", "description": "words to look for; empty for everything"}}, level="private")
 def recall(query: str = "", ctx=None) -> str:
     facts = _facts(ctx)
     if facts is None:
@@ -42,7 +42,8 @@ def recall(query: str = "", ctx=None) -> str:
 
 
 @tool("forget", "Delete remembered facts for good, by id (from recall) or by words in them.",
-      {"id": {"type": "string"}, "words": {"type": "string", "description": "words the facts contain"}})
+      {"id": {"type": "string"}, "words": {"type": "string", "description": "words the facts contain"}},
+      level="act")
 def forget(id: str = "", words: str = "", ctx=None) -> str:  # noqa: A002 (the model's word)
     facts = _facts(ctx)
     if facts is None:
