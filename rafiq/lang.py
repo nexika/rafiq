@@ -139,6 +139,18 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "budget_warning": {"en": "Heads up: you have used eighty percent of your spending cap.",
+                       "fr": "Attention : tu as utilisé quatre-vingts pour cent de ton plafond de dépenses.",
+                       "es": "Aviso: has usado el ochenta por ciento de tu límite de gasto.",
+                       "de": "Achtung: Du hast achtzig Prozent deines Ausgabenlimits verbraucht.",
+                       "ar": "تنبيه: لقد استهلكت ثمانين بالمئة من حد الإنفاق.",
+                       "ar-EG": "خد بالك: صرفت تمانين في المية من الحد بتاعك."},
+    "budget_capped": {"en": "Your spending cap is reached, so I'm switching to offline mode until it resets.",
+                      "fr": "Ton plafond de dépenses est atteint : je passe hors ligne jusqu'à sa remise à zéro.",
+                      "es": "Has llegado a tu límite de gasto, así que paso al modo sin conexión hasta que se renueve.",
+                      "de": "Dein Ausgabenlimit ist erreicht, ich arbeite offline, bis es zurückgesetzt wird.",
+                      "ar": "تم بلوغ حد الإنفاق، لذا سأعمل دون اتصال حتى يتجدد.",
+                      "ar-EG": "وصلت للحد بتاعك، فهشتغل أوفلاين لحد ما يتجدد."},
 }
 
 

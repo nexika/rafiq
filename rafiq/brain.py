@@ -83,8 +83,9 @@ def with_note(text: str, tag: str, now: datetime | None = None) -> str:
 
 class Brain:
     def __init__(self, cfg: dict, tools: dict[str, Tool], confirm: Callable[[str, str], bool],
-                 on_event: Callable[[str, dict], None] | None = None, clock=time.time):
+                 on_event: Callable[[str, dict], None] | None = None, clock=time.time, budget=None):
         self.cfg, self.tools, self.confirm = cfg, tools, confirm
+        self.budget = budget                 # charged for each Claude response; at its cap, offline only
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
@@ -93,6 +94,8 @@ class Brain:
     # ------------------------------------------------------------------ choosing a backend
 
     def backends(self) -> list[str]:
+        if self.budget and not self.budget.allows_paid():
+            return ["ollama"]
         mode = self.cfg["brain"].get("mode", "auto")
         if mode == "claude":
             return ["claude"]
@@ -172,6 +175,9 @@ class Brain:
                     system=system_prompt(self.cfg), tools=schemas, messages=messages)
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
+            usage = getattr(resp, "usage", None)
+            if self.budget and usage:
+                self.budget.charge_tokens(self.cfg["brain"]["claude_model"], usage.input_tokens, usage.output_tokens)
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
             calls = [b for b in resp.content if b.type == "tool_use"]
             if not calls:

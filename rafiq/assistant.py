@@ -20,6 +20,7 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .budget import Budget
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -32,10 +33,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the language of the current request and the
+    spending so far."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    budget: Budget | None = None
 
 
 @dataclass
@@ -78,11 +81,12 @@ class Assistant:
         self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
-        self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
+        self.budget = Budget(self.cfg)
+        self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute, budget=self.budget)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
+        self.ctx = Context(self.cfg, self.scheduler, budget=self.budget)
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, budget=self.budget)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -183,7 +187,15 @@ class Assistant:
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
+        self.publish_spending(tag)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def publish_spending(self, tag: str) -> None:
+        """Show the spending in the panel; say so once a day when a cap is near or reached."""
+        self.events.publish("spending", self.budget.summary())
+        alert = self.budget.alert()
+        if alert:
+            self.say(lang.phrase(alert, tag), tag)
 
     # ------------------------------------------------------------------ jobs from other threads
 

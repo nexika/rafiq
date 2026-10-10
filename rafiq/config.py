@@ -43,6 +43,18 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "budget": {
+        # Caps in `currency` (0: no cap). At warn_at of a cap Rafiq warns once; at the cap it goes
+        # offline (Ollama, Piper) until the next day, or the next month for the monthly cap.
+        "daily_cap": 0.0,
+        "monthly_cap": 0.0,
+        "warn_at": 0.8,
+        "currency": "USD",
+        # Per million tokens (input, output) for each Claude model; check the current price list.
+        "token_prices": {"claude-haiku-5-5": {"input": 1.0, "output": 5.0}},
+        # Per million characters read aloud. Azure's free tier (500,000 a month) is not deducted.
+        "character_prices": {"azure": 15.0},
+    },
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},

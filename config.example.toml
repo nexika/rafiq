@@ -24,6 +24,16 @@ de = "de-DE-ConradNeural"
 ar = "ar-SA-HamedNeural"
 ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 
+[budget]
+daily_cap = 0.0                 # in dollars; 0 is no cap. At 80% Rafiq warns, at the cap it goes offline
+monthly_cap = 0.0               # until the next day (or month)
+
+[budget.token_prices]           # dollars per million tokens; check the current Claude price list
+claude-haiku-5-5 = { input = 1.0, output = 5.0 }
+
+[budget.character_prices]       # dollars per million characters read aloud
+azure = 15.0
+
 [place]
 city = ""                       # for "what's the weather?" without a city
 
