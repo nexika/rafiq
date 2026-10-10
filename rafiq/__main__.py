@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | wake-pc"""
 
 from __future__ import annotations
 
@@ -156,6 +156,19 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_wake_pc(args) -> int:
+    """Start a computer that is off, with Wake-on-LAN (what a satellite does when the main computer is off)."""
+    from .fallback import wake_pc
+
+    try:
+        wake_pc(args.mac, args.broadcast, args.port)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wake-on-LAN packet sent to {args.mac}.")
+    return 0
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -191,6 +204,11 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
+    wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
+    wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
+    wake.add_argument("--port", type=int, default=9)
+    wake.set_defaults(fn=cmd_wake_pc)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)
