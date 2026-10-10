@@ -33,6 +33,11 @@ ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 # headphones = "WH-1000XM4"     # headphones, speakers and tv also match "casque", "Lautsprecher", "سماعات"...
 # desk = "USB Audio"
 
+[interruption]                  # say "stop", "attends", "espera", "warte", "توقف" or "استنى" over Rafiq
+enabled = true
+factor = 1.8                    # how much louder than Rafiq's own voice you must be; raise it if it stops itself
+echo_cancel = true              # after `pactl load-module module-echo-cancel`, listen through it
+
 [place]
 city = ""                       # for "what's the weather?" without a city
 

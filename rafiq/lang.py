@@ -119,7 +119,21 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+# What stops Rafiq while it speaks. Said over its voice, so only a short utterance counts: a long one is
+# more likely Rafiq's own sentence leaking past the echo check than you.
+STOP = {"stop", "wait", "enough", "attends", "arrête", "arrete", "espera", "para", "basta", "warte",
+        "stopp", "halt", "genug", "توقف", "قف", "استنى", "كفاية", "خلاص", "اسكت"}
+STOP_MAX_WORDS = 4
+
+
+def is_stop(text: str) -> bool:
+    """True for a short "stop" in any of Rafiq's languages ("Rafiq, stop", "attends", "استنى")."""
+    found = words(text)
+    return 0 < len(found) <= STOP_MAX_WORDS and any(w in _STOP for w in found)
+
+
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_STOP = _norm(STOP)
 
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},

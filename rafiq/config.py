@@ -52,6 +52,14 @@ DEFAULTS: dict = {
         # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
         "outputs": {},
     },
+    "interruption": {
+        # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.
+        "enabled": True,
+        "factor": 1.8,                   # how much louder than Rafiq's echo you must be
+        "min_level": 0.01,               # the quietest sound (RMS) that counts
+        "frames": 3,                     # loud 32 ms frames in a row before it listens
+        "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
+    },
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},

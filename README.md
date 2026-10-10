@@ -84,6 +84,11 @@ rafiq listen              # make the running Rafiq listen now
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
 Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
 
+**To interrupt Rafiq**, say "stop", "attends", "espera", "warte", "توقف" or "استنى" while it speaks.
+The microphone stays open: you must be about 1.8 times louder than Rafiq's own voice (`[interruption]
+factor`). With PipeWire, `pactl load-module module-echo-cancel` removes most of that echo and Rafiq
+listens through it on its own. `enabled = false` mutes the microphone while Rafiq speaks, as before.
+
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 Yes/No buttons when it asks before an action, and the choice of style.
 
