@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | listen | gestures | enroll | doctor | google-setup"""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ def cmd_run(args) -> int:
         host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
         server = serve(assistant, host, port, config.panel_token())
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
+        assistant.gestures.url = f"http://{host}:{server.server_address[1]}/api/gesture"
         print(f"Panel: http://{host}:{port}/", flush=True)
     print('Say "Rafiq" (or "يا رفيق"). Ctrl+C stops.', flush=True)
     try:
@@ -121,6 +122,10 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    import importlib.util
+
+    _check("hand gestures (mediapipe, opencv)", all(importlib.util.find_spec(m) for m in ("mediapipe", "cv2")),
+           "" if cfg["gestures"].get("enabled") else "off; pip install rafiq[gestures], then rafiq gestures demo")
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
@@ -138,6 +143,28 @@ def cmd_listen(_args) -> int:
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
         resp = httpx.post(f"http://{host}:{port}/api/listen", json={}, timeout=5,
+                          headers={"X-Rafiq-Token": config.panel_token()})
+    except httpx.HTTPError:
+        print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
+        return 1
+    return 0 if resp.status_code == 200 else 1
+
+
+def cmd_gestures(args) -> int:
+    """Hand gestures: on and off ask the running Rafiq (for a keyboard shortcut); demo and calibrate open
+    the camera in a window."""
+    if args.action in ("demo", "calibrate"):
+        from . import gestures, tracker
+
+        options = gestures.settings(config.load())
+        return tracker.main([f"--{args.action}", "--hold", str(options["hold_seconds"]),
+                             "--cooldown", str(options["cooldown_seconds"]), "--camera", str(options["camera"])])
+    import httpx
+
+    cfg = config.load()
+    host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
+    try:
+        resp = httpx.post(f"http://{host}:{port}/api/gestures", json={"on": args.action == "on"}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
@@ -189,7 +216,11 @@ def main(argv=None) -> int:
     enroll.set_defaults(fn=cmd_enroll)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
-    sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    gestures = sub.add_parser("gestures", help="webcam hand gestures: on, off, demo (camera with landmarks), "
+                              "calibrate (tune the timing)")
+    gestures.add_argument("action", choices=("on", "off", "demo", "calibrate"))
+    gestures.set_defaults(fn=cmd_gestures)
+    sub.add_parser("doctor",help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

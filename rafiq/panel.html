@@ -129,6 +129,8 @@ function handle(e) {
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "gesture": add("note", "✋ " + e.gesture + " → " + e.action); break;
+    case "gestures": add("note", "Hand gestures " + (e.on ? "on" : "off")); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
   }
 }

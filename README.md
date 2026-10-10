@@ -16,6 +16,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | Skill | Examples |
 |---|---|
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
+| Hand gestures | open palm pauses, thumbs-up plays, a fist stops Rafiq talking, swipes change tabs or the volume (see below) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
@@ -109,6 +110,31 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
+
+## Hand gestures
+
+With a webcam, held hand gestures control the computer:
+
+| Gesture | Does |
+|---|---|
+| Open palm, held | pause what is playing |
+| Thumbs-up, held | play |
+| Fist, held | stop Rafiq talking |
+| One finger, then swipe left or right | previous or next tab (tab mode lasts 5 seconds) |
+| Two fingers, then swipe left or right | volume down or up |
+| Two hands moving apart or together | zoom in or out |
+
+```bash
+.venv/bin/pip install -e ".[gestures]"   # MediaPipe and OpenCV
+rafiq gestures demo        # the camera with the hand landmarks and the gesture it sees
+rafiq gestures calibrate   # the same, with sliders for how long to hold and the pause between gestures; s saves
+rafiq gestures on          # in the running Rafiq (bind to a shortcut); "Rafiq, turn on hand gestures" works too
+```
+
+`enabled = true` under `[gestures]` turns them on when Rafiq starts. The camera runs in its own
+process, which sends Rafiq only the name of each gesture, never an image, with a token made each
+time it starts; only the actions above can happen. Media keys go through `playerctl`; tabs and zoom
+press keys with `ydotool` on Wayland (its `ydotoold` service must run) or `xdotool` on X11.
 
 ## Safety
 

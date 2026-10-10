@@ -20,6 +20,8 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .gestures import GestureControl, SystemDesktop
+from .gestures import settings as gesture_settings
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -32,10 +34,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the language of the current request and the hand
+    gestures."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    gestures: GestureControl | None = None
 
 
 @dataclass
@@ -80,7 +84,10 @@ class Assistant:
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
+        # Hand gestures: the camera tracker posts to the panel, so `rafiq run` sets the url once it serves.
+        self.gestures = GestureControl(SystemDesktop(), self.speaker.stop, self.events.publish,
+                                       options=gesture_settings(self.cfg))
+        self.ctx = Context(self.cfg, self.scheduler, gestures=self.gestures)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
@@ -268,6 +275,10 @@ class Assistant:
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
+        if self.cfg["gestures"].get("enabled"):
+            started = self.gestures.start()
+            if started.startswith("error"):
+                self.events.publish("error", {"error": started})
         self.set_state("idle")
         try:
             while not self._stop.is_set():
@@ -280,6 +291,7 @@ class Assistant:
                     self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
                 self.set_state("idle")
         finally:
+            self.gestures.stop()
             self.mic.stop()
             self.scheduler.stop()
 

@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 offline-voice = ["piper-tts>=1.2"]
+gestures = ["mediapipe>=0.10", "opencv-python>=4.8"]
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.scripts]

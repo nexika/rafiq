@@ -44,6 +44,8 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # Hand gestures through the webcam (pip install rafiq[gestures]); on at start, or by voice or shortcut.
+    "gestures": {"enabled": False, "hold_seconds": 0.6, "cooldown_seconds": 1.0, "camera": 0},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",
