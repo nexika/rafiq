@@ -1,6 +1,6 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY), then the file, and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, RAFIQ_AGENT_TOKEN), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -44,6 +44,12 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # `rafiq run --server`: the brain without devices, for `rafiq agent` on the PC. Without a TLS
+    # certificate it only listens on a private address (the LAN or Tailscale).
+    "server": {"host": "127.0.0.1", "port": 8766, "tls_cert": "", "tls_key": ""},
+    # `rafiq agent`: the server to lend this PC to. The token (from `rafiq agent-token NAME` on the
+    # server) can also come from RAFIQ_AGENT_TOKEN.
+    "agent": {"server": "", "name": "", "token": ""},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",
@@ -77,6 +83,8 @@ def load(path: Path | None = None) -> dict:
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
     if os.environ.get("ANTHROPIC_API_KEY"):
         cfg["anthropic_api_key"] = os.environ["ANTHROPIC_API_KEY"]
+    if os.environ.get("RAFIQ_AGENT_TOKEN"):
+        cfg["agent"]["token"] = os.environ["RAFIQ_AGENT_TOKEN"]
     return cfg
 
 
