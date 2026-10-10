@@ -1,7 +1,8 @@
 import pytest
 
-from rafiq import config
-from rafiq.tools import REGISTRY, everyday, load_all, pc, web
+from rafiq import config, lang
+from rafiq import tools as tools_pkg
+from rafiq.tools import CARDS, LEVELS, REGISTRY, everyday, load_all, pc, web
 
 
 def test_every_tool_has_a_description_and_a_valid_schema():
@@ -21,6 +22,61 @@ def test_actions_that_change_something_are_confirmed_first():
     assert "a@b.c" in REGISTRY["email_send"].action({"to": "a@b.c", "subject": "Hi"})
     for name in ("get_time", "weather", "web_search", "read_page", "volume", "open_app"):
         assert REGISTRY[name].action({}) is None, name
+
+
+def test_every_tool_declares_its_level_speed_exposure_and_card():
+    for t in load_all({"google": {"enabled": True}}).values():
+        assert t.level in LEVELS and t.card in CARDS, t.name
+        assert isinstance(t.slow, bool) and isinstance(t.expose, bool), t.name
+        if t.slow:
+            assert set(t.waiting_phrase) == set(lang.TAGS) and all(t.waiting_phrase.values()), t.name
+        else:
+            assert not t.waiting_phrase, t.name
+
+
+def test_only_critical_tools_ask_first_and_every_critical_tool_does():
+    for t in load_all({"google": {"enabled": True}}).values():
+        assert (t.confirm is not None) == (t.level == "critical"), t.name
+    assert {n for n, t in REGISTRY.items() if t.level == "critical"} == {"power", "email_send", "calendar_add"}
+
+
+def test_only_safe_tools_are_exposed_over_mcp():
+    tools = load_all({"google": {"enabled": True}})
+    for t in tools.values():
+        assert not t.expose or t.level == "safe", t.name
+    assert tools["web_search"].expose and tools["calculate"].expose
+    for name in ("power", "email_read", "email_list", "calendar_events", "open_app", "volume"):
+        assert not tools[name].expose, name
+
+
+def test_reading_personal_data_is_private():
+    tools = load_all({"google": {"enabled": True}})
+    for name in ("email_list", "email_read", "calendar_events"):
+        assert tools[name].level == "private", name
+
+
+def test_a_slow_tool_has_a_waiting_phrase_in_the_users_language():
+    search = load_all({})["web_search"]
+    assert search.slow
+    assert search.waiting("fr") == search.waiting_phrase["fr"] != search.waiting("en")
+    assert search.waiting("xx") == search.waiting_phrase["en"]
+    assert load_all({})["get_time"].waiting("en") is None
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"level": "god"},                                                  # unknown level
+    {"level": "safe", "card": "hologram"},                             # unknown card
+    {"level": "critical"},                                             # critical without asking first
+    {"level": "safe", "confirm": "do it"},                             # asks first but is not critical
+    {"level": "act", "expose": True},                                  # only safe tools go over MCP
+    {"level": "safe", "slow": True},                                   # slow with nothing to say meanwhile
+    {"level": "safe", "slow": True, "waiting_phrase": {"en": "Hold on."}},   # not in every language
+    {"level": "safe", "waiting_phrase": dict.fromkeys(lang.TAGS, "x")},      # a phrase on a quick tool
+])
+def test_a_tool_that_declares_itself_badly_is_refused(kwargs):
+    with pytest.raises(ValueError):
+        tools_pkg.tool("bad_tool", "never registered", **kwargs)(lambda: "")
+    assert "bad_tool" not in REGISTRY
 
 
 @pytest.mark.parametrize("expr, value", [
