@@ -20,7 +20,7 @@ def test_actions_that_change_something_are_confirmed_first():
                                       "start": "2026-10-11T09:00"}), name
     assert REGISTRY["power"].action({"action": "shutdown"}) == "shut down the computer"
     assert "a@b.c" in REGISTRY["email_send"].action({"to": "a@b.c", "subject": "Hi"})
-    for name in ("get_time", "weather", "web_search", "read_page", "volume", "open_app"):
+    for name in ("get_time", "weather", "web_search", "read_page", "volume", "open_app", "audio_output"):
         assert REGISTRY[name].action({}) is None, name
 
 
@@ -37,7 +37,8 @@ def test_every_tool_declares_its_level_speed_exposure_and_card():
 def test_only_critical_tools_ask_first_and_every_critical_tool_does():
     for t in load_all({"google": {"enabled": True}}).values():
         assert (t.confirm is not None) == (t.level == "critical"), t.name
-    assert {n for n, t in REGISTRY.items() if t.level == "critical"} == {"power", "email_send", "calendar_add"}
+    assert {n for n, t in REGISTRY.items() if t.level == "critical"} == {"power", "email_send", "calendar_add",
+                                                                        "calendar_delete"}
 
 
 def test_only_safe_tools_are_exposed_over_mcp():
@@ -173,3 +174,79 @@ def test_only_the_public_internet_is_fetched(url, addresses, ok):
 def test_open_in_browser_only_opens_web_addresses():
     assert web.open_in_browser("file:///etc/passwd").startswith("error")
     assert web.open_in_browser("javascript:alert(1)").startswith("error")
+
+
+class FakeShutdownCtx:
+    def __init__(self, delay=30):
+        self.cfg = config.load()
+        self.cfg["pc"]["shutdown_delay"] = delay
+        self.tag = "fr"
+        self.said = []
+
+    def say(self, text, tag):
+        self.said.append((text, tag))
+
+
+def countdown(cancel_at=None):
+    """A shutdown whose waits return at once and whose commands are only recorded."""
+    ran, waited = [], []
+    shutdown = pc.DelayedShutdown(run=lambda args: ran.append(args) or type("R", (), {"returncode": 0})(),
+                                  spawn=lambda fn: fn())
+
+    def wait(seconds):
+        waited.append(seconds)
+        if cancel_at is not None and len(waited) == cancel_at:
+            shutdown.cancel()
+        return shutdown.cancelled.is_set()
+
+    shutdown.wait = wait
+    return shutdown, ran, waited
+
+
+def test_shutdown_waits_warns_then_powers_off(monkeypatch):
+    shutdown, ran, waited = countdown()
+    monkeypatch.setattr(pc, "SHUTDOWN", shutdown)
+    ctx = FakeShutdownCtx()
+    assert "30 seconds" in pc.power("shutdown", ctx=ctx)
+    assert waited == [20, 10]
+    assert ctx.said == [("Extinction dans 10 secondes. Dis « annule l'extinction » pour l'arrêter.", "fr")]
+    assert ran == [["systemctl", "poweroff"]]
+    assert not shutdown.pending
+
+
+def test_cancel_the_shutdown_stops_the_countdown(monkeypatch):
+    shutdown, ran, waited = countdown(cancel_at=1)
+    monkeypatch.setattr(pc, "SHUTDOWN", shutdown)
+    pc.power("shutdown", ctx=FakeShutdownCtx())
+    assert ran == [] and waited == [20]
+
+
+def test_cancel_shutdown_tool(monkeypatch):
+    shutdown = pc.DelayedShutdown(run=lambda args: None)
+    monkeypatch.setattr(pc, "SHUTDOWN", shutdown)
+    assert pc.cancel_shutdown() == "no shutdown is pending"
+    shutdown.start(60, ["systemctl", "poweroff"], lambda left: None)
+    assert shutdown.pending
+    assert pc.cancel_shutdown() == "the shutdown is cancelled"
+    shutdown.thread.join(timeout=2)
+    assert not shutdown.pending
+
+
+def test_a_second_shutdown_does_not_start_a_second_countdown(monkeypatch):
+    shutdown = pc.DelayedShutdown(run=lambda args: None)
+    monkeypatch.setattr(pc, "SHUTDOWN", shutdown)
+    pc.power("shutdown", ctx=FakeShutdownCtx())
+    assert "already" in pc.power("shutdown", ctx=FakeShutdownCtx())
+    shutdown.cancel()
+
+
+def test_a_zero_delay_shuts_down_at_once(monkeypatch):
+    ran = []
+    monkeypatch.setattr(pc, "_run", lambda args: ran.append(args) or type("R", (), {"returncode": 0})())
+    assert pc.power("shutdown", ctx=FakeShutdownCtx(delay=0)) == "done"
+    assert ran == [["systemctl", "poweroff"]]
+
+
+def test_cancelling_the_shutdown_is_not_asked_first():
+    load_all({})
+    assert REGISTRY["cancel_shutdown"].action({}) is None
