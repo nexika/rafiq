@@ -14,8 +14,12 @@ whisper_model = "small"         # medium understands Arabic better but is about 
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
 
 [voice]
-engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper
-rate = "+0%"                    # speak faster ("+10%") or slower ("-10%")
+engine = "auto"                 # auto: Azure, ElevenLabs, Kokoro, then Piper, each when it is set up
+rate = "+0%"                    # speak faster ("+10%") or slower ("-10%"); Azure and Edge only
+
+[voice.elevenlabs_voices]       # ElevenLabs voice ids (set ELEVENLABS_API_KEY); default reads every language
+# default = "JBFqnCBsd6RMkjVDRZzb"
+# ar-EG = "<an Egyptian voice id from the Voice Library>"
 
 [voice.voices]                  # Azure voice names: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
 en = "en-US-AndrewNeural"
