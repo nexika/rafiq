@@ -11,6 +11,16 @@ ollama_url = "http://127.0.0.1:11434"
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+stt_engine = "auto"             # auto: Whisper here, the cloud only for stt_by_language or when Whisper can't run
+                                # local: never the cloud; azure or openai: every language
+offline = false                 # true: what you say never leaves this computer
+openai_model = "gpt-4o-mini-transcribe"   # needs OPENAI_API_KEY
+
+[speech.stt_by_language]        # send a language Whisper hears badly to a cloud service
+# ar = "azure"                  # Azure's Egyptian recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+
+[speech.azure_locales]
+ar = "ar-EG"                    # or ar-SA for Modern Standard Arabic
 
 [voice]
 engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper

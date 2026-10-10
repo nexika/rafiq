@@ -26,6 +26,14 @@ DEFAULTS: dict = {
         "languages": ["en", "fr", "es", "de", "ar"],
         "follow_up_seconds": 6,          # after an answer, listen this long without the name
         "max_utterance_seconds": 20,
+        # Speech to text. auto: Whisper on this computer; a cloud service only for the languages in
+        # stt_by_language, or when Whisper can't run. local: never the cloud. azure or openai: every language.
+        "stt_engine": "auto",
+        "stt_by_language": {},           # language -> "azure", "openai" or "local", e.g. {"ar": "azure"}
+        "azure_locales": {"ar": "ar-EG"},  # the Azure recogniser per language (AZURE_SPEECH_KEY, as for the voice)
+        "openai_model": "gpt-4o-mini-transcribe",
+        "openai_key": "",                # or OPENAI_API_KEY
+        "offline": False,                # true: what you say never leaves this computer
     },
     "voice": {
         # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper (offline).
