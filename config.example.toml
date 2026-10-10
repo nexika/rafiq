@@ -3,8 +3,10 @@
 user_name = ""                  # how Rafiq refers to you
 
 [brain]
-mode = "auto"                   # auto: Claude when ANTHROPIC_API_KEY is set, else Ollama
+mode = "auto"                   # auto: Claude, then OpenAI, for each whose key is set; then Ollama
 claude_model = "claude-haiku-5-5"
+openai_model = "gpt-5-mini"     # needs OPENAI_API_KEY
+openai_url = "https://api.openai.com/v1"   # or any server that speaks OpenAI's chat completions
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
 

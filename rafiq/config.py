@@ -1,6 +1,6 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY), then the file, and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -13,9 +13,12 @@ from pathlib import Path
 
 DEFAULTS: dict = {
     "brain": {
-        # "auto": Claude when an API key is set and the network answers, else Ollama.
+        # "auto": Claude, then OpenAI, for each that has an API key and answers; else Ollama.
         "mode": "auto",
         "claude_model": "claude-haiku-5-5",
+        "openai_model": "gpt-5-mini",
+        # Any server that speaks OpenAI's chat completions works here (DeepSeek, Gemini, a local one).
+        "openai_url": "https://api.openai.com/v1",
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "max_tokens": 600,
@@ -47,6 +50,7 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",
+    "openai_api_key": "",
 }
 
 
@@ -75,8 +79,9 @@ def load(path: Path | None = None) -> dict:
     cfg = copy.deepcopy(DEFAULTS)
     if path.is_file():
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        cfg["anthropic_api_key"] = os.environ["ANTHROPIC_API_KEY"]
+    for key in ("anthropic_api_key", "openai_api_key"):
+        if os.environ.get(key.upper()):
+            cfg[key] = os.environ[key.upper()]
     return cfg
 
 

@@ -102,6 +102,8 @@ def cmd_doctor(_args) -> int:
     brain = cfg["brain"]
     _check("Claude API key", bool(cfg.get("anthropic_api_key")),
            brain["claude_model"] if cfg.get("anthropic_api_key") else "set ANTHROPIC_API_KEY to use Claude")
+    _check("OpenAI API key", bool(cfg.get("openai_api_key")),
+           brain["openai_model"] if cfg.get("openai_api_key") else "set OPENAI_API_KEY to use OpenAI")
     try:
         tags = httpx.get(f"{brain['ollama_url']}/api/tags", timeout=3).json().get("models", [])
         names = [m["name"] for m in tags]
@@ -122,11 +124,9 @@ def cmd_doctor(_args) -> int:
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
-    if brain["mode"] == "auto":
-        order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
-    else:
-        order = [brain["mode"]]
-    print(f"  brain in order: {', '.join(order)}")
+    from .brain import Brain
+
+    print(f"  brain in order: {', '.join(Brain(cfg, {}, lambda action, tag: False).backends())}")
     return 0
 
 
@@ -169,12 +169,12 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
-    run.add_argument("--brain", choices=("auto", "claude", "ollama"))
+    run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
     ask.add_argument("--lang", choices=lang.TAGS)
-    ask.add_argument("--brain", choices=("auto", "claude", "ollama"))
+    ask.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
     say = sub.add_parser("say", help="say a sentence, to try a voice")

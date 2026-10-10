@@ -7,8 +7,8 @@ Arabic and Egyptian Arabic. Say "Rafiq" (or "يا رفيق"), ask, and it answer
 and dialect you used. *Rafiq* means companion.
 
 ```
-microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + tools → voice → speaker
-                                                                   ↘ local panel (127.0.0.1)
+microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or Ollama + tools → voice → speaker
+                                                                           ↘ local panel (127.0.0.1)
 ```
 
 ## What it can do
@@ -43,12 +43,18 @@ The first start downloads the Whisper models (about 550 MB). Offline voices go i
 - **Claude** (recommended): fast, good at tools and at all six languages. Set an API key from
   [console.anthropic.com](https://console.anthropic.com): `export ANTHROPIC_API_KEY=...`. The default
   model is `claude-haiku-5-5`, chosen for speed; change `brain.claude_model` for a stronger one.
-- **Ollama**: free and private, used when there is no key or Claude can't be reached. On a laptop
+- **OpenAI**: `export OPENAI_API_KEY=...`; the default model is `gpt-5-mini` (`brain.openai_model`).
+  Rafiq uses OpenAI's chat completions, so `brain.openai_url` can also point at another server that
+  speaks it (DeepSeek, Gemini's OpenAI endpoint, a local one), with that server's key.
+- **Ollama**: free and private, used when there is no key or the others can't be reached. On a laptop
   without a GPU, a 7B model takes about 10 to 20 seconds per answer, and it chooses tools and keeps
   the language less reliably than Claude. Rafiq warms the model up when it starts, so only the first
   answer is slow.
 
-`rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
+In auto mode Rafiq tries Claude, then OpenAI (each only when its key is set), then Ollama.
+`rafiq run --brain claude|openai|ollama|auto` picks one for a session; `brain.mode` in the config
+sets it. In the panel, the Brain menu lists the models your key can really use, asked of the
+provider itself, and switches to one after asking again; the choice lasts until Rafiq stops.
 
 ## The voice
 

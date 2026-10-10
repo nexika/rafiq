@@ -1,5 +1,5 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations.
+a text box, yes/no buttons for confirmations and a model picker.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -14,6 +14,8 @@ import queue
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
+
+from .brain import BrainError
 
 MAX_BODY = 10_000
 
@@ -100,6 +102,21 @@ def make_handler(assistant, token: str, port: int):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/stop":
                 assistant.speaker.stop()
+            elif path == "/api/brain":
+                return self._send(200, json.dumps(assistant.brain.status()).encode())
+            elif path == "/api/models" and isinstance(data.get("backend"), str):
+                try:
+                    models = assistant.brain.models(data["backend"])
+                except BrainError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                return self._send(200, json.dumps({"models": models}).encode())
+            elif path == "/api/model" and isinstance(data.get("backend"), str) and isinstance(data.get("model"), str):
+                try:   # the provider is asked first, so a model the key cannot use is never picked
+                    assistant.brain.choose(data["backend"], data["model"])
+                except BrainError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                assistant.events.publish("brain", {"backend": data["backend"], "mode": data["backend"],
+                                                   "model": data["model"]})
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')

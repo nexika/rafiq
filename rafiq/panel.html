@@ -63,6 +63,12 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
+#picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -8px 0 20px; font-size: 14px; }
+#picker select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); max-width: 100%; }
+#picker button { padding: 6px 12px; }
+#picker-note { color: var(--muted); }
+#picker-note.err { color: var(--err); }
 </style>
 </head>
 <body>
@@ -74,6 +80,16 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div id="state" role="status">connecting…</div>
     </div>
   </header>
+  <div id="picker">
+    <label for="backend">Brain</label>
+    <select id="backend">
+      <option value="auto">Auto</option><option value="claude">Claude</option>
+      <option value="openai">OpenAI</option><option value="ollama">Ollama</option>
+    </select>
+    <select id="model" aria-label="Model" hidden></select>
+    <button type="button" id="use" hidden>Use</button>
+    <span id="picker-note" role="status"></span>
+  </div>
   <div id="log" aria-live="polite">
     <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
   </div>
@@ -146,6 +162,44 @@ document.getElementById("talk").onclick = () => post("/api/listen");
 document.getElementById("stop").onclick = () => post("/api/stop");
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
 document.getElementById("no").onclick = () => post("/api/confirm", { yes: false });
+
+// The model picker: the list comes from the provider itself, and Rafiq asks it again before switching.
+const backendEl = document.getElementById("backend"), modelEl = document.getElementById("model");
+const useEl = document.getElementById("use"), pickerNote = document.getElementById("picker-note");
+let brain = null;
+async function ask(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
+    body: JSON.stringify(body || {}) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "error " + r.status);
+  return data;
+}
+function note(text, err) { pickerNote.textContent = text; pickerNote.className = err ? "err" : ""; }
+async function loadBrain() {
+  try { brain = await ask("/api/brain"); } catch (e) { return note(e.message, true); }
+  backendEl.value = brain.mode;
+  note(brain.mode === "auto" ? "Claude, then OpenAI, then Ollama" : brain.models[brain.mode]);
+}
+backendEl.onchange = async () => {
+  const backend = backendEl.value;
+  modelEl.hidden = useEl.hidden = true;
+  if (backend === "auto") { useEl.hidden = false; return note("Claude, then OpenAI, then Ollama"); }
+  note("Asking " + backend + " which models this key can use…");
+  try {
+    const { models } = await ask("/api/models", { backend });
+    modelEl.replaceChildren(...models.map((m) => new Option(m, m, false, brain && m === brain.models[backend])));
+    modelEl.hidden = useEl.hidden = !models.length;
+    note(models.length ? "" : "No models available.", !models.length);
+  } catch (e) { note(e.message, true); }
+};
+useEl.onclick = async () => {
+  note("Checking…");
+  try { await ask("/api/model", { backend: backendEl.value, model: modelEl.value || "" }); }
+  catch (e) { return note(e.message, true); }
+  modelEl.hidden = useEl.hidden = true;
+  loadBrain();
+};
+loadBrain();
 connect();
 </script>
 </body>
