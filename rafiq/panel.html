@@ -128,6 +128,7 @@ function handle(e) {
       + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
+    case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
   }

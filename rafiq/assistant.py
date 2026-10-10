@@ -8,6 +8,7 @@ wake-word listener for the microphone.
 
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import time
@@ -18,7 +19,8 @@ import numpy as np
 
 from . import config as config_mod
 from . import kws, lang, wake
-from .audio import RATE, Endpointer, Microphone, SileroVAD
+from .audio import RATE, Endpointer, Microphone, SileroVAD, echo_cancel_source
+from .bargein import BargeIn
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
@@ -73,12 +75,15 @@ class Assistant:
         speech = self.cfg["speech"]
         self.events = Events()
         self.jobs: queue.Queue = queue.Queue()
-        self.mic = Microphone()
+        self.mic = Microphone(device=self._echo_cancelled_device())
         self.vad = SileroVAD()
         self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
+        barge = self.cfg["interruption"]
+        self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
+                                min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
@@ -101,15 +106,44 @@ class Assistant:
         self.events.publish("state", {"state": state})
 
     def _mute(self) -> None:
-        self.mic.muted = True
+        """Rafiq starts speaking: the microphone only listens for "stop", or not at all."""
+        self.mic.drain()
+        if self.barge_in:
+            self.barge_in.start(lambda timeout: self.mic.read(timeout=timeout))
+        else:
+            self.mic.muted = True
         self.set_state("speaking")
 
     def _unmute(self) -> None:
+        if self.barge_in:
+            self.barge_in.stop()
         time.sleep(0.15)                     # the speaker's tail would be heard as speech
         self.mic.drain()
         self.vad.reset()
         self.endpointer.reset()
         self.mic.muted = False
+
+    # ------------------------------------------------------------------ interrupting
+
+    def _echo_cancelled_device(self) -> str | None:
+        """PipeWire's echo-cancelled microphone through the pulse device, when the module is loaded."""
+        barge = self.cfg["interruption"]
+        source = echo_cancel_source() if barge["enabled"] and barge["echo_cancel"] else None
+        if source is None:
+            return None
+        os.environ.setdefault("PULSE_SOURCE", source)
+        return "pulse"
+
+    def _transcribe_stop(self, audio: np.ndarray) -> str:
+        try:   # the small model only: it is fast, and a stop word is short
+            return self.wake_stt.transcribe(audio, beam_size=1, hotwords=None).text
+        except Exception as exc:
+            self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
+            return ""
+
+    def _interrupted(self) -> None:
+        self.speaker.stop()
+        self.events.publish("interrupted", {})
 
     # ------------------------------------------------------------------ hearing
 
