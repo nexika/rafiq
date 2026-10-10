@@ -1,5 +1,5 @@
 """Rafiq's harmless tools for other programs (Claude Desktop, Claude Code, other agents), as an MCP server
-over stdio: `rafiq mcp`. Only tools marked mcp=True are offered, and never one that asks the user first,
+over stdio: `rafiq mcp`. Only safe tools marked expose=True are offered, and never one that asks the user first,
 since no one is there to answer. Every call is logged.
 
 The protocol is JSON-RPC 2.0, one message per line on stdin and stdout; the few methods a tools-only server
@@ -26,7 +26,7 @@ PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS = -32700, -32600,
 
 
 def safe_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
-    return {name: t for name, t in tools.items() if t.mcp and t.confirm is None}
+    return {name: t for name, t in tools.items() if t.expose and t.level == "safe" and t.confirm is None}
 
 
 class Server:
@@ -55,7 +55,7 @@ class Server:
                 "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "rafiq", "version": __version__},
-                "instructions": "Rafiq's read-only tools: time, weather, pending timers, system status, "
+                "instructions": "Rafiq's read-only tools: time, weather, web search and pages, system status, "
                                 "arithmetic and unit conversion."})
         if method == "ping":
             return _result(msg_id, {})

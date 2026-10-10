@@ -21,15 +21,15 @@ def server():
 
 def test_only_safe_tools_are_exposed(server):
     names = set(server.tools)
-    assert {"get_time", "weather", "system_status", "list_timers", "calculate", "convert_units"} <= names
+    assert {"get_time", "weather", "system_status", "calculate", "convert_units"} <= names
     for name in ("power", "email_send", "calendar_add", "open_app", "volume", "lock_screen", "set_timer",
-                 "cancel_timer", "read_page", "web_search", "email_read"):
+                 "cancel_timer", "list_timers", "email_read"):
         assert name not in names, name
 
 
 def test_a_tool_that_asks_first_is_never_exposed_even_if_marked():
     load_all({"google": {"enabled": True}})
-    marked = dict(REGISTRY, risky=Tool("risky", "x", lambda: "done", mcp=True, confirm="do something"))
+    marked = dict(REGISTRY, risky=Tool("risky", "x", lambda: "done", expose=True, confirm="do something"))
     assert "risky" not in mcp_server.safe_tools(marked)
     assert "get_time" in mcp_server.safe_tools(marked)
 
@@ -79,7 +79,7 @@ def test_a_tool_that_raises_does_not_stop_the_server(server, monkeypatch):
     def broken():
         raise RuntimeError("sensor gone")
 
-    monkeypatch.setitem(server.tools, "system_status", Tool("system_status", "x", broken, mcp=True))
+    monkeypatch.setitem(server.tools, "system_status", Tool("system_status", "x", broken, expose=True))
     result = rpc(server, "tools/call", {"name": "system_status", "arguments": {}})["result"]
     assert result["isError"] is True and "sensor gone" in result["content"][0]["text"]
 
@@ -92,12 +92,13 @@ def test_calling_a_tool_that_is_not_exposed_is_refused(server, name, caplog):
     assert any(name in r.getMessage() for r in caplog.records)
 
 
-def test_list_timers_reads_the_saved_alarms(server, rafiq_home):
+def test_list_timers_is_private_and_not_offered(server, rafiq_home):
+    # Since #106 the pending timers are the user's own data (level "private"), so MCP clients don't get them.
     from rafiq.scheduler import Scheduler
 
     Scheduler(config.data_dir() / "alarms.json", lambda a: None).add(4102444800, "tea", "timer", "en")
-    text = rpc(server, "tools/call", {"name": "list_timers", "arguments": {}})["result"]["content"][0]["text"]
-    assert "tea" in text
+    reply = rpc(server, "tools/call", {"name": "list_timers", "arguments": {}})
+    assert "error" in reply and "tea" not in json.dumps(reply)
 
 
 def test_unknown_methods_are_a_json_rpc_error(server):

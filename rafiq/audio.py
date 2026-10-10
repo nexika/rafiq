@@ -6,6 +6,7 @@ Audio is 16 kHz mono float32 in frames of 512 samples (32 ms), the size Silero V
 from __future__ import annotations
 
 import queue
+import subprocess
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -93,6 +94,49 @@ class Endpointer:
         return None
 
 
+def rms(frame: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(np.square(frame, dtype="float64"))))
+
+
+class EchoGate:
+    """While Rafiq speaks, the microphone hears its voice too. A frame counts as you only when it is
+    `factor` times louder than that echo (the median level of the last 1.5 s) and above `min_level`.
+    Nothing counts during the first quarter second, while the echo level is not known yet."""
+
+    WINDOW_SECONDS = 1.5
+    WARM_SECONDS = 0.25
+
+    def __init__(self, factor: float = 1.8, min_level: float = 0.01):
+        self.factor, self.min_level = factor, min_level
+        self.levels: deque = deque(maxlen=int(self.WINDOW_SECONDS / FRAME_SECONDS))
+        self.warm = int(self.WARM_SECONDS / FRAME_SECONDS)
+
+    def reset(self) -> None:
+        self.levels.clear()
+
+    def loud(self, frame: np.ndarray) -> bool:
+        level = rms(frame)
+        ready = len(self.levels) >= self.warm
+        echo = float(np.median(self.levels)) if ready else 0.0
+        self.levels.append(level)
+        return ready and level >= max(self.min_level, self.factor * echo)
+
+
+def echo_cancel_source(run=subprocess.run) -> str | None:
+    """The microphone with PipeWire's (or PulseAudio's) echo cancellation applied, when the
+    echo-cancel module is loaded (`pactl load-module module-echo-cancel`); else None."""
+    try:
+        out = run(["pactl", "list", "short", "sources"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        cols = line.split("\t")
+        name = cols[1] if len(cols) > 1 else ""
+        if "echo" in name and "cancel" in name and not name.endswith(".monitor"):
+            return name
+    return None
+
+
 class Microphone:
     """The default input device as a queue of 512-sample frames. Frames are dropped, never blocked on,
     while Rafiq is busy: an old frame is worth less than a responsive callback."""
@@ -114,8 +158,14 @@ class Microphone:
     def start(self) -> None:
         import sounddevice as sd
 
-        self.stream = sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=FRAME,
-                                     device=self.device, callback=self._callback)
+        try:
+            self.stream = sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=FRAME,
+                                         device=self.device, callback=self._callback)
+        except (ValueError, sd.PortAudioError):
+            if self.device is None:
+                raise
+            self.device = None               # the echo-cancelled device is not there: the default one
+            return self.start()
         self.stream.start()
 
     def stop(self) -> None:
