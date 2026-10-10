@@ -77,7 +77,7 @@ def open_app(name: str) -> str:
 
 
 @tool("list_apps", "Names of the installed applications, to find the right one to open.",
-      {"filter": {"type": "string", "description": "only names containing this"}})
+      {"filter": {"type": "string", "description": "only names containing this"}}, safe=True)
 def list_apps(filter: str = "") -> str:  # noqa: A002
     names = sorted({e["name"] for e in desktop_entries() if filter.lower() in e["name"].lower()})
     return ", ".join(names[:80]) or "none"
@@ -116,7 +116,7 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
 
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.")
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.", safe=True)
 def system_status() -> str:
     import psutil
 

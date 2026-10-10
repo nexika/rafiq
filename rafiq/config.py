@@ -44,6 +44,9 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # The phone bridge (iOS Shortcuts, Android HTTP Shortcuts or Tasker). Off until you turn it on; it
+    # listens on this computer only unless you choose another address (see the README).
+    "phone": {"enabled": False, "host": "127.0.0.1", "port": 8766},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
     "anthropic_api_key": "",
@@ -80,9 +83,8 @@ def load(path: Path | None = None) -> dict:
     return cfg
 
 
-def panel_token() -> str:
-    """A random token the panel page must send back, so no other web page can drive Rafiq."""
-    path = home() / "panel.token"
+def _token(name: str) -> str:
+    path = home() / name
     if path.is_file():
         token = path.read_text().strip()
         if len(token) >= 32:
@@ -92,3 +94,13 @@ def panel_token() -> str:
     path.write_text(token)
     path.chmod(0o600)
     return token
+
+
+def panel_token() -> str:
+    """A random token the panel page must send back, so no other web page can drive Rafiq."""
+    return _token("panel.token")
+
+
+def phone_token() -> str:
+    """The phone's own token, so it can be changed (by deleting phone.token) without the panel's."""
+    return _token("phone.token")

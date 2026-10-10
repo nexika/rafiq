@@ -17,7 +17,7 @@ def now() -> datetime:
 
 @tool("get_time", "The current date and time, here or in another time zone.",
       {"timezone": {"type": "string", "description": "IANA time zone such as Europe/Paris or Africa/Cairo; "
-                                                     "empty for the user's own"}})
+                                                     "empty for the user's own"}}, safe=True)
 def get_time(timezone: str = "") -> str:
     when = now()
     if timezone:
@@ -39,7 +39,7 @@ def _describe(alarm, current: datetime) -> str:
 @tool("set_timer", "Start a countdown timer.",
       {"seconds": {"type": "integer", "description": "length of the timer in seconds"},
        "label": {"type": "string", "description": "what it is for, in the user's language"}},
-      required=("seconds",))
+      required=("seconds",), safe=True)
 def set_timer(seconds: int, label: str = "", ctx=None) -> str:
     seconds = int(seconds)
     if not 1 <= seconds <= 7 * 24 * 3600:
@@ -51,7 +51,7 @@ def set_timer(seconds: int, label: str = "", ctx=None) -> str:
 @tool("set_reminder", "Remind the user of something at a date and time.",
       {"when": {"type": "string", "description": "local date and time, ISO format YYYY-MM-DDTHH:MM"},
        "label": {"type": "string", "description": "what to remind them of, in the user's language"}},
-      required=("when", "label"))
+      required=("when", "label"), safe=True)
 def set_reminder(when: str, label: str, ctx=None) -> str:
     try:
         due = datetime.fromisoformat(when)
@@ -65,14 +65,14 @@ def set_reminder(when: str, label: str, ctx=None) -> str:
     return "set: " + _describe(alarm, now())
 
 
-@tool("list_timers", "The timers and reminders that are still pending.")
+@tool("list_timers", "The timers and reminders that are still pending.", safe=True)
 def list_timers(ctx=None) -> str:
     pending = ctx.scheduler.pending()
     return "\n".join(_describe(a, now()) for a in pending) if pending else "none pending"
 
 
 @tool("cancel_timer", "Cancel a timer or reminder by its id or by words in its label.",
-      {"id": {"type": "string"}, "label": {"type": "string"}})
+      {"id": {"type": "string"}, "label": {"type": "string"}}, safe=True)
 def cancel_timer(id: str = "", label: str = "", ctx=None) -> str:  # noqa: A002 (the model's word)
     gone = ctx.scheduler.cancel(id or None, label or None)
     return f"cancelled {len(gone)}: " + ", ".join(a.label for a in gone) if gone else "nothing matched"
@@ -104,7 +104,7 @@ def _get_json(url: str, params: dict) -> dict:
 
 @tool("weather", "Current weather and the forecast for the next days.",
       {"city": {"type": "string", "description": "city name; empty for the user's own city"},
-       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}})
+       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}}, safe=True)
 def weather(city: str = "", days: int = 2, ctx=None, get=_get_json) -> str:
     city = city or (ctx.cfg.get("place", {}).get("city") if ctx else "") or ""
     if not city:
@@ -167,7 +167,7 @@ def safe_eval(expression: str) -> float:
 
 
 @tool("calculate", "Work out an arithmetic expression, e.g. '15/100*240' or 'sqrt(2)*3'.",
-      {"expression": {"type": "string"}}, required=("expression",))
+      {"expression": {"type": "string"}}, required=("expression",), safe=True)
 def calculate(expression: str) -> str:
     try:
         value = safe_eval(expression)
@@ -220,7 +220,7 @@ def convert_value(value: float, from_unit: str, to_unit: str) -> float:
 
 @tool("convert_units", "Convert between units of length, mass, volume, speed, area or temperature.",
       {"value": {"type": "number"}, "from_unit": {"type": "string", "description": "e.g. km, lb, °F, cup"},
-       "to_unit": {"type": "string"}}, required=("value", "from_unit", "to_unit"))
+       "to_unit": {"type": "string"}}, required=("value", "from_unit", "to_unit"), safe=True)
 def convert_units(value: float, from_unit: str, to_unit: str) -> str:
     try:
         result = convert_value(float(value), from_unit, to_unit)

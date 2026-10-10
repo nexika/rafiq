@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | phone | google-setup"""
 
 from __future__ import annotations
 
@@ -25,6 +25,15 @@ def cmd_run(args) -> int:
         server = serve(assistant, host, port, config.panel_token())
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
         print(f"Panel: http://{host}:{port}/", flush=True)
+    if cfg["phone"].get("enabled"):
+        from .phone import PhoneBridge
+        from .phone import serve as serve_phone
+
+        bridge = PhoneBridge(cfg, assistant.tools, assistant.scheduler, on_event=assistant.events.publish)
+        host, port = cfg["phone"]["host"], int(cfg["phone"]["port"])
+        server = serve_phone(bridge, host, port, config.phone_token())
+        threading.Thread(target=server.serve_forever, name="rafiq-phone", daemon=True).start()
+        print(f"Phone bridge: http://{host}:{port}/api/inbox", flush=True)
     print('Say "Rafiq" (or "يا رفيق"). Ctrl+C stops.', flush=True)
     try:
         assistant.run()
@@ -156,6 +165,21 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_phone(_args) -> int:
+    """What to put in an iOS Shortcut or an Android HTTP Shortcut."""
+    cfg = config.load()
+    phone = cfg["phone"]
+    print(f"Address:  http://{phone['host']}:{phone['port']}/api/inbox  (POST, JSON body)")
+    print(f"Header:   Authorization: Bearer {config.phone_token()}")
+    print('Body:     {"text": "film mode"}  or  {"kind": "note", "list": "shopping", "text": "milk"}')
+    print('Reply:    {"ok": true, "answer": "..."}: have the shortcut speak or show "answer".')
+    if not phone.get("enabled"):
+        print("Turn it on: set [phone] enabled = true in", config.home() / "config.toml")
+    if phone["host"] in ("127.0.0.1", "localhost", "::1"):
+        print("It only listens on this computer: put a tunnel or a VPN in front of it to reach it from the phone.")
+    return 0
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -190,6 +214,8 @@ def main(argv=None) -> int:
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("phone", help="show how to set up a phone shortcut for the phone bridge").set_defaults(
+        fn=cmd_phone)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

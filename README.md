@@ -120,8 +120,32 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
+- The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+
+## From your phone
+
+Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").
+
+1. Set `enabled = true` under `[phone]` in the config and restart `rafiq run`.
+2. Run `rafiq phone`: it prints the address and the token for the shortcut.
+3. On an iPhone, make a Shortcut with **Dictate Text**, then **Get Contents of URL** (method POST,
+   header `Authorization: Bearer <token>`, JSON body `text` = the dictated text), then **Speak Text**
+   with the reply's `answer`. On Android, do the same with HTTP Shortcuts or Tasker.
+
+The JSON body is `{"text": "..."}` for a command, `{"kind": "note", "list": "shopping", "text": "milk"}`
+for a note (lists: `ideas`, `shopping`, `tasks`; ideas by default), or
+`{"kind": "share", "text": "...", "url": "https://..."}` for a shared link. At home, "what's on my
+shopping list?" reads the notes back.
+
+A command from the phone only runs safe tools: the time, weather, timers and reminders, notes,
+calculations, web search and the computer's status. Anything else (power, apps, volume, email,
+calendar) answers "do that at home by voice", and nothing from the phone is ever confirmed.
+
+The bridge listens on 127.0.0.1 by default, so the phone needs a tunnel or a VPN (Tailscale, for
+example) to reach it. `host = "0.0.0.0"` opens it to your home Wi-Fi, but the token then crosses the
+network in plain HTTP: use that only on a network you trust.
 
 ## Google calendar and Gmail
 

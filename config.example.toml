@@ -30,5 +30,10 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[phone]                         # notes and commands from an iOS or Android shortcut: `rafiq phone`
+enabled = false
+host = "127.0.0.1"              # this computer only; "0.0.0.0" to reach it on your home Wi-Fi
+port = 8766
+
 [google]
 enabled = false                 # true after `rafiq google-setup`
