@@ -72,7 +72,7 @@ def rafiq(monkeypatch):
     monkeypatch.setattr(assistant_mod, "load_all", lambda cfg: {})
     monkeypatch.setattr(assistant_mod.kws.Spotter, "load", classmethod(lambda cls, *a, **k: None))
     a = assistant_mod.Assistant(config.load())
-    a.stt.transcribe = lambda audio: SimpleNamespace(text=heard.pop(0), lang="en")
+    a.stt.transcribe = lambda audio, **_kwargs: SimpleNamespace(text=heard.pop(0), lang="en")
     a.set_state("idle")
     return a, heard
 
