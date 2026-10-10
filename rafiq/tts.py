@@ -47,6 +47,7 @@ class Speaker:
     def __init__(self, cfg: dict, on_start=None, on_end=None):
         self.cfg = cfg["voice"]
         self.on_start, self.on_end = on_start, on_end
+        self.rate: str | None = None      # overrides the setting while set (slower for language learners)
         self._proc: subprocess.Popen | None = None
         self._piper: dict = {}
         self.key = os.environ.get("AZURE_SPEECH_KEY") or self.cfg.get("azure_key", "")
@@ -57,6 +58,9 @@ class Speaker:
         if engine != "auto":
             return [engine, "piper"] if engine != "piper" else ["piper"]
         return (["azure"] if self.key and self.region else []) + ["piper"]
+
+    def _rate(self) -> str:
+        return self.rate or self.cfg.get("rate", "+0%")
 
     def voice(self, tag: str) -> str:
         voices = self.cfg["voices"]
@@ -71,7 +75,7 @@ class Speaker:
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1",
             headers={"Ocp-Apim-Subscription-Key": self.key, "Content-Type": "application/ssml+xml",
                      "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3", "User-Agent": "rafiq"},
-            content=ssml(text, self.voice(tag), tag, self.cfg.get("rate", "+0%")).encode(), timeout=20)
+            content=ssml(text, self.voice(tag), tag, self._rate()).encode(), timeout=20)
         resp.raise_for_status()
         out = out.with_suffix(".mp3")
         out.write_bytes(resp.content)
@@ -83,7 +87,7 @@ class Speaker:
         out = out.with_suffix(".mp3")
 
         async def run():
-            await edge_tts.Communicate(text, self.voice(tag), rate=self.cfg.get("rate", "+0%")).save(str(out))
+            await edge_tts.Communicate(text, self.voice(tag), rate=self._rate()).save(str(out))
 
         asyncio.run(run())
         return out

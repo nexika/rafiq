@@ -20,6 +20,7 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .practice import Practice
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -32,10 +33,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the language of the current request and the
+    language practice session."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    practice: Practice | None = None
 
 
 @dataclass
@@ -80,7 +83,8 @@ class Assistant:
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
+        self.practice = Practice(config_mod.data_dir() / "practice.json", on_event=self.events.publish)
+        self.ctx = Context(self.cfg, self.scheduler, practice=self.practice)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
@@ -139,6 +143,7 @@ class Assistant:
 
     def say(self, text: str, tag: str) -> None:
         self.events.publish("said", {"text": text, "tag": tag})
+        self.speaker.rate = self.practice.rate()     # slower for beginners while practising
         self.speaker.say(text, tag)
 
     def confirm(self, action: str, tag: str) -> bool:
@@ -178,11 +183,18 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        practising = self.practice.active
+        if practising:          # a learner's French can sound like English to speech-to-text
+            tag = self.practice.tag
         self.tag = tag
         self.ctx.tag = tag
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
-        self.say(answer, lang.script_language(answer, tag))
+        if self.practice.active:                         # just started, or still going
+            voice = self.practice.tag
+        else:                                            # just ended: the summary is in the learner's language
+            voice = lang.script_language(answer, self.practice.home if practising else tag)
+        self.say(answer, voice)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
     # ------------------------------------------------------------------ jobs from other threads

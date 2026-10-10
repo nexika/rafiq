@@ -44,8 +44,10 @@ h1 span { color: var(--muted); font-weight: 400; }
 .msg.you { background: var(--you); align-self: flex-end; border-bottom-right-radius: 4px; }
 .msg.rafiq { background: var(--rafiq); align-self: flex-start; border-bottom-left-radius: 4px; }
 .msg .meta { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
-.note { font-size: 13px; color: var(--muted); align-self: center; text-align: center; max-width: 95%; }
+.note { font-size: 13px; color: var(--muted); align-self: center; text-align: center; max-width: 95%;
+  white-space: pre-wrap; }
 .note.err { color: var(--err); }
+.note.fix { color: var(--ink); }
 .tool { font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); align-self: flex-start;
   border-left: 3px solid var(--accent-soft); padding: 2px 10px; max-width: 95%; overflow-wrap: anywhere; }
 #confirm { display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px;
@@ -129,6 +131,11 @@ function handle(e) {
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "correction": add("note fix", e.said + "  →  " + e.correct + (e.note ? "\n" + e.note : ""),
+      "Correction · " + (LANG[e.tag] || e.tag)); break;
+    case "practice": add("note", e.state === "start"
+      ? "Practice started: " + (LANG[e.tag] || e.tag) + ", level " + e.level + (e.topic ? ", " + e.topic : "")
+      : "Practice ended.\n" + e.summary); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
   }
 }

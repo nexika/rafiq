@@ -73,12 +73,19 @@ def system_prompt(cfg: dict) -> str:
     return SYSTEM.format(user=cfg.get("user_name") or "the user", place=f"The user is in {city}." if city else "")
 
 
-def with_note(text: str, tag: str, now: datetime | None = None) -> str:
+def with_note(text: str, tag: str, now: datetime | None = None, extra: str = "") -> str:
     """The request with the time and the answer language around it. The language is named again
-    after the request: small local models follow what comes last."""
+    after the request: small local models follow what comes last. Extra instructions for this
+    request (language practice) go in the note too, so the system prompt never changes."""
     now = now or datetime.now().astimezone()
     name = lang_mod.NAMES.get(tag, "English")
-    return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}; answer in {name}] {text}\n[Answer in {name}.]"
+    extra = f"; {extra}" if extra else ""
+    return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}; answer in {name}{extra}] {text}\n[Answer in {name}.]"
+
+
+def practice_note(ctx) -> str:
+    practice = getattr(ctx, "practice", None)
+    return practice.note() if practice else ""
 
 
 class Brain:
@@ -163,7 +170,7 @@ class Brain:
         import anthropic
 
         messages = ([{"role": t.role, "content": t.content} for t in history]
-                    + [{"role": "user", "content": with_note(text, tag)}])
+                    + [{"role": "user", "content": with_note(text, tag, extra=practice_note(ctx))}])
         schemas = claude_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:
@@ -189,7 +196,7 @@ class Brain:
         brain = self.cfg["brain"]
         messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
                     + [{"role": t.role, "content": t.content} for t in history]
-                    + [{"role": "user", "content": with_note(text, tag)}])
+                    + [{"role": "user", "content": with_note(text, tag, extra=practice_note(ctx))}])
         schemas = ollama_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:
