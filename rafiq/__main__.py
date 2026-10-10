@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | status | update | google-setup"""
 
 from __future__ import annotations
 
@@ -130,6 +130,24 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
+def cmd_status(_args) -> int:
+    """Is Rafiq up, and is it safe? Works over SSH on a server without a screen."""
+    from . import hosting
+
+    checks = hosting.status(config.load())
+    for check in checks:
+        _check(check.label, check.ok, check.detail)
+    return 0 if all(check.ok for check in checks) else 1
+
+
+def cmd_update(args) -> int:
+    from . import hosting
+
+    code, lines = hosting.update(check=args.check, restart=not args.no_restart)
+    print("\n".join(lines))
+    return code
+
+
 def cmd_listen(_args) -> int:
     """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
     import httpx
@@ -190,6 +208,12 @@ def main(argv=None) -> int:
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("status", help="is Rafiq running, its version, and is the panel private").set_defaults(
+        fn=cmd_status)
+    update = sub.add_parser("update", help="pull the new version, reinstall it and restart the service")
+    update.add_argument("--check", action="store_true", help="only say whether there is a new version")
+    update.add_argument("--no-restart", action="store_true", help="don't restart the rafiq service")
+    update.set_defaults(fn=cmd_update)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

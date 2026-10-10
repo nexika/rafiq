@@ -123,6 +123,13 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 
+## Always on
+
+Rafiq can run day and night on this PC, a mini-PC, a NAS, a Raspberry Pi or a VPS, as a systemd
+service. [docs/hosting.md](docs/hosting.md) explains where to run it and how to keep its panel
+private. On the server, `rafiq status` says whether it is running and safe, and `rafiq update` pulls
+the new version, reinstalls it and restarts the service.
+
 ## Google calendar and Gmail
 
 1. In a [Google Cloud project](https://console.cloud.google.com/), enable the Calendar and Gmail APIs,
