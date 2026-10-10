@@ -81,13 +81,16 @@ def cmd_say(args) -> int:
     return 0 if ok else 1
 
 
-def _check(label: str, ok: bool, detail: str = "") -> bool:
-    print(f"  {'ok ' if ok else 'no '} {label}" + (f": {detail}" if detail else ""))
+def _check(label: str, ok: bool, detail: str = "", fix: str = "", optional: bool = False) -> bool:
+    mark = "ok " if ok else "-- " if optional else "no "
+    print(f"  {mark} {label}" + (f": {detail}" if detail else ""))
+    if fix:
+        print(f"        {'tip' if ok or optional else 'fix'}: {fix}")
     return ok
 
 
 def cmd_doctor(_args) -> int:
-    import httpx
+    from . import doctor
 
     cfg = config.load()
     print(f"Rafiq settings: {config.home() / 'config.toml'}")
@@ -99,34 +102,25 @@ def cmd_doctor(_args) -> int:
     except Exception as exc:
         _check("microphone", False, type(exc).__name__)
     _check("audio player (ffplay)", bool(shutil.which("ffplay")))
-    brain = cfg["brain"]
-    _check("Claude API key", bool(cfg.get("anthropic_api_key")),
-           brain["claude_model"] if cfg.get("anthropic_api_key") else "set ANTHROPIC_API_KEY to use Claude")
-    try:
-        tags = httpx.get(f"{brain['ollama_url']}/api/tags", timeout=3).json().get("models", [])
-        names = [m["name"] for m in tags]
-        _check("Ollama", brain["ollama_model"] in names,
-               f"{brain['ollama_model']} " + ("installed" if brain["ollama_model"] in names else
-                                              f"missing (ollama pull {brain['ollama_model']})"))
-    except Exception:
-        _check("Ollama", False, f"not reachable at {brain['ollama_url']}")
     from .tts import Speaker
 
     speaker = Speaker(cfg)
-    _check("Azure voices (Egyptian Arabic)", bool(speaker.key and speaker.region),
-           "set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION" if not speaker.key else speaker.region)
     for tag in ("en", "fr", "es", "de", "ar"):
         path = speaker.piper_path(tag)
         _check(f"offline voice {tag}", path is not None, path.name if path else "missing")
-    google = config.home() / "google" / "token.json"
-    _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
-           "connected" if google.is_file() else "run: rafiq google-setup")
+    print("Integrations:")
+    for check in doctor.integrations(cfg):
+        _check(check.label, check.ok, check.detail, check.fix, check.optional)
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
+    brain = cfg["brain"]
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
     else:
         order = [brain["mode"]]
     print(f"  brain in order: {', '.join(order)}")
+    print("Models for this machine:")
+    for line in doctor.advice_lines(cfg, doctor.machine()):
+        print(line)
     return 0
 
 
@@ -189,7 +183,8 @@ def main(argv=None) -> int:
     enroll.set_defaults(fn=cmd_enroll)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
-    sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("doctor", help="check the microphone, voices, keys and integrations; suggest models").set_defaults(
+        fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
