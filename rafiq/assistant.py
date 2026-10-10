@@ -22,7 +22,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
-from .tools import load_all
+from .tools import dev, load_all
 from .tts import Speaker
 
 MIN_UTTERANCE_SECONDS = 0.35
@@ -95,6 +95,14 @@ class Assistant:
             self.name_seconds = max(len(t) for t in self.spotter.templates) * 0.02
 
     # ------------------------------------------------------------------ state shown in the panel
+
+    def set_project(self, path: str) -> str:
+        """The project folder for the developer tools, chosen in the panel."""
+        folder = dev.set_project(path)
+        if not folder.startswith("error"):
+            self.cfg["dev"]["project"] = folder
+            self.events.publish("project", {"path": folder})
+        return folder
 
     def set_state(self, state: str) -> None:
         self.state = state

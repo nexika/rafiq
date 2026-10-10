@@ -30,5 +30,8 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[dev]
+project = ""                    # the folder for "run the tests", "what's my git status?" (or set it in the panel)
+
 [google]
 enabled = false                 # true after `rafiq google-setup`

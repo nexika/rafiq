@@ -46,6 +46,7 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "dev": {"project": ""},             # the folder "run the tests" works in; also set from the panel
     "anthropic_api_key": "",
 }
 

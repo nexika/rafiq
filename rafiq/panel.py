@@ -98,6 +98,10 @@ def make_handler(assistant, token: str, port: int):
                 assistant.submit("listen")
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put(data["yes"])
+            elif path == "/api/project" and isinstance(data.get("path"), str):
+                folder = assistant.set_project(data["path"][:1000])
+                if folder.startswith("error"):
+                    return self._send(400, json.dumps({"error": folder}).encode())
             elif path == "/api/stop":
                 assistant.speaker.stop()
             else:

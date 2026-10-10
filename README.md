@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Your project | "run the tests", "what's my git status?", "why did CI fail?", "what's on my PR?", through Nexika's barq, tabib and mizan when they are on the PATH; set the project folder in the panel or as `[dev] project` |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -118,6 +119,7 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
+  The project tools only read (tests, git status, CI, PR); the model picks the question, never the command.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
