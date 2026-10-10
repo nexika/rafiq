@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | update | backup"""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import threading
+from pathlib import Path
 
 from . import config, lang
 
@@ -164,6 +165,32 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_update(_args) -> int:
+    """Pull the latest Rafiq with git and install its dependencies again."""
+    from . import maintain
+
+    try:
+        maintain.update()
+    except maintain.MaintenanceError as exc:
+        print(f"Update failed: {exc}", file=sys.stderr)
+        return 1
+    print("Rafiq is up to date. Restart it to use the new version.")
+    return 0
+
+
+def cmd_backup(args) -> int:
+    """Save settings, recordings and everything else Rafiq keeps to a private archive on this computer."""
+    from . import maintain
+
+    try:
+        path = maintain.backup(args.to)
+    except (maintain.MaintenanceError, OSError) as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved {path} (readable only by you; it holds your keys, keep it off public places).")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -191,6 +218,10 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    sub.add_parser("update", help="pull the latest Rafiq and its dependencies").set_defaults(fn=cmd_update)
+    backup = sub.add_parser("backup", help="save settings and recordings to a private local archive")
+    backup.add_argument("--to", type=Path, help="the folder for the archive (default: <settings>/backups)")
+    backup.set_defaults(fn=cmd_backup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)
