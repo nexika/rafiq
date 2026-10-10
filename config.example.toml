@@ -32,3 +32,12 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+# Games and launchers the app menu does not show. "Launch Borderlands" opens them; "add an app called X"
+# adds one to apps.json in this folder, after asking. Each runs as an argument list, never a shell line.
+# [apps."Borderlands 2"]
+# steam = 49520                 # the game id, or "steam://rungameid/49520"
+# [apps.Minecraft]
+# flatpak = "com.mojang.Minecraft"
+# [apps.RetroArch]
+# command = ["retroarch", "--fullscreen"]
