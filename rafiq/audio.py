@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import queue
+import subprocess
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -164,6 +165,45 @@ def pick_rate(supported: Callable[[int], bool], preferred: int = 0, rates: Seque
     raise RuntimeError("the microphone takes none of the usual sample rates")
 
 
+class EchoGate:
+    """While Rafiq speaks, the microphone hears its voice too. A frame counts as you only when it is
+    `factor` times louder than that echo (the median level of the last 1.5 s) and above `min_level`.
+    Nothing counts during the first quarter second, while the echo level is not known yet."""
+
+    WINDOW_SECONDS = 1.5
+    WARM_SECONDS = 0.25
+
+    def __init__(self, factor: float = 1.8, min_level: float = 0.01):
+        self.factor, self.min_level = factor, min_level
+        self.levels: deque = deque(maxlen=int(self.WINDOW_SECONDS / FRAME_SECONDS))
+        self.warm = int(self.WARM_SECONDS / FRAME_SECONDS)
+
+    def reset(self) -> None:
+        self.levels.clear()
+
+    def loud(self, frame: np.ndarray) -> bool:
+        level = rms(frame)
+        ready = len(self.levels) >= self.warm
+        echo = float(np.median(self.levels)) if ready else 0.0
+        self.levels.append(level)
+        return ready and level >= max(self.min_level, self.factor * echo)
+
+
+def echo_cancel_source(run=subprocess.run) -> str | None:
+    """The microphone with PipeWire's (or PulseAudio's) echo cancellation applied, when the
+    echo-cancel module is loaded (`pactl load-module module-echo-cancel`); else None."""
+    try:
+        out = run(["pactl", "list", "short", "sources"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        cols = line.split("\t")
+        name = cols[1] if len(cols) > 1 else ""
+        if "echo" in name and "cancel" in name and not name.endswith(".monitor"):
+            return name
+    return None
+
+
 class Resampler:
     """Device audio at any rate in, 16 kHz frames of 512 samples out (scipy's resample_poly).
 
@@ -247,6 +287,7 @@ class Microphone:
         self.resampler = Resampler(rate or RATE)
         self.stream = None
         self.muted = False
+        self.fallback = False         # if the device can't open, use the system default
 
     @classmethod
     def from_config(cls, cfg: dict) -> Microphone:
@@ -265,11 +306,17 @@ class Microphone:
     def start(self) -> None:
         import sounddevice as sd
 
-        index = resolve_device(self.device, sd.query_devices())
-        self.rate = pick_rate(lambda rate: rate_supported(sd, index, rate), preferred=self.rate)
-        self.resampler = Resampler(self.rate)
-        self.stream = sd.InputStream(samplerate=self.rate, channels=1, dtype="float32",
-                                     blocksize=self.resampler.blocksize, device=index, callback=self._callback)
+        try:
+            index = resolve_device(self.device, sd.query_devices())
+            self.rate = pick_rate(lambda rate: rate_supported(sd, index, rate), preferred=self.rate)
+            self.resampler = Resampler(self.rate)
+            self.stream = sd.InputStream(samplerate=self.rate, channels=1, dtype="float32",
+                                         blocksize=self.resampler.blocksize, device=index, callback=self._callback)
+        except (ValueError, RuntimeError, sd.PortAudioError):
+            if not self.fallback:
+                raise
+            self.device, self.fallback = None, False   # the echo-cancelled device is not there: the default one
+            return self.start()
         self.stream.start()
 
     def stop(self) -> None:
