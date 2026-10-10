@@ -19,12 +19,12 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, modes, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, echo_cancel_source
 from .bargein import BargeIn
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
-from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
+from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tools import load_all
 from .tts import Speaker
 
@@ -35,12 +35,14 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler, the language of the current request, and a way
-    to say something later (a countdown) from another thread."""
+    """What a tool may use: settings, the scheduler, the language of the current request, a way
+    to say something later (a countdown) from another thread, and who to tell when the mode changes
+    (the panel shows it)."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
     say: Callable[[str, str], None] | None = None
+    on_mode: Callable[[str], None] | None = None
 
 
 @dataclass
@@ -82,13 +84,14 @@ class Assistant:
         self.vad = SileroVAD()
         self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
-        self.stt = Transcriber(speech["whisper_model"], speech["languages"])
+        self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         barge = self.cfg["interruption"]
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag))
+        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
+                           on_mode=self._mode_changed)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
@@ -112,6 +115,17 @@ class Assistant:
             state = "muted"
         self.state = state
         self.events.publish("state", {"state": state})
+
+    @property
+    def mode(self) -> str:
+        return modes.current(self.cfg)
+
+    def set_mode(self, mode: str) -> None:
+        modes.switch(self.cfg, mode)
+        self._mode_changed(self.mode)
+
+    def _mode_changed(self, mode: str) -> None:
+        self.events.publish("mode", {"mode": mode})
 
     def _mute(self) -> None:
         """Rafiq starts speaking: the microphone only listens for "stop", or not at all."""
@@ -196,7 +210,10 @@ class Assistant:
 
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
-        heard = self.stt.transcribe(audio)
+        if modes.offline(self.cfg):          # offline mode: nothing leaves the computer
+            heard = self.stt.local.transcribe(audio)
+        else:
+            heard = self.stt.transcribe(audio, hint=self.tag)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
@@ -288,6 +305,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "mode":
+                    self.set_mode(data["mode"])
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")

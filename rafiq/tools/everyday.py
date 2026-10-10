@@ -1,4 +1,4 @@
-"""Time, timers and reminders, weather, calculations and unit conversion."""
+"""Time, timers and reminders, weather, calculations and unit conversion, and Rafiq's mode."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import operator
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .. import modes
 from . import tool
 
 
@@ -228,3 +229,20 @@ def convert_units(value: float, from_unit: str, to_unit: str) -> str:
         return f"error: {exc}"
     return f"{value:g} {from_unit} = {round(result, 4):g} {to_unit}"
 
+
+# ---------------------------------------------------------------------- mode
+
+@tool("set_mode", "Switch Rafiq's mode: everyday (fast), quality (the strongest model, slower and costlier) "
+      "or offline (only local models and voices, nothing leaves the computer). Empty: say the current mode.",
+      {"mode": {"type": "string", "enum": list(modes.MODES), "description": "the mode to switch to"}},
+      level="act")
+def set_mode(mode: str = "", ctx=None) -> str:
+    if not mode:
+        return f"the current mode is {modes.current(ctx.cfg)}"
+    try:
+        mode = modes.switch(ctx.cfg, mode)
+    except ValueError as exc:
+        return f"error: {exc}"
+    if ctx.on_mode:
+        ctx.on_mode(mode)
+    return f"switched to {mode} mode; it applies from the next request"

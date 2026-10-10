@@ -61,6 +61,17 @@ Rafiq. The service does not see keys exported in your shell, so put them in
 
 `rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
 
+### Modes: everyday, quality, offline
+
+- **Everyday** (the default): the fast model, `brain.claude_model`.
+- **Quality**: the strongest model, `brain.quality_model` (`claude-opus-5-5`), slower and costlier.
+- **Offline**: nothing leaves the computer: only Ollama and the Piper voices, whatever `brain.mode`
+  and `voice.engine` say. Speech-to-text is always local.
+
+Switch by voice ("Rafiq, switch to offline mode", "what mode are you in?"), with the switch at the
+top of the panel, or for a session with `rafiq run --mode quality`. `brain.profile` in the config
+sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
+
 ## The voice
 
 | Engine | Languages | Needs |
@@ -81,6 +92,25 @@ Download the Piper voices once:
 cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voices \
   en_US-ryan-medium fr_FR-tom-medium es_ES-davefx-medium de_DE-thorsten-medium ar_JO-kareem-medium
 ```
+
+## Hearing: Whisper, with the cloud for chosen languages
+
+Whisper runs on your computer and hears every language by default. For a language it hears badly,
+send that language to a cloud service; Whisper still tells the language first, on your computer:
+
+```toml
+[speech.stt_by_language]
+ar = "azure"      # Azure's Egyptian Arabic recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+```
+
+| Service | Needs |
+|---|---|
+| **Azure AI Speech** | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (the same key as the voice); `speech.azure_locales` picks the recogniser |
+| **OpenAI** (`gpt-4o-mini-transcribe`) | `OPENAI_API_KEY` |
+
+When Whisper can't run, a cloud service with a key hears everything; when the cloud can't be
+reached, Whisper does. The name "Rafiq" is always heard on your computer. `speech.stt_engine = "local"`
+or `speech.offline = true` keeps what you say on your computer.
 
 ## Use it
 
