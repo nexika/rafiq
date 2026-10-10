@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
-from . import persona
+from . import modes, persona
 from .tools import Tool, claude_schemas, ollama_schemas
 
 HISTORY_TURNS = 10
@@ -131,12 +131,18 @@ class Brain:
     # ------------------------------------------------------------------ choosing a backend
 
     def backends(self) -> list[str]:
+        if modes.offline(self.cfg):
+            return ["ollama"]
         mode = self.cfg["brain"].get("mode", "auto")
         if mode == "claude":
             return ["claude"]
         if mode == "ollama":
             return ["ollama"]
         return (["claude"] if self.cfg.get("anthropic_api_key") else []) + ["ollama"]
+
+    def claude_model(self) -> str:
+        brain = self.cfg["brain"]
+        return brain["quality_model"] if modes.current(self.cfg) == "quality" else brain["claude_model"]
 
     def think(self, text: str, tag: str, ctx=None) -> str:
         """Answer one thing the user said. Tries Claude, then Ollama in auto mode."""
@@ -220,7 +226,7 @@ class Brain:
             wait = budget.next_round(30)
             try:
                 resp = self._claude_client().messages.create(
-                    model=self.cfg["brain"]["claude_model"], max_tokens=self.cfg["brain"]["max_tokens"],
+                    model=self.claude_model(), max_tokens=self.cfg["brain"]["max_tokens"],
                     system=system_prompt(self.cfg), tools=schemas, messages=messages, timeout=wait)
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
