@@ -119,6 +119,20 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+SLEEP = {"go to sleep", "sleep", "mets toi en veille", "en veille", "va dormir", "dors", "vete a dormir",
+         "a dormir", "duérmete", "duermete", "geh schlafen", "schlaf", "نام", "نم", "روح نام", "اذهب للنوم",
+         "اذهب إلى النوم"}
+# Said around the phrase without changing it ("go to sleep please", "نام يا رفيق").
+_SLEEP_FILLER = {"please", "now", "thanks", "rafiq", "rafik", "s'il", "te", "plait", "plaît", "merci",
+                 "maintenant", "por", "favor", "ya", "bitte", "jetzt", "يا", "رفيق", "خلاص", "دلوقتي", "شكرا"}
+
+
+def is_sleep(text: str) -> bool:
+    """True when the whole request is "go to sleep" (or "نام", "mets-toi en veille"...); a request that
+    only mentions sleep ("set a sleep timer") is not."""
+    return " ".join(w for w in words(text) if w not in _SLEEP_FILLER_N) in _SLEEP_N
+
+
 # What stops Rafiq while it speaks. Said over its voice, so only a short utterance counts: a long one is
 # more likely Rafiq's own sentence leaking past the echo check than you.
 STOP = {"stop", "wait", "enough", "attends", "arrête", "arrete", "espera", "para", "basta", "warte",
@@ -133,6 +147,8 @@ def is_stop(text: str) -> bool:
 
 
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
+_SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
 _STOP = _norm(STOP)
 
 PHRASES = {
@@ -171,6 +187,12 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "limit": {"en": "That was taking too long, so I stopped. Try asking in a simpler way.",
+              "fr": "Ça prenait trop de temps, alors j'ai arrêté. Essaie de demander plus simplement.",
+              "es": "Estaba tardando demasiado, así que paré. Prueba a pedirlo de forma más sencilla.",
+              "de": "Das hat zu lange gedauert, also habe ich aufgehört. Frag es bitte einfacher.",
+              "ar": "استغرق ذلك وقتًا طويلًا فتوقفت. جرّب أن تسأل بطريقة أبسط.",
+              "ar-EG": "ده كان واخد وقت كتير فوقفت. جرّب تسأل بطريقة أبسط."},
 }
 
 
