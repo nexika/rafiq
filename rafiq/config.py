@@ -46,6 +46,16 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "prayer": {
+        "enabled": False,
+        "method": "egyptian",            # egyptian, umm_al_qura, mwl, isna, karachi, dubai, kuwait, qatar, ...
+        "asr": "standard",               # or "hanafi"
+        "adjust": {},                    # minutes per prayer, e.g. {"fajr": 2}
+        "reminders": {},                 # minutes before, e.g. {"fajr": 10}; none until you set them
+        "language": "en",                # the language reminders are said in
+        "hijri_adjust": 0,               # days, to match the local moon sighting
+        "reciter": "alafasy",
+    },
     "anthropic_api_key": "",
 }
 

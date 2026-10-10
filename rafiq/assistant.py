@@ -210,8 +210,22 @@ class Assistant:
             self.set_state("idle")
 
     def _alarm_due(self, alarm: Alarm) -> None:
+        if alarm.kind == "prayer-plan":
+            self._plan_prayers()
+            return
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def _plan_prayers(self) -> None:
+        """Prayer reminders for today and tomorrow, when the user has set some."""
+        if not self.cfg.get("prayer", {}).get("enabled"):
+            return
+        from .tools import prayer
+
+        try:
+            prayer.plan_day(self.cfg, self.scheduler)
+        except Exception as exc:                 # no network for the city, a wrong setting: say so in the panel
+            self.events.publish("error", {"error": f"prayer reminders: {type(exc).__name__}: {exc}"})
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
@@ -266,6 +280,7 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        self._plan_prayers()
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
         self.set_state("idle")

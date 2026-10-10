@@ -67,7 +67,7 @@ def set_reminder(when: str, label: str, ctx=None) -> str:
 
 @tool("list_timers", "The timers and reminders that are still pending.")
 def list_timers(ctx=None) -> str:
-    pending = ctx.scheduler.pending()
+    pending = [a for a in ctx.scheduler.pending() if a.kind != "prayer-plan"]   # Rafiq's own, not the user's
     return "\n".join(_describe(a, now()) for a in pending) if pending else "none pending"
 
 

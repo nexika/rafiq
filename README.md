@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Prayer (off until `prayer.enabled = true`) | "when is maghrib?", "what's the Hijri date?", "how long until iftar?", "recite Surat Al-Mulk", "play Al-Baqarah verses 1 to 5 by Husary", "stop the recitation" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -109,6 +110,24 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
+
+## Prayer times, the Hijri date and the Quran
+
+Off by default: set `enabled = true` under `[prayer]` (see `config.example.toml`).
+
+- **Prayer times** are calculated on this computer from the sun's position, for `prayer.latitude` and
+  `prayer.longitude` (or the city in `[place]`), with the method you choose: Egyptian General
+  Authority of Survey (the default), Umm al-Qura, Muslim World League, ISNA, Karachi, Dubai, Kuwait,
+  Qatar, Singapore or France, and the standard or Hanafi asr. Rafiq always names the method it used.
+  They agree with aladhan.com to the minute for Cairo and Mecca; if your mosque differs, move any
+  prayer by minutes under `[prayer.adjust]`.
+- **Reminders**: none until you set them, e.g. `fajr = 10` under `[prayer.reminders]` for ten minutes
+  before fajr, said in `prayer.language`.
+- **The Hijri date** follows the Umm al-Qura calendar (2018 to 2039, the tabular calendar outside it).
+  Where the month starts with the moon sighting, `prayer.hijri_adjust = 1` or `-1` moves it a day.
+- **Ramadan**: during Ramadan, prayer times come with the time left until iftar and until suhoor ends.
+- **Recitation** streams verse by verse from [EveryAyah](https://everyayah.com), which allows it;
+  nothing is saved. Reciters: alafasy (default), abdul_basit, husary, minshawi, sudais, muaiqly.
 
 ## Safety
 
