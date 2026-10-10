@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Clipboard | "translate what I copied into Arabic", "summarise my clipboard", "explain this error", "copy that" (needs `wl-clipboard` on Wayland, `xclip` on X11) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -115,7 +116,8 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels.
-- Web pages, search results and emails are passed to the model as data, never as instructions.
+- Web pages, search results, emails and the clipboard are passed to the model as data, never as
+  instructions. The clipboard is read only when you ask about what you copied.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
