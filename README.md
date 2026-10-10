@@ -19,6 +19,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -115,8 +116,8 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels.
-- Web pages, search results and emails are passed to the model as data, never as instructions.
-  Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- Web pages, search results, emails and Discord messages are passed to the model as data, never as
+  instructions. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
@@ -130,6 +131,17 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+## Discord
+
+Rafiq reads Discord through a bot of your own, never your user account (self-bots are against
+Discord's rules, and a user token is refused).
+
+1. Create an application at the [Discord developer portal](https://discord.com/developers/applications),
+   add a bot and turn on its **Message Content** intent.
+2. Invite it to your servers with the **View Channels** and **Read Message History** permissions.
+3. Put its token in `DISCORD_BOT_TOKEN` (or `bot_token` under `[discord]`), your own Discord user id in
+   `user_id` (Developer Mode, then right-click your name, Copy User ID), and set `enabled = true`.
 
 ## Settings
 
