@@ -50,6 +50,17 @@ The first start downloads the Whisper models (about 550 MB). Offline voices go i
 
 `rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
 
+### Modes: everyday, quality, offline
+
+- **Everyday** (the default): the fast model, `brain.claude_model`.
+- **Quality**: the strongest model, `brain.quality_model` (`claude-opus-5-5`), slower and costlier.
+- **Offline**: nothing leaves the computer: only Ollama and the Piper voices, whatever `brain.mode`
+  and `voice.engine` say. Speech-to-text is always local.
+
+Switch by voice ("Rafiq, switch to offline mode", "what mode are you in?"), with the switch at the
+top of the panel, or for a session with `rafiq run --mode quality`. `brain.profile` in the config
+sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
+
 ## The voice
 
 | Engine | Languages | Needs |

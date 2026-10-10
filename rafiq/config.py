@@ -15,7 +15,10 @@ DEFAULTS: dict = {
     "brain": {
         # "auto": Claude when an API key is set and the network answers, else Ollama.
         "mode": "auto",
+        # everyday: claude_model, fast and cheap; quality: quality_model; offline: Ollama and Piper only.
+        "profile": "everyday",
         "claude_model": "claude-haiku-5-5",
+        "quality_model": "claude-opus-5-5",
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "max_tokens": 600,
