@@ -30,5 +30,13 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[paper]                         # the morning paper: rafiq paper (rafiq paper --demo to try it)
+title = "Rafiq"
+languages = ["en"]              # ["en", "ar"] prints headings in both; Arabic first lays the page out right to left
+feeds = []                      # RSS or Atom addresses, e.g. ["https://feeds.bbci.co.uk/news/rss.xml"]
+tech_feeds = []
+priorities = []                 # ["Send the report"]
+deadlines = []                  # [{title = "Tax return", date = "2026-10-15"}]
+
 [google]
 enabled = false                 # true after `rafiq google-setup`

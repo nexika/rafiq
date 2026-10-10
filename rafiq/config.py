@@ -46,6 +46,15 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "paper": {
+        "title": "Rafiq",
+        "languages": [],                 # e.g. ["en", "ar"] for a bilingual paper; empty: the first speech language
+        "feeds": [],                     # RSS or Atom addresses for the news section
+        "tech_feeds": [],
+        "max_articles": 6,               # per section
+        "priorities": [],
+        "deadlines": [],                 # [{title = "Tax return", date = "2026-10-15"}]
+    },
     "anthropic_api_key": "",
 }
 
