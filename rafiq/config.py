@@ -22,6 +22,7 @@ DEFAULTS: dict = {
         # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
         # model rounds, tool calls in all, and seconds from the request to the answer.
         "limits": {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120},
+        "persona": "neutral",            # neutral, concise or butler; changing it by voice or in the panel wins
     },
     "speech": {
         "whisper_model": "small",       # tiny, base, small, medium; medium is better for Arabic but slower
@@ -31,10 +32,14 @@ DEFAULTS: dict = {
         "max_utterance_seconds": 20,
     },
     "voice": {
-        # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper (offline).
+        # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, then ElevenLabs when
+        # ELEVENLABS_API_KEY is set, then Kokoro when its files are in data/kokoro/, then Piper (offline).
         "engine": "auto",
         "azure_key": "",
         "azure_region": "",
+        "elevenlabs_key": "",
+        "elevenlabs_model": "eleven_flash_v2_5",
+        "elevenlabs_voices": {},         # language (or "default") -> ElevenLabs voice id
         "rate": "+0%",
         "voices": {
             "en": "en-US-AndrewNeural",
@@ -46,8 +51,21 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "audio": {
+        # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
+        "outputs": {},
+    },
+    "interruption": {
+        # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.
+        "enabled": True,
+        "factor": 1.8,                   # how much louder than Rafiq's echo you must be
+        "min_level": 0.01,               # the quietest sound (RMS) that counts
+        "frames": 3,                     # loud 32 ms frames in a row before it listens
+        "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
+    },
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
+    "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
     "anthropic_api_key": "",
 }
