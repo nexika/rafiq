@@ -48,6 +48,10 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "audio": {
+        # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
+        "outputs": {},
+    },
     "interruption": {
         # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.
         "enabled": True,
