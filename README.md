@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -130,6 +131,20 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+## Home devices (Nest, Hue, plugs)
+
+Rafiq controls home devices through [Home Assistant](https://www.home-assistant.io/), which already
+knows Google Nest, Philips Hue, smart plugs and many other brands, so there is no Google Device Access
+registration to pay for.
+
+1. In Home Assistant, open your profile and create a **long-lived access token**.
+2. Set `url` under `[home_assistant]` in the config (for example `http://homeassistant.local:8123`), and
+   the token in `HOME_ASSISTANT_TOKEN` (or `token` in the config).
+
+Then ask "which lights are on?" or "turn off the coffee plug" (asks first). Lights, switches and plugs,
+fans, thermostats, media players and humidifiers can be switched on and off; locks, alarms and garage
+doors never are.
 
 ## Settings
 

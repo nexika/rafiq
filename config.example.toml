@@ -32,3 +32,7 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[home_assistant]                # Nest, Hue, smart plugs...: profile > long-lived access token in Home Assistant
+url = ""                        # e.g. http://homeassistant.local:8123
+token = ""                      # or set HOME_ASSISTANT_TOKEN
