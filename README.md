@@ -110,6 +110,13 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
 
+## Other rooms: a satellite
+
+A Raspberry Pi 4 or 5 with a USB speakerphone can be Rafiq's ears and voice in another room:
+`rafiq satellite` hears the name itself, sends only what follows it to the main computer, plays the
+answer, reconnects on its own and runs as a systemd service (`rafiq satellite --unit`). It can share
+the speaker with a Spotify receiver. Setup: [docs/satellite.md](docs/satellite.md).
+
 ## Safety
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said

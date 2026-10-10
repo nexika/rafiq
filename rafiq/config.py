@@ -46,6 +46,14 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "satellite": {
+        # For `rafiq satellite` on another device: where the main Rafiq listens for satellites.
+        "server": "",                    # ws://192.168.1.10:8766/satellite on the home network, else wss://
+        "name": "",                      # the room; default: this computer's host name
+        "token": "",                     # or RAFIQ_SATELLITE_TOKEN
+        "input_device": "",              # "" for the default, a number, or part of the device name
+        "output_device": "",
+    },
     "anthropic_api_key": "",
 }
 

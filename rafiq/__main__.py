@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | satellite"""
 
 from __future__ import annotations
 
@@ -156,6 +156,66 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_satellite(args) -> int:
+    """Be a microphone and speaker in another room for the Rafiq running on the main computer."""
+    import logging
+
+    from . import kws, satellite
+
+    if args.unit:
+        print(satellite.service_unit(sys.executable), end="")
+        return 0
+    cfg = config.load()
+    settings = cfg["satellite"]
+    server = args.server or settings["server"]
+    if not server:
+        print("Set the main computer's address: [satellite] server = \"ws://...\" in "
+              f"{config.home() / 'config.toml'} (or --server)", file=sys.stderr)
+        return 1
+    try:
+        satellite.check_server(server)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    secret = satellite.token(cfg)
+    if not secret:
+        print("Set the satellite's token: RAFIQ_SATELLITE_TOKEN or [satellite] token", file=sys.stderr)
+        return 1
+    spotter = kws.Spotter.load()
+    if spotter is None:
+        print("Record the name on this device (rafiq enroll), or copy ~/.config/rafiq/data/wake from the "
+              "main computer", file=sys.stderr)
+        return 1
+    try:
+        import websockets  # noqa: F401
+    except ImportError:
+        print('The satellite needs the websockets package: pip install "rafiq[satellite]"', file=sys.stderr)
+        return 1
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    from .audio import RATE
+
+    mel = kws.Mel()
+    ears = satellite.MicrophoneEars(satellite.device(settings["input_device"]),
+                                    cfg["speech"]["max_utterance_seconds"])
+
+    def show(score, threshold):
+        print(f"  heard: score {score:.3f}, wakes below {threshold:.3f}", flush=True)
+
+    sat = satellite.Satellite(
+        server, args.name or settings["name"] or satellite.default_name(), secret, satellite.WebSocketLink.open,
+        ears, satellite.SpeakerPlayer(satellite.device(settings["output_device"])),
+        lambda audio: spotter.score(mel(audio[:int(kws.MAX_SECONDS * RATE)])), spotter.threshold,
+        name_seconds=max(len(t) for t in spotter.templates) * 0.02, on_score=show if args.scores else None)
+    ears.start()
+    try:
+        return sat.run()
+    except KeyboardInterrupt:
+        sat.stop()
+        return 0
+    finally:
+        ears.stop()
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -190,6 +250,12 @@ def main(argv=None) -> int:
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sat = sub.add_parser("satellite", help="be a microphone and speaker in another room (Raspberry Pi)")
+    sat.add_argument("--server", help="the main computer, e.g. ws://192.168.1.10:8766/satellite")
+    sat.add_argument("--name", help="this room's name (default: the host name)")
+    sat.add_argument("--scores", action="store_true", help="print each utterance's wake score, to tune it")
+    sat.add_argument("--unit", action="store_true", help="print a systemd user unit that runs the satellite")
+    sat.set_defaults(fn=cmd_satellite)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
