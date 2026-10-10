@@ -25,7 +25,8 @@ ar = "ar-SA-HamedNeural"
 ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 
 [place]
-city = ""                       # for "what's the weather?" without a city
+city = ""                       # for "what's the weather?" without a city; empty: GNOME's location service
+ip_lookup = false               # true: if GNOME has no location, find it from your IP (sends it to ipapi.co)
 
 [panel]
 port = 8765

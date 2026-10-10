@@ -8,6 +8,7 @@ import operator
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .. import location
 from . import tool
 
 
@@ -103,15 +104,22 @@ def _get_json(url: str, params: dict) -> dict:
 
 
 @tool("weather", "Current weather and the forecast for the next days.",
-      {"city": {"type": "string", "description": "city name; empty for the user's own city"},
+      {"city": {"type": "string", "description": "city name; empty for where the user is"},
        "days": {"type": "integer", "description": "days of forecast, 1 to 7"}})
-def weather(city: str = "", days: int = 2, ctx=None, get=_get_json) -> str:
-    city = city or (ctx.cfg.get("place", {}).get("city") if ctx else "") or ""
-    if not city:
-        return "error: no city given and none set in the config (place.city)"
-    place = geocode(city, get)
-    if not place:
-        return f"error: no place called {city!r}"
+def weather(city: str = "", days: int = 2, ctx=None, get=_get_json, here=location.here) -> str:
+    cfg = ctx.cfg if ctx else {}
+    city = city or cfg.get("place", {}).get("city") or ""
+    if city:
+        place = geocode(city, get)
+        if not place:
+            return f"error: no place called {city!r}"
+    else:
+        found = here(cfg, get)
+        if not found:
+            return ("error: no city given, none set in the config (place.city) and the location service "
+                    "gave none; the user can set place.city, or allow an IP lookup with place.ip_lookup = true")
+        place = {"latitude": found.latitude, "longitude": found.longitude, "country": found.country,
+                 "name": found.name or f"your location ({found.latitude:.2f}, {found.longitude:.2f})"}
     days = max(1, min(int(days or 1), 7))
     data = get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": place["latitude"], "longitude": place["longitude"], "timezone": "auto",
@@ -119,7 +127,8 @@ def weather(city: str = "", days: int = 2, ctx=None, get=_get_json) -> str:
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
         "forecast_days": days})
     cur, daily = data.get("current") or {}, data.get("daily") or {}
-    lines = [f"{place['name']}, {place.get('country', '')}: now {cur.get('temperature_2m')}°C "
+    where = ", ".join(p for p in (place["name"], place.get("country")) if p)
+    lines = [f"{where}: now {cur.get('temperature_2m')}°C "
              f"(feels {cur.get('apparent_temperature')}°C), {WEATHER_CODES.get(cur.get('weather_code'), 'unknown')}, "
              f"wind {cur.get('wind_speed_10m')} km/h, humidity {cur.get('relative_humidity_2m')}%"]
     for i, day in enumerate(daily.get("time") or []):

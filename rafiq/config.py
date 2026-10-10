@@ -44,7 +44,9 @@ DEFAULTS: dict = {
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
-    "place": {"city": "", "units": "metric"},
+    "place": {"city": "", "units": "metric",
+              # With no city: GNOME's location service, then (only if true) an IP lookup at ipapi.co.
+              "ip_lookup": False},
     "google": {"enabled": False},
     "anthropic_api_key": "",
 }
