@@ -119,6 +119,84 @@ def test_when_every_backend_fails_rafiq_says_so_in_the_users_language(monkeypatc
     assert make_brain().think("bonjour", "fr") == "Je n'arrive pas à réfléchir pour le moment."
 
 
+def calls_to(name, count=1):
+    return {"role": "assistant", "tool_calls": [{"function": {"name": name, "arguments": {}}}] * count}
+
+
+def test_the_defaults_match_jarvis_six_rounds_twelve_calls_two_minutes():
+    assert config.load()["brain"]["limits"] == {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120}
+
+
+def test_too_many_rounds_stops_with_a_message_in_the_users_language(ollama):
+    script, requests = ollama
+    script += [calls_to("get_time")] * 3
+    brain = make_brain()
+    brain.cfg["brain"]["limits"]["max_rounds"] = 2
+    assert brain.think("quelle heure", "fr") == brain_mod.lang_mod.phrase("limit", "fr")
+    assert len(requests) == 2
+
+
+def test_too_many_tool_calls_stops_before_running_the_extra_ones(ollama):
+    script, requests = ollama
+    log = []
+    script += [calls_to("get_time", 2), calls_to("power", 2)]
+    brain = make_brain(log=log)
+    brain.cfg["brain"]["limits"]["max_tool_calls"] = 3
+    assert brain.think("shut down twice", "ar-EG") == brain_mod.lang_mod.phrase("limit", "ar-EG")
+    assert log == []            # the batch that would pass the cap is not run at all
+    assert len(requests) == 2
+
+
+def test_running_out_of_time_stops_the_request(ollama):
+    script, requests = ollama
+    now = [1000.0]
+
+    def slow_time():
+        now[0] += 50
+        return "Saturday 10 October 2026, 15:40"
+
+    script += [calls_to("get_time")] * 4
+    cfg = config.load()
+    cfg["brain"]["mode"] = "ollama"
+    cfg["brain"]["limits"]["max_seconds"] = 120
+    brain = Brain(cfg, {"get_time": Tool("get_time", "time", slow_time)}, lambda a, t: True, clock=lambda: now[0])
+    assert brain.think("what time is it", "en") == brain_mod.lang_mod.phrase("limit", "en")
+    assert len(requests) == 3   # at 0 s, 50 s and 100 s; at 150 s the time is up
+
+
+def test_the_model_request_never_waits_past_the_time_left(monkeypatch):
+    now, timeouts = [1000.0], []
+
+    def post(url, json=None, timeout=None):
+        timeouts.append(timeout)
+        now[0] += 90
+        return FakeResponse({"message": calls_to("get_time")})
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", post)
+    cfg = config.load()
+    cfg["brain"]["mode"] = "ollama"
+    brain = Brain(cfg, tools_with([]), lambda a, t: True, clock=lambda: now[0])
+    brain.think("what time is it", "en")
+    assert timeouts == [120, 30]
+
+
+def test_a_limit_does_not_fall_back_to_the_other_backend(ollama, monkeypatch):
+    """Claude already spent the request's budget looping; starting over on Ollama would double it."""
+    script, requests = ollama
+    brain = make_brain()
+    brain.cfg["brain"]["mode"] = "auto"
+    brain.cfg["anthropic_api_key"] = "sk-test"
+
+    def looping(*args):
+        raise brain_mod.LimitReached("too many tool rounds")
+
+    monkeypatch.setattr(brain, "_claude_turn", looping)
+    assert brain.think("hello", "en") == brain_mod.lang_mod.phrase("limit", "en")
+    assert requests == []
+
+
 def test_system_prompt_has_no_time_or_language():
     text = brain_mod.system_prompt(config.load())
     assert "2026" not in text and "{" not in text
