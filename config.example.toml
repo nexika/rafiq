@@ -7,6 +7,7 @@ mode = "auto"                   # auto: Claude when ANTHROPIC_API_KEY is set, el
 claude_model = "claude-haiku-5-5"
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
+persona = "neutral"             # neutral, concise or butler (a dry, witty butler); "be more concise" switches it by voice
 
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU

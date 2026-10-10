@@ -19,6 +19,7 @@ DEFAULTS: dict = {
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "max_tokens": 600,
+        "persona": "neutral",            # neutral, concise or butler; changing it by voice or in the panel wins
     },
     "speech": {
         "whisper_model": "small",       # tiny, base, small, medium; medium is better for Arabic but slower
