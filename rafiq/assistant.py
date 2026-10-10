@@ -20,6 +20,7 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .permissions import ALWAYS, Approvals
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -32,10 +33,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler and the language of the current request. A remote
+    request (one not made in person) runs only level 1 tools and level 2 ones approved for good."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    remote: bool = False
 
 
 @dataclass
@@ -82,10 +85,12 @@ class Assistant:
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.approvals = Approvals(config_mod.data_dir() / "approvals.json")
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish,
+                           approvals=self.approvals)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
-        self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
+        self.pending_answer: queue.Queue = queue.Queue()   # a yes, no or "always" clicked in the panel
         self.state = "starting"
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
@@ -141,20 +146,22 @@ class Assistant:
         self.events.publish("said", {"text": text, "tag": tag})
         self.speaker.say(text, tag)
 
-    def confirm(self, action: str, tag: str) -> bool:
+    def confirm(self, action: str, tag: str, always: bool = False) -> bool | str:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
-        panel's yes and no buttons answer too."""
+        panel's yes and no buttons answer too. With always=True (a reversible action) "yes, always"
+        is offered and comes back as ALWAYS; otherwise it counts as a plain yes."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
-        self.events.publish("confirm", {"action": action, "tag": tag})
+        self.events.publish("confirm", {"action": action, "tag": tag, "always": always})
         for _attempt in range(2):
-            self.say(lang.phrase("confirm", tag, action=action), tag)
+            self.say(lang.phrase("confirm_always" if always else "confirm", tag, action=action), tag)
             self.set_state("listening")
             deadline = time.monotonic() + CONFIRM_SECONDS
             while time.monotonic() < deadline:
                 try:
                     answer = self.pending_answer.get_nowait()
-                    self.events.publish("confirmed", {"yes": answer})
+                    answer = True if answer == ALWAYS and not always else answer
+                    self.events.publish("confirmed", {"yes": bool(answer)})
                     return answer
                 except queue.Empty:
                     pass
@@ -162,9 +169,10 @@ class Assistant:
                 if audio is None:
                     continue
                 text, _ = self.hear(audio)
-                answer = lang.yes_or_no(text)
+                answer = lang.answer(text)
                 if answer is not None:
-                    self.events.publish("confirmed", {"yes": answer})
+                    answer = True if answer == ALWAYS and not always else answer
+                    self.events.publish("confirmed", {"yes": bool(answer)})
                     if not answer:
                         self.say(lang.phrase("cancelled", tag), tag)
                     return answer
@@ -172,6 +180,11 @@ class Assistant:
         self.events.publish("confirmed", {"yes": False})
         self.say(lang.phrase("cancelled", tag), tag)
         return False
+
+    def revoke(self, name: str) -> None:
+        """Forget a "yes, always" (from the panel): that tool asks again next time."""
+        self.approvals.revoke(name)
+        self.events.publish("approvals", {"tools": self.approvals.names()})
 
     def respond(self, text: str, tag: str) -> None:
         """Think about one request and say the answer."""

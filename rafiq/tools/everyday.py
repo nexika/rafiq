@@ -71,8 +71,9 @@ def list_timers(ctx=None) -> str:
     return "\n".join(_describe(a, now()) for a in pending) if pending else "none pending"
 
 
-@tool("cancel_timer", "Cancel a timer or reminder by its id or by words in its label.",
-      {"id": {"type": "string"}, "label": {"type": "string"}})
+@tool("cancel_timer", "Cancel a timer or reminder by its id or by words in its label. Rafiq asks the user first.",
+      {"id": {"type": "string"}, "label": {"type": "string"}},
+      confirm=lambda a: f"cancel the timer or reminder '{a.get('label') or a.get('id', '')}'", level=2)
 def cancel_timer(id: str = "", label: str = "", ctx=None) -> str:  # noqa: A002 (the model's word)
     gone = ctx.scheduler.cancel(id or None, label or None)
     return f"cancelled {len(gone)}: " + ", ".join(a.label for a in gone) if gone else "nothing matched"

@@ -115,6 +115,13 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels.
+- Every tool has a permission level. Level 1 (the time, weather, volume...) runs at once. Level 2
+  (reversible: opening a page in the browser, cancelling a timer) asks first, and "yes, always" ("oui,
+  toujours", "sí, siempre", "ja, immer", "نعم دائمًا", "آه على طول") stops asking for that tool; the
+  panel lists these approvals with a Revoke button. They are stored in
+  `~/.config/rafiq/data/approvals.json`, readable only by you. Level 3 (email, calendar bookings,
+  shutting down) asks every time and is never remembered; a request that does not come from you in
+  person can only run level 1 tools and level 2 tools you approved for good.
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.

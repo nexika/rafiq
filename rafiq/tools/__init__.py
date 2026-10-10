@@ -1,11 +1,14 @@
 """Rafiq's skills. Each tool is a plain function with a description and a JSON schema for its inputs;
-a tool that changes something outside Rafiq names the action, and Rafiq asks before running it."""
+a tool that changes something outside Rafiq names the action, and Rafiq asks before running it. Its
+permission level (see permissions.py) says whether "yes, always" may be remembered."""
 
 from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
+
+from ..permissions import SAFE, SENSITIVE
 
 
 @dataclass
@@ -18,6 +21,13 @@ class Tool:
     # None: runs without asking. A string or a function of the arguments: the action to confirm out
     # loud first, in words the user hears ("shut down the computer").
     confirm: str | Callable | None = None
+    # 1, 2 or 3 (permissions.py). Left out: 1 for a tool that doesn't ask, 3 for one that does, so a
+    # new tool that asks is asked about every time until it is marked reversible.
+    level: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.level is None:
+            self.level = SAFE if self.confirm is None else SENSITIVE
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -39,9 +49,10 @@ class Tool:
 REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None):
+def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None,
+         level: int | None = None):
     def register(fn: Callable) -> Callable:
-        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm)
+        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm, level)
         return fn
     return register
 

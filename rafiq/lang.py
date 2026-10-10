@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from .permissions import ALWAYS as YES_ALWAYS
+
 TAGS = ("en", "fr", "es", "de", "ar", "ar-EG")
 NAMES = {"en": "English", "fr": "French", "es": "Spanish", "de": "German", "ar": "Modern Standard Arabic",
          "ar-EG": "Egyptian Arabic"}
@@ -108,6 +110,23 @@ NO = {"no", "nope", "cancel", "stop", "don't", "non", "annule", "annuler", "nein
       "لاء", "الغي", "ألغي", "الغاء", "إلغاء", "بلاش", "استنى", "متعملش"}
 
 
+# "Yes, always": remember the approval. Only offered for reversible actions (permissions.py).
+ALWAYS = {"always", "toujours", "siempre", "immer", "دائما", "دائمًا", "دايما", "دايمًا", "علطول", "عالطول"}
+_ALWAYS_PHRASES = ("على طول", "ع طول")
+
+
+def answer(text: str) -> bool | str | None:
+    """Like yes_or_no, and "always" for "yes, always" ("always" alone counts: it is a yes). A no
+    still wins: "no, not always" is a no."""
+    plain = yes_or_no(text)
+    if plain is False:
+        return False
+    norm = " ".join(words(text))
+    if set(norm.split()) & _ALWAYS or any(p in norm for p in _ALWAYS_PHRASES_N):
+        return YES_ALWAYS
+    return plain
+
+
 def yes_or_no(text: str) -> bool | None:
     """True for a clear yes, False for a clear no, None when it is neither or both. A no always wins
     over a yes in the same answer ("yes, no wait" is a no): an action is only taken on a clear yes."""
@@ -119,7 +138,8 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
-_EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_EGYPTIAN, _WEAK_N, _YES, _NO, _ALWAYS = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO), _norm(ALWAYS)
+_ALWAYS_PHRASES_N = tuple(normalize_arabic(p) for p in _ALWAYS_PHRASES)
 
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},
@@ -129,6 +149,12 @@ PHRASES = {
     "confirm": {"en": "Should I {action}? Say yes or no.", "fr": "Je dois {action} ? Dis oui ou non.",
                 "es": "¿Quieres que {action}? Di sí o no.", "de": "Soll ich {action}? Sag ja oder nein.",
                 "ar": "هل أقوم بـ{action}؟ قل نعم أو لا.", "ar-EG": "أعمل {action}؟ قول آه أو لأ."},
+    "confirm_always": {"en": "Should I {action}? Say yes, no, or yes always.",
+                       "fr": "Je dois {action} ? Dis oui, non, ou oui toujours.",
+                       "es": "¿Quieres que {action}? Di sí, no, o sí siempre.",
+                       "de": "Soll ich {action}? Sag ja, nein oder ja immer.",
+                       "ar": "هل أقوم بـ{action}؟ قل نعم أو لا أو نعم دائمًا.",
+                       "ar-EG": "أعمل {action}؟ قول آه أو لأ أو آه على طول."},
     "cancelled": {"en": "Okay, I won't.", "fr": "D'accord, je ne le fais pas.", "es": "Vale, no lo hago.",
                   "de": "Okay, ich lasse es.", "ar": "حسنًا، لن أفعل.", "ar-EG": "ماشي، مش هعمل كده."},
     "timer_done": {"en": "Your timer is done: {label}", "fr": "Ton minuteur est terminé : {label}",

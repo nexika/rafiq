@@ -9,6 +9,7 @@ import sys
 import threading
 
 from . import config, lang
+from .permissions import ALWAYS
 
 
 def cmd_run(args) -> int:
@@ -33,9 +34,11 @@ def cmd_run(args) -> int:
     return 0
 
 
-def _terminal_confirm(action: str, tag: str) -> bool:
-    answer = input(lang.phrase("confirm", tag, action=action) + " ")
-    return lang.yes_or_no(answer) is True
+def _terminal_confirm(action: str, tag: str, always: bool = False) -> bool | str:
+    answer = lang.answer(input(lang.phrase("confirm_always" if always else "confirm", tag, action=action) + " "))
+    if answer == ALWAYS:
+        return ALWAYS if always else True
+    return answer is True
 
 
 def cmd_ask(args) -> int:

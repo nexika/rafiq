@@ -1,5 +1,5 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations.
+a text box, yes/no buttons for confirmations, and the "yes, always" approvals with a way to revoke them.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -14,6 +14,8 @@ import queue
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
+
+from .permissions import ALWAYS
 
 MAX_BODY = 10_000
 
@@ -68,6 +70,8 @@ def make_handler(assistant, token: str, port: int):
                 for event in list(assistant.events.history):
                     self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
                 self.wfile.write(f"data: {json.dumps({'kind': 'state', 'state': assistant.state})}\n\n".encode())
+                approvals = {"kind": "approvals", "tools": assistant.approvals.names()}
+                self.wfile.write(f"data: {json.dumps(approvals)}\n\n".encode())
                 self.wfile.flush()
                 while True:
                     try:
@@ -97,7 +101,9 @@ def make_handler(assistant, token: str, port: int):
             elif path == "/api/listen":
                 assistant.submit("listen")
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
-                assistant.pending_answer.put(data["yes"])
+                assistant.pending_answer.put(ALWAYS if data["yes"] and data.get("always") is True else data["yes"])
+            elif path == "/api/revoke" and isinstance(data.get("tool"), str):
+                assistant.revoke(data["tool"])
             elif path == "/api/stop":
                 assistant.speaker.stop()
             else:

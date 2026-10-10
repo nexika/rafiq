@@ -133,6 +133,11 @@ class FakeAssistant:
 
         self.pending_answer = queue.Queue()
         self.speaker = type("S", (), {"stop": lambda self: None})()
+        self.revoked = []
+        self.approvals = type("A", (), {"names": lambda self: []})()
+
+    def revoke(self, name):
+        self.revoked.append(name)
 
     def submit(self, kind, **data):
         self.jobs.append((kind, data))
