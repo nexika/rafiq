@@ -17,6 +17,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 |---|---|
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
+| The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
@@ -117,6 +118,9 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   answer cancels.
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
+  asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
+  in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.

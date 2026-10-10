@@ -15,17 +15,20 @@ class Tool:
     fn: Callable
     params: dict = field(default_factory=dict)
     required: tuple = ()
-    # None: runs without asking. A string or a function of the arguments: the action to confirm out
-    # loud first, in words the user hears ("shut down the computer").
+    # None: runs without asking. A string or a function of the arguments (and of the context, if it
+    # takes `ctx`): the action to confirm out loud first, in words the user hears ("shut down the
+    # computer"); a function may return None to run without asking.
     confirm: str | Callable | None = None
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
 
-    def action(self, args: dict) -> str | None:
-        if self.confirm is None:
-            return None
-        return self.confirm(args) if callable(self.confirm) else self.confirm
+    def action(self, args: dict, ctx=None) -> str | None:
+        if self.confirm is None or not callable(self.confirm):
+            return self.confirm
+        if "ctx" in inspect.signature(self.confirm).parameters:
+            return self.confirm(args, ctx=ctx)
+        return self.confirm(args)
 
     def run(self, args: dict, ctx) -> str:
         accepted = inspect.signature(self.fn).parameters
@@ -48,7 +51,7 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; Google only when it is set up."""
-    from . import everyday, pc, web  # noqa: F401  (registers the tools)
+    from . import everyday, pc, screen, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401

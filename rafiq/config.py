@@ -46,6 +46,13 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "screen": {
+        # Questions about the screen go to Claude (in the cloud), and never while offline unless a
+        # local vision model is set: an Ollama model that reads images, e.g. "qwen2.5vl:7b".
+        "ollama_model": "",
+        "ask_first": True,               # ask before each screenshot that goes to the cloud
+        "max_side": 1568,                # shrink the screenshot to this many pixels on its long side
+    },
     "anthropic_api_key": "",
 }
 

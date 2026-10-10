@@ -30,5 +30,9 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[screen]
+ollama_model = ""               # a local vision model (e.g. "qwen2.5vl:7b") to read the screen offline
+ask_first = true                # ask before each screenshot that goes to Claude, in the cloud
+
 [google]
 enabled = false                 # true after `rafiq google-setup`

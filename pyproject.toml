@@ -16,6 +16,8 @@ dependencies = [
     "psutil>=5.9",
     "trafilatura>=1.8",
     "ddgs>=9.0",
+    "jeepney>=0.8",
+    "pillow>=10.1",
 ]
 
 [project.optional-dependencies]
