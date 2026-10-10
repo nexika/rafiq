@@ -32,3 +32,11 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[presence]                      # react when your phone leaves or comes home (see the README)
+phone_ip = ""                   # the phone's fixed IP, e.g. "192.168.1.20"; empty: off
+phone_mac = ""                  # optional; only this MAC counts
+away_minutes = 10               # off the Wi-Fi this long before the away scene
+away_command = []               # the away scene, e.g. ["/home/you/bin/lights", "off"]
+home_command = []               # the welcome-home scene
+welcome = true                  # also say "welcome home"

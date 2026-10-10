@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, presence, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -32,10 +32,12 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the language of the current request, and the
+    phone watcher when a phone is set up."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    presence: presence.Presence | None = None
 
 
 @dataclass
@@ -80,7 +82,8 @@ class Assistant:
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
+        self.presence = self._make_presence()
+        self.ctx = Context(self.cfg, self.scheduler, presence=self.presence)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
@@ -213,6 +216,30 @@ class Assistant:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
 
+    def _make_presence(self) -> presence.Presence | None:
+        settings = self.cfg["presence"]
+        if not settings.get("phone_ip"):
+            return None
+        return presence.Presence(
+            config_mod.data_dir() / "presence.json",
+            lambda: presence.phone_seen(settings["phone_ip"], settings.get("phone_mac", "")),
+            on_away=self._phone_left, on_home=self._phone_back,
+            away_after=float(settings["away_minutes"]) * 60)
+
+    def _phone_left(self) -> None:
+        self.events.publish("presence", {"state": "away"})
+        error = presence.run_scene(self.cfg, "away")
+        if error:
+            self.events.publish("error", {"error": error})
+
+    def _phone_back(self) -> None:
+        self.events.publish("presence", {"state": "home"})
+        error = presence.run_scene(self.cfg, "home")
+        if error:
+            self.events.publish("error", {"error": error})
+        if self.cfg["presence"].get("welcome", True):
+            self.submit("say", text=lang.phrase("welcome_home", self.tag), tag=self.tag)
+
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
             self.say(lang.phrase("listening", self.tag), self.tag)
@@ -266,6 +293,8 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        if self.presence:
+            self.presence.start(every=float(self.cfg["presence"]["check_seconds"]))
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
         self.set_state("idle")
@@ -282,6 +311,8 @@ class Assistant:
         finally:
             self.mic.stop()
             self.scheduler.stop()
+            if self.presence:
+                self.presence.stop()
 
     def stop(self) -> None:
         self._stop.set()

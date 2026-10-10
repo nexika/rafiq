@@ -46,6 +46,15 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "presence": {
+        "phone_ip": "",                  # the phone's fixed IP on the home Wi-Fi; empty: presence is off
+        "phone_mac": "",                 # optional: only this MAC counts (turn off the phone's private MAC)
+        "away_minutes": 10,              # off the Wi-Fi this long before the away scene
+        "check_seconds": 30,
+        "away_command": [],              # the away scene: a command as an argument list
+        "home_command": [],              # the welcome-home scene
+        "welcome": True,                 # also say "welcome home"
+    },
     "anthropic_api_key": "",
 }
 

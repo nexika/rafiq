@@ -110,6 +110,35 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
 
+## Presence: when your phone leaves or comes home
+
+When your phone has been off the home Wi-Fi for 10 minutes, Rafiq plays the away scene; when it is
+back, the welcome-home scene, and says "welcome home". "Rafiq, turn off presence" stops it (and it
+stays off after a restart); "turn on presence" starts it again.
+
+Rafiq looks for the phone every 30 seconds: a ping, and when that gets no answer, the computer's ARP
+table, because a sleeping phone often ignores pings but still answers ARP. A phone that drops off for
+a few minutes while asleep still counts as home. When Rafiq starts, it first learns where the phone
+is, without playing a scene.
+
+1. **Give the phone a fixed IP**: in your router, reserve an address for the phone (often called a
+   DHCP reservation or static lease).
+2. **Turn off the private (random) Wi-Fi address for your home network**, or the router may see a
+   new phone: on Android, Wi-Fi → your network → Privacy → "Use device MAC"; on an iPhone, Wi-Fi →
+   (i) → "Private Wi-Fi Address" off (or "Fixed" on iOS 18).
+3. Set it in `~/.config/rafiq/config.toml`:
+
+```toml
+[presence]
+phone_ip = "192.168.1.20"
+phone_mac = "aa:bb:cc:dd:ee:ff"           # optional: only this phone counts at that address
+away_command = ["/home/you/bin/scene", "away"]
+home_command = ["/home/you/bin/scene", "home"]
+```
+
+The scenes are commands of your own for now (run as argument lists, never through a shell), so they
+can drive any lights or plugs you already control from the terminal.
+
 ## Safety
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
