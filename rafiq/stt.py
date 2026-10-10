@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .hallucinations import is_hallucination, is_speech
+
 HOTWORDS = "Rafiq رفيق"
 # For the small model that only listens for the name: in tests on six languages, a prompt found the
 # name more often than hotwords (6 of 8 against 5 of 8) and as rarely by mistake.
@@ -55,5 +57,9 @@ class Transcriber:
         segments, _ = self.model.transcribe(audio, language=lang, beam_size=beam_size,
                                             condition_on_previous_text=False, vad_filter=False,
                                             hotwords=hotwords, initial_prompt=prompt, without_timestamps=True)
-        text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.8).strip()
+        # Silence and noise come back as stock phrases ("Thanks for watching!"): never a request.
+        kept = [s.text.strip() for s in segments if is_speech(s) and not is_hallucination(s.text)]
+        text = " ".join(kept).strip()
+        if is_hallucination(text):
+            text = ""
         return Heard(text=text, lang=lang, confidence=confidence)
