@@ -11,7 +11,7 @@ from rafiq.__main__ import main
 
 
 class FakeMic:
-    def __init__(self):
+    def __init__(self, **_kwargs):
         self.frames, self.muted = queue.Queue(), False
 
     def read(self, timeout=0.5):
