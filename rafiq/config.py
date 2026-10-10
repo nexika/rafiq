@@ -26,6 +26,13 @@ DEFAULTS: dict = {
         "languages": ["en", "fr", "es", "de", "ar"],
         "follow_up_seconds": 6,          # after an answer, listen this long without the name
         "max_utterance_seconds": 20,
+        "end_silence_seconds": 0.7,      # this much silence ends what you say (a noisy room adds a little)
+    },
+    "audio": {
+        "device": "",                    # index or part of the name (see `rafiq doctor`); "": the system default
+        "rate": 0,                       # the sample rate to try first; 0: 16 kHz, then whatever the device takes
+        "auto_calibration": True,        # listen to the room for a moment at start-up and fit the thresholds
+        "calibration_seconds": 1.0,
     },
     "voice": {
         # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper (offline).
