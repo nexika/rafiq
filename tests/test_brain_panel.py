@@ -175,6 +175,12 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assert assistant.jobs == [("text", {"text": "what time is it"})]
 
 
+def test_the_dictate_button_and_shortcut_are_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/dictate", {})[0] == 200
+    assert assistant.jobs == [("dictate", {})]
+
+
 def test_a_request_without_the_token_is_refused(panel):
     assistant, port = panel
     assert request(port, "/api/text", {"text": "shut down"}, token=None)[0] == 403

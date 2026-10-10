@@ -72,7 +72,18 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq dictate             # start (or stop) typing what you say into the focused window
 ```
+
+**Dictation**: say "Rafiq, dictate" (or "dictée", "dicta", "Diktat", "إملاء"), press the panel's
+Dictate button, or bind `rafiq dictate` to a shortcut. Each thing you say is typed into the focused
+window, in any of the six languages, with spoken punctuation ("comma", "question mark", "new line";
+"virgule", "coma", "Komma", "فاصلة", "علامة استفهام", "سطر جديد"). Say "stop dictating" ("arrête la
+dictée", "deja de dictar", "Diktat beenden", "أوقف الإملاء", "بطل إملاء") or press the shortcut again
+to end. The panel turns amber while dictating. Typing needs `wtype` or `ydotool` with `wl-clipboard`
+on Wayland (on GNOME, ydotool, with its `ydotoold` service running), or `xdotool` and `xclip` on
+X11. ydotool cannot type Arabic or accented letters, so that text is pasted through the clipboard,
+which then holds it; `rafiq doctor` shows which tools it found.
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
 Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.

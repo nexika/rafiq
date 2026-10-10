@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | listen | dictate | enroll | doctor | google-setup"""
 
 from __future__ import annotations
 
@@ -121,6 +121,11 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    from .dictation import Keyboard
+
+    typing = ("wtype", "ydotool", "wl-copy") if Keyboard().wayland else ("xdotool", "xclip")
+    found = [t for t in typing if shutil.which(t)]
+    _check("dictation (typing into windows)", bool(found), ", ".join(found) or "install " + " or ".join(typing))
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
@@ -132,12 +137,21 @@ def cmd_doctor(_args) -> int:
 
 def cmd_listen(_args) -> int:
     """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+    return _ask_running("/api/listen")
+
+
+def cmd_dictate(_args) -> int:
+    """Start typing what you say into the focused window, or stop: bind this to a keyboard shortcut."""
+    return _ask_running("/api/dictate")
+
+
+def _ask_running(path: str) -> int:
     import httpx
 
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/listen", json={}, timeout=5,
+        resp = httpx.post(f"http://{host}:{port}{path}", json={}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
@@ -189,6 +203,8 @@ def main(argv=None) -> int:
     enroll.set_defaults(fn=cmd_enroll)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    sub.add_parser("dictate", help="start or stop typing what you say (for a keyboard shortcut)").set_defaults(
+        fn=cmd_dictate)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)

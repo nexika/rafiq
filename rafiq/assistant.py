@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import dictation, kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -83,6 +83,8 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.keyboard = dictation.Keyboard()
+        self.dictating = False
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -180,10 +182,43 @@ class Assistant:
             return
         self.tag = tag
         self.ctx.tag = tag
+        if dictation.wants_dictation(text):
+            self.dictate(tag)
+            return
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    # ------------------------------------------------------------------ dictation
+
+    def dictate(self, tag: str) -> None:
+        """Type what is said into the focused window, one utterance at a time, until "stop dictating"
+        (or the shortcut again). The panel shows the "dictating" state the whole time, so text never
+        goes into a window unannounced."""
+        session = dictation.Session()
+        self.dictating = True
+        self.events.publish("dictation", {"on": True, "tag": tag})
+        self.say(lang.phrase("dictating", tag), tag)
+        self.set_state("dictating")
+        try:
+            while self.dictating and not self._stop.is_set():
+                audio = self.next_utterance(timeout=0.5)
+                if audio is None or not self.dictating:
+                    continue
+                heard = self.stt.transcribe(audio, hotwords=None)
+                stopped, text = session.add(heard.text, heard.lang)
+                if text:
+                    self.keyboard.type(text)
+                    self.events.publish("dictated", {"text": text, "tag": heard.lang})
+                if stopped:
+                    break
+        except dictation.TypingFailed as exc:
+            self.events.publish("error", {"error": str(exc)})
+        finally:
+            self.dictating = False
+            self.events.publish("dictation", {"on": False, "tag": tag})
+        self.say(lang.phrase("dictation_stopped", tag), tag)
 
     # ------------------------------------------------------------------ jobs from other threads
 
@@ -205,9 +240,14 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "dictate":               # the shortcut: start, or stop when dictating
+                    if self.dictating:
+                        self.dictating = False
+                        continue
+                    self.dictate(self.tag)
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
-            self.set_state("idle")
+            self.set_state("dictating" if self.dictating else "idle")
 
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
