@@ -24,7 +24,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD, echo_cancel_source
 from .bargein import BargeIn
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
-from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
+from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tools import load_all
 from .tts import Speaker
 
@@ -82,7 +82,7 @@ class Assistant:
         self.vad = SileroVAD()
         self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
-        self.stt = Transcriber(speech["whisper_model"], speech["languages"])
+        self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         barge = self.cfg["interruption"]
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
@@ -169,7 +169,7 @@ class Assistant:
 
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
-        heard = self.stt.transcribe(audio)
+        heard = self.stt.transcribe(audio, hint=self.tag)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
