@@ -19,6 +19,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| OBS Studio | "start recording" (asks first), "go live" (asks first), "switch to the camera scene", "clip that" |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -130,6 +131,14 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+## OBS Studio
+
+1. OBS 28 or newer: in OBS, **Tools > WebSocket Server Settings**, tick **Enable WebSocket server**
+   and note the password.
+2. `.venv/bin/pip install -e ".[obs]"`
+3. Under `[obs]` in the config set `enabled = true` and the `password` (or set `OBS_WEBSOCKET_PASSWORD`).
+4. For "clip that", turn on the replay buffer in OBS (Settings > Output > Replay Buffer) and start it.
 
 ## Settings
 

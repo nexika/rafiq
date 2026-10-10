@@ -32,3 +32,9 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[obs]                           # OBS Studio 28+: Tools > WebSocket Server Settings > Enable
+enabled = false                 # true to say "start recording", "switch to the camera scene", "clip that"
+host = "localhost"
+port = 4455
+password = ""                   # or set OBS_WEBSOCKET_PASSWORD

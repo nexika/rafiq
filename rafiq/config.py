@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # OBS Studio 28+ with its WebSocket server on; OBS_WEBSOCKET_PASSWORD overrides the password here.
+    "obs": {"enabled": False, "host": "localhost", "port": 4455, "password": "", "timeout": 5},
     "anthropic_api_key": "",
 }
 
