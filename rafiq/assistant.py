@@ -86,6 +86,8 @@ class Assistant:
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
+        self.confirming = False
+        self.muted = False                   # `rafiq mute`: the name and follow-ups are not listened for
         self.state = "starting"
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
@@ -97,12 +99,33 @@ class Assistant:
     # ------------------------------------------------------------------ state shown in the panel
 
     def set_state(self, state: str) -> None:
+        if state == "idle" and self.muted:
+            state = "muted"
         self.state = state
         self.events.publish("state", {"state": state})
 
     def _mute(self) -> None:
         self.mic.muted = True
         self.set_state("speaking")
+
+    def set_muted(self, muted: bool | None = None) -> bool:
+        """Stop or start listening (None: the other way round). Muting also ends the conversation:
+        no follow-up, and a question asked before an action is answered no. Called from the panel's
+        thread, so it only sets flags."""
+        self.muted = (not self.muted) if muted is None else muted
+        self.events.publish("muted", {"muted": self.muted})
+        if self.muted:
+            self.follow_up_until = 0.0
+            if self.confirming:
+                self.pending_answer.put(False)
+        if self.state in ("idle", "muted"):
+            self.set_state("idle")
+        return self.muted
+
+    def go_to_sleep(self) -> None:
+        """"Go to sleep": the follow-up window closes at once; the name wakes Rafiq again."""
+        self.follow_up_until = 0.0
+        self.events.publish("sleep", {})
 
     def _unmute(self) -> None:
         time.sleep(0.15)                     # the speaker's tail would be heard as speech
@@ -113,14 +136,18 @@ class Assistant:
 
     # ------------------------------------------------------------------ hearing
 
-    def next_utterance(self, timeout: float | None) -> np.ndarray | None:
-        """The next thing said, or None when nothing starts before the timeout (None: wait forever)."""
+    def next_utterance(self, timeout: float | None, idle: bool = False) -> np.ndarray | None:
+        """The next thing said, or None when nothing starts before the timeout (None: wait forever).
+        While muted, what is heard when idle (waiting for the name or a follow-up) is dropped."""
         deadline = None if timeout is None else time.monotonic() + timeout
         while not self._stop.is_set():
             self._run_jobs()
             if deadline and time.monotonic() > deadline and not self.endpointer.active:
                 return None
             frame = self.mic.read(timeout=0.1)
+            if idle and self.muted:
+                self.endpointer.reset()          # half an utterance from before the mute
+                continue
             if frame is None:
                 continue
             utterance = self.endpointer.push(frame, self.vad(frame))
@@ -147,6 +174,13 @@ class Assistant:
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         self.events.publish("confirm", {"action": action, "tag": tag})
+        self.confirming = True
+        try:
+            return self._ask_yes_or_no(action, tag)
+        finally:
+            self.confirming = False
+
+    def _ask_yes_or_no(self, action: str, tag: str) -> bool:
         for _attempt in range(2):
             self.say(lang.phrase("confirm", tag, action=action), tag)
             self.set_state("listening")
@@ -162,6 +196,10 @@ class Assistant:
                 if audio is None:
                     continue
                 text, _ = self.hear(audio)
+                if lang.is_sleep(text):
+                    self.events.publish("confirmed", {"yes": False})
+                    self.go_to_sleep()
+                    return False
                 answer = lang.yes_or_no(text)
                 if answer is not None:
                     self.events.publish("confirmed", {"yes": answer})
@@ -177,6 +215,9 @@ class Assistant:
         """Think about one request and say the answer."""
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
+            return
+        if lang.is_sleep(text):
+            self.go_to_sleep()
             return
         self.tag = tag
         self.ctx.tag = tag
@@ -271,7 +312,7 @@ class Assistant:
         self.set_state("idle")
         try:
             while not self._stop.is_set():
-                audio = self.next_utterance(timeout=None)
+                audio = self.next_utterance(timeout=None, idle=True)
                 if audio is None:
                     continue
                 try:

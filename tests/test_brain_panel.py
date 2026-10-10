@@ -137,6 +137,9 @@ class FakeAssistant:
     def submit(self, kind, **data):
         self.jobs.append((kind, data))
 
+    def set_muted(self, muted=None):
+        self.jobs.append(("mute", {"muted": muted}))
+
 
 @pytest.fixture
 def panel():
@@ -173,6 +176,14 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assistant, port = panel
     assert request(port, "/api/text", {"text": "what time is it"})[0] == 200
     assert assistant.jobs == [("text", {"text": "what time is it"})]
+
+
+def test_the_mute_button_and_rafiq_mute_reach_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/mute", {})[0] == 200
+    assert request(port, "/api/mute", {"muted": False})[0] == 200
+    assert request(port, "/api/mute", {"muted": "yes"})[0] == 400
+    assert assistant.jobs == [("mute", {"muted": None}), ("mute", {"muted": False})]
 
 
 def test_a_request_without_the_token_is_refused(panel):

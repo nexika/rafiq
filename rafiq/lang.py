@@ -119,7 +119,23 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+SLEEP = {"go to sleep", "sleep", "mets toi en veille", "en veille", "va dormir", "dors", "vete a dormir",
+         "a dormir", "duérmete", "duermete", "geh schlafen", "schlaf", "نام", "نم", "روح نام", "اذهب للنوم",
+         "اذهب إلى النوم"}
+# Said around the phrase without changing it ("go to sleep please", "نام يا رفيق").
+_SLEEP_FILLER = {"please", "now", "thanks", "rafiq", "rafik", "s'il", "te", "plait", "plaît", "merci",
+                 "maintenant", "por", "favor", "ya", "bitte", "jetzt", "يا", "رفيق", "خلاص", "دلوقتي", "شكرا"}
+
+
+def is_sleep(text: str) -> bool:
+    """True when the whole request is "go to sleep" (or "نام", "mets-toi en veille"...); a request that
+    only mentions sleep ("set a sleep timer") is not."""
+    return " ".join(w for w in words(text) if w not in _SLEEP_FILLER_N) in _SLEEP_N
+
+
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
+_SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
 
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},

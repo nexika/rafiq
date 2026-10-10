@@ -130,19 +130,29 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
-def cmd_listen(_args) -> int:
-    """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+def _ask_running(path: str, body: dict) -> int:
+    """Send a request to the running Rafiq through its panel."""
     import httpx
 
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/listen", json={}, timeout=5,
+        resp = httpx.post(f"http://{host}:{port}{path}", json=body, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
         return 1
     return 0 if resp.status_code == 200 else 1
+
+
+def cmd_listen(_args) -> int:
+    """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+    return _ask_running("/api/listen", {})
+
+
+def cmd_mute(args) -> int:
+    """Turn listening off and on: bind this to a keyboard shortcut too."""
+    return _ask_running("/api/mute", {} if args.state is None else {"muted": args.state == "on"})
 
 
 def cmd_enroll(args) -> int:
@@ -189,6 +199,9 @@ def main(argv=None) -> int:
     enroll.set_defaults(fn=cmd_enroll)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    mute = sub.add_parser("mute", help="stop or start listening (for a keyboard shortcut)")
+    mute.add_argument("state", nargs="?", choices=("on", "off"), help="on: stop listening; default: toggle")
+    mute.set_defaults(fn=cmd_mute)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
