@@ -28,10 +28,14 @@ DEFAULTS: dict = {
         "max_utterance_seconds": 20,
     },
     "voice": {
-        # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper (offline).
+        # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, then ElevenLabs when
+        # ELEVENLABS_API_KEY is set, then Kokoro when its files are in data/kokoro/, then Piper (offline).
         "engine": "auto",
         "azure_key": "",
         "azure_region": "",
+        "elevenlabs_key": "",
+        "elevenlabs_model": "eleven_flash_v2_5",
+        "elevenlabs_voices": {},         # language (or "default") -> ElevenLabs voice id
         "rate": "+0%",
         "voices": {
             "en": "en-US-AndrewNeural",

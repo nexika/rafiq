@@ -55,8 +55,14 @@ The first start downloads the Whisper models (about 550 MB). Offline voices go i
 | Engine | Languages | Needs |
 |---|---|---|
 | **Azure AI Speech** (default when a key is set) | all six, Egyptian voices `ar-EG-ShakirNeural` and `ar-EG-SalmaNeural` | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`; the free tier covers 500,000 characters a month |
+| **ElevenLabs** (next when a key is set) | all six through one multilingual voice (`eleven_flash_v2_5`); it speaks Arabic but not in a chosen dialect, so pick an Egyptian voice from the Voice Library for `ar-EG` in `[voice.elevenlabs_voices]` | `ELEVENLABS_API_KEY` |
+| **Kokoro** (offline, next when its files are there) | en, fr, es only (Kokoro has no Arabic or German, so those go to Piper) | `pip install -e ".[kokoro]"` and `kokoro-v1.0.onnx`, `voices-v1.0.bin` in `~/.config/rafiq/data/kokoro/` |
 | **Piper** (offline) | en, fr, es, de, ar; no Egyptian voice, so Egyptian is read by the Jordanian Arabic voice | voice files in `~/.config/rafiq/data/piper/` |
 | Edge read-aloud | the same voices as Azure | nothing, but it is unofficial and Microsoft blocked it in October 2026 |
+
+`voice.engine` picks one engine (`azure`, `elevenlabs`, `kokoro`, `piper`, `edge`); Piper is always
+tried after it. The Kokoro files are on the
+[kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases) (model-files-v1.0).
 
 Download the Piper voices once:
 
