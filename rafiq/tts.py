@@ -12,7 +12,8 @@
   any time (it answered 403 on 2026-10-10), so it is used only when chosen.
 
 "auto" uses Azure when a key is set, then ElevenLabs when its key is set, then Kokoro when its files
-are there, then Piper. When nothing can speak, a desktop notification shows the text instead.
+are there, then Piper; offline mode uses Piper only. When nothing can speak, a desktop notification
+shows the text instead.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from . import config as config_mod
+from . import modes
 
 PIPER_FILES = {"en": "en_US-ryan-medium", "fr": "fr_FR-tom-medium", "es": "es_ES-davefx-medium",
                "de": "de_DE-thorsten-medium", "ar": "ar_JO-kareem-medium"}
@@ -57,6 +59,7 @@ def ssml(text: str, voice: str, tag: str, rate: str = "+0%") -> str:
 
 class Speaker:
     def __init__(self, cfg: dict, on_start=None, on_end=None):
+        self.settings = cfg                  # shared: offline mode can be switched on while running
         self.cfg = cfg["voice"]
         self.on_start, self.on_end = on_start, on_end
         self._proc: subprocess.Popen | None = None
@@ -67,6 +70,8 @@ class Speaker:
         self.eleven_key = os.environ.get("ELEVENLABS_API_KEY") or self.cfg.get("elevenlabs_key", "")
 
     def engines(self) -> list[str]:
+        if modes.offline(self.settings):
+            return ["piper"]
         engine = self.cfg.get("engine", "auto")
         if engine != "auto":
             return [engine, "piper"] if engine != "piper" else ["piper"]
