@@ -1,5 +1,6 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations.
+a text box and yes/no buttons for confirmations. A settings drawer switches the brain's mode and model
+and the voices; only the allowlist in config.py can be written, and keys never reach the page.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -14,6 +15,8 @@ import queue
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
+
+from . import lang
 
 MAX_BODY = 10_000
 
@@ -56,6 +59,10 @@ def make_handler(assistant, token: str, port: int):
                 if not self._token_ok((parse_qs(url.query).get("token") or [None])[0]):
                     return self._send(403, b'{"error":"token"}')
                 return self._stream()
+            if url.path == "/api/status":
+                if not self._token_ok(self.headers.get("X-Rafiq-Token")):
+                    return self._send(403, b'{"error":"token"}')
+                return self._send(200, json.dumps(assistant.status(), ensure_ascii=False).encode())
             return self._send(404, b'{"error":"not found"}')
 
         def _stream(self) -> None:
@@ -100,6 +107,13 @@ def make_handler(assistant, token: str, port: int):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/stop":
                 assistant.speaker.stop()
+            elif path == "/api/voice-test" and data.get("tag") in lang.TAGS:
+                assistant.submit("say", text=lang.phrase("voice_test", data["tag"]), tag=data["tag"])
+            elif path == "/api/settings" and isinstance(data.get("changes"), dict):
+                try:
+                    assistant.change_settings(data["changes"])
+                except ValueError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')

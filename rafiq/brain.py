@@ -89,6 +89,7 @@ class Brain:
         self.memory = Memory()
         self.clock = clock
         self._claude = None
+        self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
 
     # ------------------------------------------------------------------ choosing a backend
 
@@ -126,12 +127,30 @@ class Brain:
         if action and not self.confirm(action, tag):
             self.on_event("tool", {"name": name, "args": args, "result": "declined"})
             return "The user said no; it was not done. Tell them briefly that you didn't do it."
+        self.on_event("tool_start", {"name": name})
         try:
             result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
         self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
         return result[:8000]
+
+    def spend(self) -> dict:
+        """Claude's tokens so far, and their price in dollars when one is set for the model
+        (brain.prices); Ollama runs here and costs nothing."""
+        price = self.cfg["brain"].get("prices", {}).get(self.cfg["brain"]["claude_model"])
+        dollars = None
+        if isinstance(price, dict):
+            dollars = round((self.tokens["input_tokens"] * price.get("input", 0)
+                             + self.tokens["output_tokens"] * price.get("output", 0)) / 1e6, 6)
+        return {**self.tokens, "dollars": dollars}
+
+    def _count(self, usage) -> None:
+        if usage is None:
+            return
+        for name in self.tokens:
+            self.tokens[name] += getattr(usage, name, 0) or 0
+        self.on_event("spend", self.spend())
 
     def warm_up(self) -> None:
         """Have the local model read the system prompt and tools once, so the first question is
@@ -172,6 +191,7 @@ class Brain:
                     system=system_prompt(self.cfg), tools=schemas, messages=messages)
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
+            self._count(getattr(resp, "usage", None))
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
             calls = [b for b in resp.content if b.type == "tool_use"]
             if not calls:

@@ -18,7 +18,7 @@ import numpy as np
 
 from . import config as config_mod
 from . import kws, lang, wake
-from .audio import RATE, Endpointer, Microphone, SileroVAD
+from .audio import RATE, Endpointer, Microphone, SileroVAD, level
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
@@ -28,6 +28,7 @@ from .tts import Speaker
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
+LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
 
 
 @dataclass
@@ -45,10 +46,13 @@ class Events:
     listeners: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def publish(self, kind: str, data: dict) -> None:
+    def publish(self, kind: str, data: dict, keep: bool = True) -> None:
+        """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
+        are not replayed to a panel opened later."""
         event = {"kind": kind, "time": time.time(), **data}
         with self.lock:
-            self.history.append(event)
+            if keep:
+                self.history.append(event)
             for q in list(self.listeners):
                 try:
                     q.put_nowait(event)
@@ -87,6 +91,7 @@ class Assistant:
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
         self.state = "starting"
+        self._level_at = 0.0
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
         self.spotter = kws.Spotter.load()
@@ -99,6 +104,24 @@ class Assistant:
     def set_state(self, state: str) -> None:
         self.state = state
         self.events.publish("state", {"state": state})
+
+    def status(self) -> dict:
+        """What the panel's drawer shows: the settings it may change (never a key), the spend so far
+        and the timers and reminders waiting."""
+        return {"settings": config_mod.settable(self.cfg), "choices": config_mod.CHOICES,
+                "spend": self.brain.spend(),
+                "tasks": [{"kind": a.kind, "label": a.label, "due": a.due} for a in self.scheduler.pending()]}
+
+    def change_settings(self, changes: dict) -> None:
+        """Save settings changed in the panel; the brain and the voice read them on their next use."""
+        config_mod.save_settings(changes, self.cfg)
+        self.events.publish("settings", {"settings": config_mod.settable(self.cfg)})
+
+    def _publish_level(self, frame: np.ndarray) -> None:
+        now = time.monotonic()
+        if now - self._level_at >= LEVEL_SECONDS:
+            self._level_at = now
+            self.events.publish("level", {"level": level(frame)}, keep=False)
 
     def _mute(self) -> None:
         self.mic.muted = True
@@ -123,6 +146,7 @@ class Assistant:
             frame = self.mic.read(timeout=0.1)
             if frame is None:
                 continue
+            self._publish_level(frame)
             utterance = self.endpointer.push(frame, self.vad(frame))
             if utterance is not None and len(utterance) / RATE >= MIN_UTTERANCE_SECONDS:
                 return utterance

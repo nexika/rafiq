@@ -8,6 +8,9 @@ claude_model = "claude-haiku-5-5"
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
 
+[brain.prices]                  # dollars per million tokens, to show Claude's spend in the panel
+# claude-haiku-5-5 = { input = 1.0, output = 5.0 }
+
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
