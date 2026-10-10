@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | notify | hooks | doctor | google-setup"""
 
 from __future__ import annotations
 
@@ -132,12 +132,34 @@ def cmd_doctor(_args) -> int:
 
 def cmd_listen(_args) -> int:
     """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+    return _post_to_running("/api/listen", {})
+
+
+def cmd_notify(args) -> int:
+    """Tell the running Rafiq that a long job ended; it says so unless muted or in quiet hours."""
+    return _post_to_running("/api/notify", {"text": " ".join(args.text), "event": args.event or "",
+                                            "lang": args.lang})
+
+
+def cmd_mute(args) -> int:
+    return _post_to_running("/api/mute", {"muted": args.command == "mute"})
+
+
+def cmd_hooks(args) -> int:
+    from .notify import HOOKS
+
+    print(HOOKS[args.kind], end="")
+    return 0
+
+
+def _post_to_running(path: str, body: dict) -> int:
+    """Send a request to the running Rafiq's panel API."""
     import httpx
 
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/listen", json={}, timeout=5,
+        resp = httpx.post(f"http://{host}:{port}{path}", json=body, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
@@ -181,6 +203,20 @@ def main(argv=None) -> int:
     say.add_argument("text", nargs="+")
     say.add_argument("--lang", choices=lang.TAGS, default="en")
     say.set_defaults(fn=cmd_say)
+    notify = sub.add_parser("notify", help="have the running Rafiq say that a long job ended")
+    notify.add_argument("text", nargs="+")
+    event = notify.add_mutually_exclusive_group()
+    event.add_argument("--done", dest="event", action="store_const", const="done",
+                       help='say "Finished: TEXT" in your language')
+    event.add_argument("--failed", dest="event", action="store_const", const="failed",
+                       help='say "Failed: TEXT" in your language')
+    notify.add_argument("--lang", choices=lang.TAGS, help="default: the language you last spoke")
+    notify.set_defaults(fn=cmd_notify)
+    sub.add_parser("mute", help="show notifications in the panel without saying them").set_defaults(fn=cmd_mute)
+    sub.add_parser("unmute", help="say notifications again").set_defaults(fn=cmd_mute)
+    hooks = sub.add_parser("hooks", help="print a ready-made hook that calls rafiq notify")
+    hooks.add_argument("kind", choices=("claude-code", "shell"))
+    hooks.set_defaults(fn=cmd_hooks)
     enroll = sub.add_parser("enroll", help="record yourself saying the name, for a reliable wake word")
     enroll.add_argument("--forms", nargs="+", help='the ways you call it (default: "Rafiq" "يا رفيق")')
     enroll.add_argument("--takes", type=int, default=3, help="recordings of each form (default 3)")

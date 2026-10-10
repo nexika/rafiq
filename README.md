@@ -80,6 +80,18 @@ Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 and Yes/No buttons when it asks before an action.
 
+**Spoken notifications** tell you when a long job ends, so you can stop watching terminals:
+
+```bash
+rafiq notify --done "the benchmark"   # "Finished: the benchmark", in the language you last spoke
+make test; rafiq notify --failed tests
+rafiq mute / rafiq unmute             # muted: shown in the panel, not spoken
+rafiq hooks claude-code               # a Claude Code Stop hook ("Finished: Claude Code")
+rafiq hooks shell                     # `announce <command>` and `watch-ci` (GitHub Actions) for your shell
+```
+
+Set `notify.quiet_hours = "22:00-07:00"` in the config to keep them silent at night.
+
 ## The wake word
 
 **Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"

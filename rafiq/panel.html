@@ -129,6 +129,7 @@ function handle(e) {
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "notify": add("note", "🔔 " + e.text + (e.spoken ? "" : " (not spoken: muted or quiet hours)")); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
   }
 }

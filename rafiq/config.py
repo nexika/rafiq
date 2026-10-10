@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # Notifications from long jobs (`rafiq notify`) are shown but not spoken in these hours.
+    "notify": {"quiet_hours": ""},   # e.g. "22:00-07:00"
     "anthropic_api_key": "",
 }
 

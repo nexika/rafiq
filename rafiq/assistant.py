@@ -13,11 +13,12 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, notify, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -87,6 +88,7 @@ class Assistant:
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
         self.state = "starting"
+        self.muted = False                   # notifications are shown, not spoken (panel /api/mute)
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
         self.spotter = kws.Spotter.load()
@@ -140,6 +142,16 @@ class Assistant:
     def say(self, text: str, tag: str) -> None:
         self.events.publish("said", {"text": text, "tag": tag})
         self.speaker.say(text, tag)
+
+    def notify(self, text: str, event: str, tag: str | None, now: datetime | None = None) -> None:
+        """A long job ended (`rafiq notify`): say so in the conversation's language, unless muted or
+        in quiet hours, when the panel shows it only."""
+        tag = tag or self.tag
+        sentence = notify.message(text, event, tag)
+        spoken = notify.should_speak(self.cfg, self.muted, now)
+        self.events.publish("notify", {"text": sentence, "event": event, "spoken": spoken})
+        if spoken:
+            self.speaker.say(sentence, lang.script_language(sentence, tag))
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
@@ -203,6 +215,8 @@ class Assistant:
                     self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag))
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
+                elif kind == "notify":
+                    self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
             except Exception as exc:

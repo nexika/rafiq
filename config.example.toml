@@ -32,3 +32,6 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[notify]
+quiet_hours = ""                # e.g. "22:00-07:00": `rafiq notify` messages are shown, not spoken
