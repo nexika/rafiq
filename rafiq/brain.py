@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
-from .tools import Tool, claude_schemas, ollama_schemas
+from .tools import Tool, claude_schemas, local_tools, ollama_schemas
 
 MAX_STEPS = 6
 HISTORY_TURNS = 10
@@ -81,6 +81,23 @@ def with_note(text: str, tag: str, now: datetime | None = None) -> str:
     return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}; answer in {name}] {text}\n[Answer in {name}.]"
 
 
+def check_arguments(tool: Tool | None, raw) -> tuple[dict, str | None]:
+    """A local model's tool arguments as a dict, and what is wrong with them if anything: text that is
+    not JSON, JSON that is not an object, or a required argument left out."""
+    args = raw if raw is not None else {}
+    if isinstance(args, str):
+        try:
+            args = json.loads(args) if args.strip() else {}
+        except ValueError:
+            return {}, "the arguments are not valid JSON"
+    if not isinstance(args, dict):
+        return {}, "the arguments must be a JSON object"
+    missing = [name for name in (tool.required if tool else ()) if name not in args]
+    if missing:
+        return args, f"missing required arguments: {', '.join(missing)}"
+    return args, None
+
+
 class Brain:
     def __init__(self, cfg: dict, tools: dict[str, Tool], confirm: Callable[[str, str], bool],
                  on_event: Callable[[str, dict], None] | None = None, clock=time.time):
@@ -133,6 +150,9 @@ class Brain:
         self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
         return result[:8000]
 
+    def local_tools(self) -> dict[str, Tool]:
+        return local_tools(self.tools, self.cfg["brain"].get("ollama_tools", "local"))
+
     def warm_up(self) -> None:
         """Have the local model read the system prompt and tools once, so the first question is
         answered as fast as the next ones. Claude needs no warming up."""
@@ -144,7 +164,7 @@ class Brain:
         try:
             httpx.post(f"{brain['ollama_url']}/api/chat", timeout=600, json={
                 "model": brain["ollama_model"], "stream": False, "keep_alive": "30m",
-                "tools": ollama_schemas(self.tools),
+                "tools": ollama_schemas(self.local_tools()),
                 "messages": [{"role": "system", "content": system_prompt(self.cfg)}],
                 "options": {"num_predict": 1, "num_ctx": 8192}})
         except httpx.HTTPError:
@@ -190,7 +210,9 @@ class Brain:
         messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
                     + [{"role": t.role, "content": t.content} for t in history]
                     + [{"role": "user", "content": with_note(text, tag)}])
-        schemas = ollama_schemas(self.tools)
+        tools = self.local_tools()
+        schemas = ollama_schemas(tools)
+        retried = False
         for _ in range(MAX_STEPS):
             try:
                 resp = httpx.post(f"{brain['ollama_url']}/api/chat", timeout=120, json={
@@ -206,12 +228,17 @@ class Brain:
                 return (message.get("content") or "").strip()
             for call in calls:
                 fn = call.get("function") or {}
-                args = fn.get("arguments") or {}
-                if isinstance(args, str):
-                    try:
-                        args = json.loads(args)
-                    except ValueError:
-                        args = {}
-                messages.append({"role": "tool", "tool_name": fn.get("name", ""),
-                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx)})
+                name = fn.get("name", "")
+                args, problem = check_arguments(tools.get(name), fn.get("arguments"))
+                if problem:
+                    # A broken call is never run with guessed arguments. The model gets one more try;
+                    # a second broken call means it is not managing, and the turn fails.
+                    if retried:
+                        raise BrainError(f"broken tool call: {problem}")
+                    retried = True
+                    self.on_event("tool", {"name": name, "args": fn.get("arguments"), "result": problem})
+                    result = f"error: {problem}. Call {name} again with valid JSON arguments."
+                else:
+                    result = self._run_tool(name, args, tag, ctx)
+                messages.append({"role": "tool", "tool_name": name, "content": result})
         raise BrainError("too many tool steps")

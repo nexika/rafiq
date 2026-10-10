@@ -55,6 +55,23 @@ def load_all(cfg: dict) -> dict[str, Tool]:
     return dict(REGISTRY)
 
 
+# What a small local model gets by default. Every extra tool is one more wrong choice for a 7B model,
+# and ours skipped tools when it had all of them; these cover what people ask a voice assistant most.
+# Left out: list_apps, lock_screen, open_in_browser, read_page, list_timers, cancel_timer, calendar_add,
+# email_read and email_send. [brain] ollama_tools = "all" sends everything, or a list names the set.
+LOCAL_TOOLS = ("get_time", "set_timer", "set_reminder", "weather", "calculate", "convert_units", "web_search",
+               "open_app", "volume", "system_status", "power", "calendar_events", "email_list")
+
+
+def local_tools(tools: dict[str, Tool], choice: str | list = "local") -> dict[str, Tool]:
+    """The tools to send a local model: "all", "local" (the set above) or a list of names. Names of
+    tools that are not loaded (Google switched off, a typo) are skipped."""
+    if choice == "all":
+        return dict(tools)
+    names = LOCAL_TOOLS if choice == "local" else choice
+    return {name: tools[name] for name in names if name in tools}
+
+
 def claude_schemas(tools: dict[str, Tool]) -> list[dict]:
     return [{"name": t.name, "description": t.description, "input_schema": t.schema()} for t in tools.values()]
 

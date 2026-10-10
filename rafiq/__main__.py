@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | toolcheck | google-setup"""
 
 from __future__ import annotations
 
@@ -130,6 +130,34 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
+def cmd_toolcheck(_args) -> int:
+    """Send a fixed list of requests to the local model, once with every tool and once with the set it
+    gets, and print how often it picked the right tool and answered in the right language."""
+    import httpx
+
+    from . import toolcheck
+    from .tools import load_all, local_tools
+
+    cfg = config.load()
+    tools = load_all(cfg)
+    ask = toolcheck.ollama_ask(cfg)
+    choice = cfg["brain"].get("ollama_tools", "local")
+    print(f"{cfg['brain']['ollama_model']}, {len(toolcheck.REQUESTS)} requests")
+    for label, subset in (("all tools", tools), (f"ollama_tools = {choice!r}", local_tools(tools, choice))):
+        try:
+            results = toolcheck.run(cfg, subset, toolcheck.REQUESTS, ask)
+        except httpx.HTTPError as exc:
+            print(f"Ollama is not answering at {cfg['brain']['ollama_url']}: {type(exc).__name__}", file=sys.stderr)
+            return 1
+        for r in results:
+            if not (r.right_tool and r.right_language):
+                print(f"  [{r.request.tag}] {r.request.text!r}: wanted {r.request.tool}, got "
+                      f"{', '.join(r.called) or 'no tool'} {r.answer[:60]!r}")
+        total, tool_ok, lang_ok = toolcheck.score(results)
+        print(f"{label} ({len(subset)}): right tool {tool_ok}/{total}, right language {lang_ok}/{total}")
+    return 0
+
+
 def cmd_listen(_args) -> int:
     """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
     import httpx
@@ -190,6 +218,8 @@ def main(argv=None) -> int:
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
+        fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

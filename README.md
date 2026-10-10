@@ -46,7 +46,10 @@ The first start downloads the Whisper models (about 550 MB). Offline voices go i
 - **Ollama**: free and private, used when there is no key or Claude can't be reached. On a laptop
   without a GPU, a 7B model takes about 10 to 20 seconds per answer, and it chooses tools and keeps
   the language less reliably than Claude. Rafiq warms the model up when it starts, so only the first
-  answer is slow.
+  answer is slow. It gets a smaller set of tools than Claude (fewer choices, fewer wrong ones;
+  `brain.ollama_tools = "all"` sends every tool), and a tool call with broken arguments is sent back
+  to it once to fix. `rafiq toolcheck` measures how often it picks the right tool, with every tool
+  and with its set.
 
 `rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
 
