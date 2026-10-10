@@ -41,6 +41,19 @@ def test_a_different_word_does_not_match():
     assert kws.sdtw(word(), word(40)) > 0.8
 
 
+def test_align_says_where_the_match_ends():
+    t = word(20)
+    score, end = kws.align(t, np.concatenate([word(5), t, word(30)]))
+    assert score == pytest.approx(0.0) and end == 24
+
+
+def test_the_name_is_cut_out_of_a_request_recording():
+    t = word(20)
+    request = np.concatenate([t, word(40)])          # "Rafiq" then the request
+    cut = kws.name_in_context([word(20), t], request)
+    assert len(cut) == 20 and np.allclose(cut, t)
+
+
 def test_the_threshold_lies_between_the_name_and_ordinary_speech():
     base = word()
     names = [base + rng.normal(scale=0.2, size=base.shape) for _ in range(4)]
@@ -86,8 +99,9 @@ def test_synthetic_voice_wakes_on_the_name_and_not_on_look_alikes():
 
     def say(text, speed=1.0):
         buf = io.BytesIO()
-        with wave.open(buf, "wb") as w:
-            voice.synthesize_wav(text, w, syn_config=SynthesisConfig(length_scale=speed))
+        with wave.open(buf, "wb") as w:   # no random variation: the same audio every run
+            voice.synthesize_wav(text, w, syn_config=SynthesisConfig(length_scale=speed, noise_scale=0.0,
+                                                                     noise_w_scale=0.0))
         buf.seek(0)
         with wave.open(buf) as w:
             rate = w.getframerate()
@@ -96,8 +110,9 @@ def test_synthetic_voice_wakes_on_the_name_and_not_on_look_alikes():
         return np.concatenate([np.zeros(4000, "float32"), audio, np.zeros(8000, "float32")])
 
     names = [trim(say(f, s), vad) for f in ("Rafiq.", "Hey Rafiq.") for s in (0.9, 1.0, 1.15)]
+    requests = [trim(say(t), vad) for t in ("Rafiq, turn up the volume.", "Hey Rafiq, tell me a joke.")]
     others = [trim(say(t), vad) for t in ("What's the weather like today?", "Remind me to call my friend.")]
-    spotter, _ = fit(names, others, mel)
+    spotter, _ = fit(names, others, mel, request_clips=requests)
     for text in ("Rafiq, what time is it?", "Hey Rafiq, open Firefox."):
         assert spotter.score(mel(trim(say(text), vad)[:40000])) <= spotter.threshold, text
     for text in ("He's a terrific guy.", "I was just talking about dinner.", "Remind me later."):

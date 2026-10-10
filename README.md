@@ -30,7 +30,7 @@ git clone <this repo> rafiq && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
 .venv/bin/rafiq doctor
-.venv/bin/rafiq enroll       # record "Rafiq" in your voice (about a minute)
+.venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
@@ -80,21 +80,30 @@ and Yes/No buttons when it asks before an action.
 
 ## The wake word
 
-**Record your voice once:** `rafiq enroll` asks you to say "Rafiq" and "يا رفيق" three times each, then
-three ordinary sentences (about a minute). Rafiq then compares the start of everything it hears with
-your recordings (log-mel frames matched with dynamic time warping) and sets its threshold between your
-name recordings and your ordinary speech, so it fits your voice and microphone. Most speech that isn't
-the name is dismissed in a few hundred milliseconds, without running Whisper.
+**Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"
+three times each, then to call Rafiq with any request three times ("Rafiq, what time is it?"), then
+three ordinary sentences. Rafiq compares the start of everything it hears with your recordings
+(log-mel frames matched with dynamic time warping) and sets its threshold between your recordings of
+the name and your ordinary speech, so it fits your voice and microphone. Most speech that isn't the
+name is dismissed in a few hundred milliseconds, without running Whisper.
+
+The requests matter: a word said alone ends long and falling, but before a request it runs into the
+next word. Rafiq cuts the name out of each request recording and keeps that too.
+
+| Tested with synthetic voices, 3 random draws each | wakes on the name | wakes by mistake |
+|---|---|---|
+| English, name recordings only | 96% | 2% |
+| English, with request recordings | **100%** | **2%** |
+| Arabic, name recordings only | 50% | 5% |
+| Arabic, with request recordings | **100%** | **5%** |
+
+The mistakes came from look-alikes such as "Rafael" and "يا ريت". A real voice in a real room is the
+test that counts: the panel shows each wake-up's score next to the threshold.
 
 - Other forms: `rafiq enroll --forms "Rafiq" "Hey Rafiq" "يا رفيق"`.
 - Wakes too rarely or too often: `rafiq enroll --sensitivity 0.6` (looser) or `0.3` (stricter) refits
   the saved recordings without recording again.
-- Several people: each enrolls in turn, or record the forms with different voices in one session.
-
-In tests with synthetic voices, every wake phrase was caught in English and Arabic, and look-alikes
-("terrific", "Rafael", "رفعت", "ربيع", "فريق") stayed below the threshold except one English one. A real
-voice in a real room is the test that counts: the panel shows each wake-up's score next to the
-threshold, to tune with.
+- It is tuned to one voice: enrolling again replaces the recordings.
 
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.

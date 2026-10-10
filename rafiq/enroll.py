@@ -1,4 +1,5 @@
-"""`rafiq enroll`: record the name and a few ordinary sentences, and fit the wake-word spotter to them."""
+"""`rafiq enroll`: record the name, the name before a request, and a few ordinary sentences, and fit the
+wake-word spotter to them."""
 
 from __future__ import annotations
 
@@ -13,6 +14,12 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD
 
 NAME_FORMS = ["Rafiq", "يا رفيق"]
 TAKES = 3
+# Said the way you would really call it: the name runs into the request. Any request will do.
+REQUESTS = [
+    "Rafiq, what time is it?",
+    "يا رفيق، شغل الموسيقى",
+    "Rafiq, set a timer for five minutes",
+]
 SENTENCES = [
     "What's the weather like today?",
     "أنا رايح الشغل دلوقتي",
@@ -58,11 +65,15 @@ def trim(audio: np.ndarray, vad: SileroVAD, frame: int = 512) -> np.ndarray:
     return audio[max(0, (speech[0] - 2) * frame):min(len(audio), (speech[-1] + 3) * frame)]
 
 
+def head(clip: np.ndarray) -> np.ndarray:
+    return clip[:int(kws.MAX_SECONDS * RATE)]
+
+
 def fit(name_clips: list[np.ndarray], other_clips: list[np.ndarray], mel: kws.Mel | None = None,
-        sensitivity: float = kws.SENSITIVITY):
+        sensitivity: float = kws.SENSITIVITY, request_clips: list[np.ndarray] = ()):
     mel = mel or kws.Mel()
-    return kws.calibrate([mel(c) for c in name_clips], [mel(c[:int(kws.MAX_SECONDS * RATE)]) for c in other_clips],
-                         sensitivity)
+    return kws.calibrate([mel(c) for c in name_clips], [mel(head(c)) for c in other_clips], sensitivity,
+                         request_frames=[mel(head(c)) for c in request_clips])
 
 
 def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input) -> int:
@@ -72,32 +83,39 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
         old.unlink()
     mic, vad = Microphone(), SileroVAD()
     mel = kws.Mel()
+
+    def record(prompt: str, timeout: float = 8.0, required: bool = True) -> np.ndarray | None:
+        while True:
+            ask(f"  Press Enter, then say {prompt} ")
+            clip = record_one(mic, vad, timeout)
+            if clip is not None or not required:
+                return clip
+            say("  I heard nothing; again, please.")
+
     say("Recording your voice for the wake word. Speak at your normal distance from the microphone.")
-    names, others = [], []
+    names, requests, others = [], [], []
     mic.start()
     try:
         for form in forms:
             for take in range(1, takes + 1):
-                while True:
-                    ask(f'  Press Enter, then say "{form}" ({take}/{takes}) ')
-                    clip = record_one(mic, vad)
-                    if clip is not None:
-                        break
-                    say("  I heard nothing; again, please.")
-                names.append(clip)
-                save_wav(out / f"name-{len(names)}.wav", clip)
-        say("Now a few ordinary sentences, so I learn what is not my name.")
+                names.append(record(f'"{form}" ({take}/{takes})'))
+                save_wav(out / f"name-{len(names)}.wav", names[-1])
+        say("Now call me with a request, the way you normally would (any request is fine), for example:")
+        for i, example in enumerate(REQUESTS, 1):
+            requests.append(record(f'something like "{example}"', timeout=10))
+            save_wav(out / f"request-{i}.wav", requests[-1])
+        say("Last, a few ordinary sentences, so I learn what is not my name.")
         for i, sentence in enumerate(SENTENCES, 1):
-            ask(f'  Press Enter, then say: "{sentence}" ')
-            clip = record_one(mic, vad, timeout=10)
+            clip = record(f'"{sentence}"', timeout=10, required=False)
             if clip is not None:
                 others.append(clip)
                 save_wav(out / f"other-{i}.wav", clip)
     finally:
         mic.stop()
-    spotter, report = fit(names, others, mel)
+    spotter, report = fit(names, others, mel, request_clips=requests)
     spotter.save(out)
-    say(f"Saved {len(names)} recordings of the name and {len(others)} sentences in {out}.")
+    say(f"Saved {len(names)} recordings of the name, {len(requests)} requests and {len(others)} sentences "
+        f"in {out}.")
     say(f"  your recordings of the name differ by up to {report['name_spread']:.2f}; "
         + (f"ordinary speech comes no closer than {report['ordinary_closest']:.2f}; "
            if report["ordinary_closest"] is not None else "")
@@ -112,7 +130,8 @@ def recalibrate(sensitivity: float) -> dict:
     """Fit the threshold again from the saved recordings, with another sensitivity."""
     out = kws.folder()
     names = [load_wav(p) for p in sorted(out.glob("name-*.wav"))]
+    requests = [load_wav(p) for p in sorted(out.glob("request-*.wav"))]
     others = [load_wav(p) for p in sorted(out.glob("other-*.wav"))]
-    spotter, report = fit(names, others, sensitivity=sensitivity)
+    spotter, report = fit(names, others, sensitivity=sensitivity, request_clips=requests)
     spotter.save(out)
     return report
