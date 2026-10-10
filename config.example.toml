@@ -1,0 +1,34 @@
+# Copy to ~/.config/rafiq/config.toml. Every setting is optional.
+
+user_name = ""                  # how Rafiq refers to you
+
+[brain]
+mode = "auto"                   # auto: Claude when ANTHROPIC_API_KEY is set, else Ollama
+claude_model = "claude-haiku-5-5"
+ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
+ollama_url = "http://127.0.0.1:11434"
+
+[speech]
+whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
+follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+
+[voice]
+engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper
+rate = "+0%"                    # speak faster ("+10%") or slower ("-10%")
+
+[voice.voices]                  # Azure voice names: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
+en = "en-US-AndrewNeural"
+fr = "fr-FR-DeniseNeural"
+es = "es-ES-AlvaroNeural"
+de = "de-DE-ConradNeural"
+ar = "ar-SA-HamedNeural"
+ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
+
+[place]
+city = ""                       # for "what's the weather?" without a city
+
+[panel]
+port = 8765
+
+[google]
+enabled = false                 # true after `rafiq google-setup`
