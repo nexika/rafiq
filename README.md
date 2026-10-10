@@ -39,6 +39,11 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
+`rafiq doctor` lists your microphones; pick one with `[audio] device` in the settings. A microphone
+that refuses 16 kHz is opened at a rate it takes and resampled. At start-up Rafiq listens to the room
+for a second and fits its speech thresholds to the noise, so stay quiet for a moment
+(`[audio] auto_calibration = false` turns this off).
+
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 
@@ -64,6 +69,17 @@ Rafiq. The service does not see keys exported in your shell, so put them in
 
 `rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
 
+### Modes: everyday, quality, offline
+
+- **Everyday** (the default): the fast model, `brain.claude_model`.
+- **Quality**: the strongest model, `brain.quality_model` (`claude-opus-5-5`), slower and costlier.
+- **Offline**: nothing leaves the computer: only Ollama and the Piper voices, whatever `brain.mode`
+  and `voice.engine` say. Speech-to-text is always local.
+
+Switch by voice ("Rafiq, switch to offline mode", "what mode are you in?"), with the switch at the
+top of the panel, or for a session with `rafiq run --mode quality`. `brain.profile` in the config
+sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
+
 ## The voice
 
 | Engine | Languages | Needs |
@@ -85,6 +101,25 @@ cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voic
   en_US-ryan-medium fr_FR-tom-medium es_ES-davefx-medium de_DE-thorsten-medium ar_JO-kareem-medium
 ```
 
+## Hearing: Whisper, with the cloud for chosen languages
+
+Whisper runs on your computer and hears every language by default. For a language it hears badly,
+send that language to a cloud service; Whisper still tells the language first, on your computer:
+
+```toml
+[speech.stt_by_language]
+ar = "azure"      # Azure's Egyptian Arabic recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+```
+
+| Service | Needs |
+|---|---|
+| **Azure AI Speech** | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (the same key as the voice); `speech.azure_locales` picks the recogniser |
+| **OpenAI** (`gpt-4o-mini-transcribe`) | `OPENAI_API_KEY` |
+
+When Whisper can't run, a cloud service with a key hears everything; when the cloud can't be
+reached, Whisper does. The name "Rafiq" is always heard on your computer. `speech.stt_engine = "local"`
+or `speech.offline = true` keeps what you say on your computer.
+
 ## Use it
 
 ```bash
@@ -92,10 +127,16 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
-Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
+Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R. Add a second one
+for `rafiq mute`, such as Ctrl+Alt+M (GNOME on Wayland does not let apps grab keys themselves). While
+muted Rafiq ignores the microphone, even its name; the Talk button and `rafiq listen` still work once.
+
+Say **"go to sleep"** ("نام", "mets-toi en veille") to end a conversation at once: Rafiq stops waiting
+for a follow-up and drops a question it was asking before an action.
 
 **To interrupt Rafiq**, say "stop", "attends", "espera", "warte", "توقف" or "استنى" while it speaks.
 The microphone stays open: you must be about 1.8 times louder than Rafiq's own voice (`[interruption]
