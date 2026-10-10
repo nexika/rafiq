@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -44,6 +45,7 @@ jobs:
         run: python -m pytest -q
 
   ci-passed:
+    name: CI passed
     if: always()
     needs: [lint, test]
     runs-on: ubuntu-latest
