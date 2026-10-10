@@ -175,6 +175,12 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assert assistant.jobs == [("text", {"text": "what time is it"})]
 
 
+def test_the_morning_paper_timers_offer_reaches_the_running_rafiq(panel):
+    assistant, port = panel
+    assert request(port, "/api/paper", {})[0] == 200
+    assert assistant.jobs == [("paper", {})]
+
+
 def test_a_request_without_the_token_is_refused(panel):
     assistant, port = panel
     assert request(port, "/api/text", {"text": "shut down"}, token=None)[0] == 403

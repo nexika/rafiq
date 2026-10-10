@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | paper"""
 
 from __future__ import annotations
 
@@ -132,12 +132,17 @@ def cmd_doctor(_args) -> int:
 
 def cmd_listen(_args) -> int:
     """Make the running Rafiq listen now, without the name: bind this to a keyboard shortcut."""
+    return _ask_running("/api/listen")
+
+
+def _ask_running(path: str) -> int:
+    """Send a request to the running Rafiq through its panel."""
     import httpx
 
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/listen", json={}, timeout=5,
+        resp = httpx.post(f"http://{host}:{port}{path}", json={}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
@@ -154,6 +159,33 @@ def cmd_enroll(args) -> int:
         print(f"Rafiq now wakes below {report['threshold']:.2f} (sensitivity {args.sensitivity}).")
         return 0
     return enroll.run(forms=args.forms or None, takes=args.takes)
+
+
+def cmd_paper(args) -> int:
+    """The morning paper: print it now (asking first), have the running Rafiq offer it, or install the
+    systemd timer that does that every morning."""
+    from pathlib import Path
+
+    from . import paper
+
+    if args.paper_command == "print":
+        result = paper.MorningPaper(config.load()).print_today(lambda action: _terminal_confirm(action, "en"))
+        print(result)
+        return 0 if result.startswith("printed") else 1
+    if args.paper_command == "offer":
+        return _ask_running("/api/paper")
+    try:
+        units = paper.timer_units(args.at, sys.executable)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    folder = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, text in units.items():
+        (folder / name).write_text(text)
+    print(f"Wrote {folder / paper.TIMER}. Turn it on with:\n"
+          f"  systemctl --user daemon-reload && systemctl --user enable --now {paper.TIMER}")
+    return 0
 
 
 def cmd_google_setup(_args) -> int:
@@ -190,6 +222,13 @@ def main(argv=None) -> int:
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    paper_cmd = sub.add_parser("paper", help="print the morning paper, or schedule it")
+    paper_sub = paper_cmd.add_subparsers(dest="paper_command", required=True)
+    paper_sub.add_parser("print", help="print today's paper now (asks first)")
+    paper_sub.add_parser("offer", help="have the running Rafiq offer to print it (what the timer runs)")
+    timer = paper_sub.add_parser("timer", help="install a systemd user timer that offers it every day")
+    timer.add_argument("--at", default="07:00", help="time of day, HH:MM (default 07:00)")
+    paper_cmd.set_defaults(fn=cmd_paper)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

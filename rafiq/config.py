@@ -46,6 +46,9 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # The morning paper on real paper: the CUPS printer (empty: the default one), where the day's PDF is
+    # ("{date}" becomes YYYY-MM-DD; empty: data/paper/<date>.pdf), and whether to offer it after the brief.
+    "paper": {"printer": "", "file": "", "after_brief": False},
     "anthropic_api_key": "",
 }
 

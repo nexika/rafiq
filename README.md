@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Morning paper | "print my paper" (asks first, never twice a day) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -130,6 +131,19 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+## The morning paper on paper
+
+Rafiq prints the day's paper with CUPS (`lp`), once a day at most and only after you say yes. It
+prints `~/.config/rafiq/data/paper/YYYY-MM-DD.pdf` (or `file` under `[paper]`, with `{date}` in it).
+
+- Every morning at a fixed time: `rafiq paper timer --at 07:00` writes a systemd user timer; turn it on
+  with `systemctl --user daemon-reload && systemctl --user enable --now rafiq-paper.timer`. At that
+  time the running Rafiq asks out loud (or in the panel) whether to print.
+- After the first brief of the day: `after_brief = true` under `[paper]`.
+- Now, from a terminal: `rafiq paper print` (asks first).
+
+A lock file (`data/paper.lock`) holds the date of the last print, so it never comes out twice.
 
 ## Settings
 

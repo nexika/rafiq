@@ -30,5 +30,10 @@ city = ""                       # for "what's the weather?" without a city
 [panel]
 port = 8765
 
+[paper]                         # the morning paper on paper (CUPS); `rafiq paper timer --at 07:00` schedules it
+printer = ""                    # a CUPS printer name (lpstat -p); empty: the default printer
+file = ""                       # the day's PDF, "{date}" becomes YYYY-MM-DD; empty: data/paper/<date>.pdf
+after_brief = false             # also offer to print it after the first brief of the day
+
 [google]
 enabled = false                 # true after `rafiq google-setup`

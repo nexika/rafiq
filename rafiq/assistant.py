@@ -20,6 +20,7 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .paper import MorningPaper
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -83,6 +84,7 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.paper = MorningPaper(self.cfg)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -205,9 +207,20 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "paper":
+                    self.offer_paper()
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")
+
+    def offer_paper(self) -> None:
+        """The timer's offer: ask, and print on a yes. Silent when there is nothing to print."""
+        result = self.paper.print_today(lambda action: self.confirm(action, self.tag))
+        self.events.publish("paper", {"result": result})
+        if result.startswith("printed"):
+            self.say(lang.phrase("paper_printed", self.tag), self.tag)
+        elif result.startswith("error: printing failed"):
+            self.say(lang.phrase("paper_failed", self.tag), self.tag)
 
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
