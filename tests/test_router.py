@@ -106,6 +106,7 @@ def make_brain(routing=True, events=None):
     cfg = config.load()
     cfg["brain"]["mode"] = "ollama"
     cfg["brain"]["routing"] = routing
+    cfg["brain"]["ollama_tools"] = "all"   # every tool when the router keeps them all, not the local set
     on_event = (lambda kind, data: events.append((kind, data))) if events is not None else None
     return Brain(cfg, dict(TOOLS), lambda action, tag: True, on_event=on_event)
 
