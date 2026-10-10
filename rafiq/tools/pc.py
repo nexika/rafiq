@@ -1,5 +1,6 @@
-"""This computer: open apps, volume, how it is doing, lock it, power off. Linux with PipeWire (wpctl)
-and a desktop that reads .desktop files (GNOME, KDE, ...).
+"""This computer: open apps, volume, how it is doing, lock it, power off, and wake other computers on
+the network (Wake-on-LAN). Linux with PipeWire (wpctl) and a desktop that reads .desktop files (GNOME,
+KDE, ...).
 
 Commands run as argument lists, never through a shell: no word the user says can become a command.
 """
@@ -8,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 import time
 from configparser import ConfigParser
@@ -160,3 +162,63 @@ def power(action: str) -> str:
         return f"error: action is one of {', '.join(POWER)}"
     result = _run(POWER[action][0])
     return "done" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
+
+
+# ---------------------------------------------------------------------- wake-on-LAN
+
+def magic_packet(mac: str) -> bytes:
+    """Six 0xFF bytes, then the network card's address sixteen times. Takes aa:bb:.., aa-bb-.., aabb.ccdd..
+    or plain hex."""
+    digits = re.sub(r"[:.-]", "", mac.strip())
+    if not re.fullmatch(r"[0-9a-fA-F]{12}", digits):
+        raise ValueError(f"not a network card address: {mac!r}")
+    return b"\xff" * 6 + bytes.fromhex(digits) * 16
+
+
+def _words(text: str) -> str:
+    return " ".join(w for w in text.lower().split() if w != "the")
+
+
+def find_machine(query: str, machines: dict) -> str | None:
+    """The configured machine a spoken name means: the exact name, then a name containing it or contained
+    in it ("gaming" or "my gaming pc" for "gaming pc")."""
+    q = _words(query)
+    if not q:
+        return None
+    for test in (lambda n: _words(n) == q, lambda n: q in _words(n) or _words(n) in q):
+        matches = [n for n in machines if test(n)]
+        if matches:
+            return min(matches, key=len)
+    return None
+
+
+def _broadcast(packet: bytes, address: str, port: int) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(packet, (address, port))
+
+
+@tool("wake_computer", "Wake a computer on the local network (Wake-on-LAN), by its name in the config. "
+      "Rafiq asks the user first.",
+      {"name": {"type": "string", "description": "the computer's name, e.g. 'gaming PC'"}}, required=("name",),
+      confirm=lambda args: f"wake {args.get('name') or 'a computer'}")
+def wake_computer(name: str, ctx=None, send=_broadcast) -> str:
+    wol = ctx.cfg.get("wake_on_lan", {}) if ctx else {}
+    machines = wol.get("machines") or {}
+    if not machines:
+        return "error: no computers to wake are set in the config (wake_on_lan.machines)"
+    found = find_machine(name, machines)
+    if found is None:
+        return f"error: no computer called {name!r}; known: {', '.join(machines)}"
+    entry = machines[found] if isinstance(machines[found], dict) else {"mac": machines[found]}
+    try:
+        packet = magic_packet(str(entry.get("mac", "")))
+    except ValueError as exc:
+        return f"error: {found}: {exc}"
+    address = entry.get("broadcast") or wol.get("broadcast", "255.255.255.255")
+    port = int(entry.get("port") or wol.get("port", 9))
+    try:
+        send(packet, address, port)
+    except OSError as exc:
+        return f"error: could not send to {address}: {exc}"
+    return f"sent the wake-up packet to {found}"

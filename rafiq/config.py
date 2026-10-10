@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
+    "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     "anthropic_api_key": "",
 }
 
