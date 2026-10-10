@@ -123,6 +123,8 @@ function handle(e) {
     case "typed": add("msg you", e.text, "You (typed)"); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
     case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
+    case "interpret": add("note", (e.on ? "Interpreting: " : "Stopped interpreting: ")
+      + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
     case "brain": stateEl.dataset.backend = e.backend; break;
     case "wake": if (e.score !== undefined) add("note", "Heard the name (match " + e.score + ", wakes below "
       + e.threshold + ")"); break;

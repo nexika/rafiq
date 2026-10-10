@@ -139,6 +139,15 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "interpret_start": {"en": "I'll interpret. Speak in turns; say stop to finish.",
+                        "fr": "Je fais l'interprète. Parlez chacun votre tour ; dites stop pour finir.",
+                        "es": "Voy a interpretar. Hablad por turnos; decid basta para terminar.",
+                        "de": "Ich dolmetsche. Sprecht abwechselnd; sagt Stopp zum Beenden.",
+                        "ar": "سأترجم بينكما. تحدثا بالتناوب، وقولا توقف للإنهاء.",
+                        "ar-EG": "هترجم بينكم. اتكلموا واحد واحد، وقولوا كفاية لما تخلصوا."},
+    "interpret_end": {"en": "Interpreting finished.", "fr": "Fin de l'interprétation.",
+                      "es": "Fin de la interpretación.", "de": "Dolmetschen beendet.", "ar": "انتهت الترجمة.",
+                      "ar-EG": "خلصنا الترجمة."},
 }
 
 

@@ -43,15 +43,17 @@ class Transcriber:
                                        cpu_threads=max(1, (os.cpu_count() or 4) - 2))
         return self._model
 
-    def language(self, audio: np.ndarray) -> tuple[str, float]:
+    def language(self, audio: np.ndarray, languages: list[str] | None = None) -> tuple[str, float]:
         _, _, probs = self.model.detect_language(audio=audio)
-        return pick_language(probs, self.languages)
+        return pick_language(probs, languages or self.languages)
 
     def transcribe(self, audio: np.ndarray, lang: str | None = None, beam_size: int = 3,
-                   hotwords: str | None = HOTWORDS, prompt: str | None = None) -> Heard:
+                   hotwords: str | None = HOTWORDS, prompt: str | None = None,
+                   languages: list[str] | None = None) -> Heard:
+        """What was said. `languages` narrows the guess, e.g. to the two of an interpreted conversation."""
         confidence = 1.0
         if lang is None:
-            lang, confidence = self.language(audio)
+            lang, confidence = self.language(audio, languages)
         segments, _ = self.model.transcribe(audio, language=lang, beam_size=beam_size,
                                             condition_on_previous_text=False, vad_filter=False,
                                             hotwords=hotwords, initial_prompt=prompt, without_timestamps=True)

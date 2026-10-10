@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import interpret, kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -128,9 +128,9 @@ class Assistant:
                 return utterance
         return None
 
-    def hear(self, audio: np.ndarray):
+    def hear(self, audio: np.ndarray, languages: list[str] | None = None):
         self.set_state("thinking")
-        heard = self.stt.transcribe(audio)
+        heard = self.stt.transcribe(audio, languages=languages)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
@@ -178,12 +178,25 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        pair = interpret.parse_request(text)
+        if pair:
+            self.interpret(pair)
+            return
         self.tag = tag
         self.ctx.tag = tag
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def interpret(self, pair: interpret.Pair) -> None:
+        """Interpreter mode: say what each person says in the other's language until one says stop."""
+        def listen(timeout: float):
+            self.set_state("listening")
+            return self.next_utterance(timeout=timeout)
+
+        interpret.Session(pair, listen, self.hear, self.brain.translate, self.say, self.events.publish).run()
+        self.follow_up_until = 0.0
 
     # ------------------------------------------------------------------ jobs from other threads
 
