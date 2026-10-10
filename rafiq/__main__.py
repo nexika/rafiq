@@ -145,6 +145,17 @@ def cmd_listen(_args) -> int:
     return 0 if resp.status_code == 200 else 1
 
 
+def cmd_enroll(args) -> int:
+    """Record the name (and a few ordinary sentences) so Rafiq knows your voice saying it."""
+    from . import enroll
+
+    if args.sensitivity is not None:
+        report = enroll.recalibrate(args.sensitivity)
+        print(f"Rafiq now wakes below {report['threshold']:.2f} (sensitivity {args.sensitivity}).")
+        return 0
+    return enroll.run(forms=args.forms or None, takes=args.takes)
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -170,6 +181,12 @@ def main(argv=None) -> int:
     say.add_argument("text", nargs="+")
     say.add_argument("--lang", choices=lang.TAGS, default="en")
     say.set_defaults(fn=cmd_say)
+    enroll = sub.add_parser("enroll", help="record yourself saying the name, for a reliable wake word")
+    enroll.add_argument("--forms", nargs="+", help='the ways you call it (default: "Rafiq" "يا رفيق")')
+    enroll.add_argument("--takes", type=int, default=3, help="recordings of each form (default 3)")
+    enroll.add_argument("--sensitivity", type=float,
+                        help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
+    enroll.set_defaults(fn=cmd_enroll)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)

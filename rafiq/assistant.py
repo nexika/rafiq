@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import lang, wake
+from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -88,6 +88,11 @@ class Assistant:
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
         self.state = "starting"
         self._stop = threading.Event()
+        # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
+        self.spotter = kws.Spotter.load()
+        self.mel = kws.Mel() if self.spotter else None
+        if self.spotter:   # (rafiq enroll --sensitivity refits the threshold)
+            self.name_seconds = max(len(t) for t in self.spotter.templates) * 0.02
 
     # ------------------------------------------------------------------ state shown in the panel
 
@@ -220,11 +225,28 @@ class Assistant:
 
     # ------------------------------------------------------------------ the main loop
 
+    def _spot_with_recordings(self, audio: np.ndarray) -> None:
+        """Wake when the start of what was said matches your recordings of the name. Most speech
+        that is not the name stops here, after a few hundred milliseconds of arithmetic."""
+        score = self.spotter.score(self.mel(audio[:int(kws.MAX_SECONDS * RATE)]))
+        if score > self.spotter.threshold:
+            return
+        self.events.publish("wake", {"score": round(score, 3), "threshold": round(self.spotter.threshold, 3)})
+        if len(audio) / RATE > self.name_seconds + 1.3:    # more than the name: the request came with it
+            text, tag = self.hear(audio)
+            found, command = wake.find(text)
+            self.respond(command if found else text, tag)
+        else:
+            self._listen_for_request(greet=True)
+
     def handle_idle_utterance(self, audio: np.ndarray) -> None:
         if time.monotonic() < self.follow_up_until:      # a follow-up: no name needed
             text, tag = self.hear(audio)
             found, rest = wake.find(text)
             self.respond(rest if found else text, tag)
+            return
+        if self.spotter:
+            self._spot_with_recordings(audio)
             return
         # The name comes first, so only the start is checked: faster, and less to mishear.
         spotted = self.wake_stt.transcribe(audio[:int(WAKE_SECONDS * RATE)], beam_size=1, hotwords=None,
