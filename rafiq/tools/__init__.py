@@ -51,7 +51,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
     from . import everyday, pc, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
-        from . import google  # noqa: F401
+        from . import google, parcels  # noqa: F401
     return dict(REGISTRY)
 
 
