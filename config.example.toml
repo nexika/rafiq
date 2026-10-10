@@ -32,3 +32,7 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[deadlines]                     # deadlines from iCal feeds (the .ics or webcal:// address a calendar publishes)
+feeds = []                      # e.g. [{ name = "Loopstr", url = "https://..." }] or ["https://..."]
+cache_minutes = 15

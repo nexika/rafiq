@@ -47,12 +47,18 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google only when it is set up."""
+    """Import every skill module; Google only when it is set up, deadlines only with an iCal feed."""
     from . import everyday, pc, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
-    return dict(REGISTRY)
+    tools = dict(REGISTRY)
+    if cfg.get("deadlines", {}).get("feeds"):
+        from . import agenda  # noqa: F401
+        tools = dict(REGISTRY)
+    else:
+        tools.pop("deadlines", None)
+    return tools
 
 
 def claude_schemas(tools: dict[str, Tool]) -> list[dict]:

@@ -46,6 +46,12 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "deadlines": {
+        "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}
+        "cache_minutes": 15,
+        # A title with one of these words is a period away, not a deadline (as is anything longer than a day).
+        "period_words": ["leave", "vacation", "holiday", "day off", "congé", "vacances", "urlaub", "إجازة"],
+    },
     "anthropic_api_key": "",
 }
 
