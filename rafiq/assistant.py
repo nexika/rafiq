@@ -20,6 +20,7 @@ from . import config as config_mod
 from . import kws, lang, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .reader import Reader
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -32,10 +33,11 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler, the reader and the language of the current request."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    reader: Reader | None = None
 
 
 @dataclass
@@ -80,7 +82,8 @@ class Assistant:
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
+        self.reader = Reader(interrupt=self.speaker.stop)
+        self.ctx = Context(self.cfg, self.scheduler, reader=self.reader)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
@@ -183,7 +186,20 @@ class Assistant:
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
+        if self.reader.active:            # read_aloud or "resume reading" loaded something
+            self.read()
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def read(self) -> None:
+        """Read aloud what the reader holds, until the end, a pause or a stop (from the panel)."""
+        def say(text: str, tag: str) -> None:
+            if not self.speaker.say(text, tag):      # no voice works: don't notify sentence after sentence
+                self.reader.stop()
+
+        self.reader.run(say, on_progress=lambda i, n: self.events.publish("reading", {"index": i, "total": n,
+                                                                                    "state": "reading"}))
+        self.events.publish("reading", {"index": self.reader.index, "total": len(self.reader.segments),
+                                        "state": self.reader.state})
 
     # ------------------------------------------------------------------ jobs from other threads
 
@@ -205,6 +221,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "read":
+                    self.read()
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")

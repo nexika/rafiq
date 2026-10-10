@@ -1,5 +1,5 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations.
+a text box, yes/no buttons for confirmations and the controls of a reading aloud.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -99,9 +99,19 @@ def make_handler(assistant, token: str, port: int):
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/stop":
+                assistant.reader.stop()
                 assistant.speaker.stop()
+            elif path == "/api/reading" and data.get("action") in ("pause", "skip", "stop"):
+                getattr(assistant.reader, data["action"])()
+            elif path == "/api/reading" and data.get("action") == "resume":
+                if assistant.reader.resume():
+                    assistant.submit("read")
             else:
                 return self._send(400, b'{"error":"unknown request"}')
+            if path in ("/api/stop", "/api/reading"):
+                reader = assistant.reader
+                assistant.events.publish("reading", {"index": reader.index, "total": len(reader.segments),
+                                                     "state": reader.state})
             return self._send(200, b'{"ok":true}')
 
     return Handler

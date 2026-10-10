@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -78,7 +79,10 @@ rafiq listen              # make the running Rafiq listen now
 Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
-and Yes/No buttons when it asks before an action.
+and Yes/No buttons when it asks before an action. While it reads aloud, it shows Pause/Resume, Skip and
+Stop. The microphone is off while Rafiq speaks, so a reading is paused from the panel; "Rafiq, resume
+reading" or "stop reading" work once it is paused. The selection needs `wl-clipboard` (Wayland) or
+`xclip`/`xsel` (X11); PDFs need `pip install 'rafiq[pdf]'`.
 
 ## The wake word
 
