@@ -41,6 +41,9 @@ echo_cancel = true              # after `pactl load-module module-echo-cancel`, 
 [place]
 city = ""                       # for "what's the weather?" without a city
 
+[pc]
+shutdown_delay = 30             # "shut down" waits this long; "cancel the shutdown" stops it. 0: at once
+
 [panel]
 port = 8765
 

@@ -62,6 +62,7 @@ DEFAULTS: dict = {
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
+    "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
     "anthropic_api_key": "",
 }

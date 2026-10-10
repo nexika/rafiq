@@ -134,6 +134,8 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels.
+- "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
+  (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
