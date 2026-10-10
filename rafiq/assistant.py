@@ -77,7 +77,7 @@ class Assistant:
         self.vad = SileroVAD()
         self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
-        self.stt = Transcriber(speech["whisper_model"], speech["languages"])
+        self.stt = Transcriber(speech["whisper_model"], speech["languages"], mixed=speech["mixed"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.ctx = Context(self.cfg, self.scheduler)

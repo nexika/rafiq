@@ -11,6 +11,7 @@ ollama_url = "http://127.0.0.1:11434"
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+mixed = true                    # Egyptian Arabic with English words ("افتحلي الـ settings"): keep them in Latin letters
 
 [voice]
 engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper

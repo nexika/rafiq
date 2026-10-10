@@ -26,6 +26,7 @@ DEFAULTS: dict = {
         "languages": ["en", "fr", "es", "de", "ar"],
         "follow_up_seconds": 6,          # after an answer, listen this long without the name
         "max_utterance_seconds": 20,
+        "mixed": True,                   # Arabic with English words ("افتحلي الـ settings"): keep them in Latin letters
     },
     "voice": {
         # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper (offline).

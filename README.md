@@ -22,6 +22,10 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
+English words inside Arabic work too: "افتحلي الـ settings", "شغّل الـ playlist بتاعتي" or
+"ابعت email لسارة" reach the brain with the English words in Latin letters. To see how well Whisper
+hears your own mixed speech, record sentences as `name.wav` with their text in `name.txt` and run
+`rafiq stt-score <folder>` (it compares the small and medium models, with and without this handling).
 
 ## Install
 
