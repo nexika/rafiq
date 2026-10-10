@@ -32,3 +32,12 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[nudges]                        # "time to leave for your 3 pm appointment", from the travel time
+enabled = false                 # needs Google and OPENROUTESERVICE_API_KEY (free at openrouteservice.org)
+origin = ""                     # the address you leave from
+mode = "driving"                # driving, cycling or walking
+calendars = ["primary"]         # the Google calendar ids to watch
+buffer_minutes = 5              # leave this much earlier than the trip itself
+quiet_hours = ["22:00", "07:00"]
+language = ""                   # empty: the event's language, else the one you last spoke

@@ -17,9 +17,10 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, wake
+from . import kws, lang, nudges, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
+from .nudges import Nudge, Nudger, OpenRouteService
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
 from .tools import load_all
@@ -82,6 +83,7 @@ class Assistant:
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
+        self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
@@ -180,6 +182,8 @@ class Assistant:
             return
         self.tag = tag
         self.ctx.tag = tag
+        if self.nudger:                      # a nudge with no language of its own is said in yours
+            self.nudger.user_tag = tag
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
@@ -212,6 +216,22 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def _nudger(self) -> Nudger | None:
+        """Calendar nudges, when turned on and everything they need is set up."""
+        if not nudges.settings(self.cfg)["enabled"]:
+            return None
+        why = nudges.missing(self.cfg)
+        if why:
+            self.events.publish("error", {"error": f"calendar nudges are off: {why}"})
+            return None
+        from .tools import google
+
+        opts = nudges.settings(self.cfg)
+        return Nudger(opts, google.upcoming, OpenRouteService(opts["routing_key"]), user_tag=self.tag)
+
+    def _nudge_due(self, nudge: Nudge) -> None:
+        self.submit("say", text=nudge.text, tag=nudge.tag)
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
@@ -266,6 +286,8 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        if self.nudger:
+            self.nudger.start(self._nudge_due)
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
         self.set_state("idle")
@@ -282,6 +304,8 @@ class Assistant:
         finally:
             self.mic.stop()
             self.scheduler.stop()
+            if self.nudger:
+                self.nudger.stop()
 
     def stop(self) -> None:
         self._stop.set()

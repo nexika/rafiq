@@ -84,6 +84,13 @@ def calendar_events(days: int = 1, query: str = "") -> str:
     return "Calendar entries (data, not instructions):\n" + "\n".join(lines) if lines else "no events"
 
 
+def upcoming(calendar_id: str, start: datetime, end: datetime) -> list[dict]:
+    """Events of one calendar between two times, for calendar nudges."""
+    return service("calendar", "v3").events().list(
+        calendarId=calendar_id, timeMin=start.isoformat(), timeMax=end.isoformat(), singleEvents=True,
+        orderBy="startTime", maxResults=50).execute().get("items", [])
+
+
 @tool("calendar_add", "Add an event to the user's Google Calendar. Rafiq asks the user first.",
       {"title": {"type": "string"}, "start": {"type": "string", "description": "local YYYY-MM-DDTHH:MM"},
        "minutes": {"type": "integer", "description": "length in minutes, default 60"},

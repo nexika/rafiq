@@ -121,6 +121,11 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    from . import nudges
+
+    if nudges.settings(cfg)["enabled"]:
+        why = nudges.missing(cfg)
+        _check("calendar nudges", why is None, why or f"from {nudges.settings(cfg)['origin']}")
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
