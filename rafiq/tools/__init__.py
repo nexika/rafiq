@@ -18,6 +18,8 @@ class Tool:
     # None: runs without asking. A string or a function of the arguments: the action to confirm out
     # loud first, in words the user hears ("shut down the computer").
     confirm: str | Callable | None = None
+    # True: its arguments and results (amounts, payees) stay out of the event log and the panel.
+    private: bool = False
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -39,16 +41,17 @@ class Tool:
 REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None):
+def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None,
+         private: bool = False):
     def register(fn: Callable) -> Callable:
-        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm)
+        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm, private)
         return fn
     return register
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; Google only when it is set up."""
-    from . import everyday, pc, web  # noqa: F401  (registers the tools)
+    from . import everyday, finance, pc, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401

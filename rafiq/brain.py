@@ -130,7 +130,11 @@ class Brain:
             result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
-        self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
+        if tool.private:
+            hidden = "error (hidden)" if result.startswith("error") else "(hidden)"
+            self.on_event("tool", {"name": name, "args": "(hidden)", "result": hidden})
+        else:
+            self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
         return result[:8000]
 
     def warm_up(self) -> None:
