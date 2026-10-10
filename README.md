@@ -80,6 +80,14 @@ Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 and Yes/No buttons when it asks before an action.
 
+Its **Subscriptions** page (http://127.0.0.1:8765/subscriptions) lists what you pay for again and
+again: monthly and yearly totals per currency, the charges of the next 30 days, alerts when one
+charges tomorrow or its amount changed, and a split by category. They are kept in
+`~/.config/rafiq/data/subscriptions.json` and reach the model only when you ask ("how much do my
+subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and
+proposes what it finds; each one is merged only when you press Merge, and a new price for a known
+subscription updates it and raises the "amount changed" alert.
+
 ## The wake word
 
 **Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"

@@ -15,6 +15,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
+from . import subscriptions
+
 MAX_BODY = 10_000
 
 
@@ -49,12 +51,16 @@ def make_handler(assistant, token: str, port: int):
             if not self._host_ok():
                 return self._send(403, b'{"error":"wrong host"}')
             url = urlparse(self.path)
-            if url.path == "/":
-                page = resources.files("rafiq").joinpath("panel.html").read_text(encoding="utf-8")
+            pages = {"/": "panel.html", "/subscriptions": "subscriptions.html"}
+            if url.path in pages:
+                page = resources.files("rafiq").joinpath(pages[url.path]).read_text(encoding="utf-8")
                 return self._send(200, page.replace("__TOKEN__", token).encode(), "text/html; charset=utf-8")
-            if url.path == "/events":
+            if url.path in ("/events", "/api/subscriptions"):
                 if not self._token_ok((parse_qs(url.query).get("token") or [None])[0]):
                     return self._send(403, b'{"error":"token"}')
+                if url.path == "/api/subscriptions":
+                    summary = subscriptions.summary(subscriptions.default_store())
+                    return self._send(200, json.dumps(summary, ensure_ascii=False).encode())
                 return self._stream()
             return self._send(404, b'{"error":"not found"}')
 
@@ -100,9 +106,23 @@ def make_handler(assistant, token: str, port: int):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/stop":
                 assistant.speaker.stop()
+            elif path == "/api/subscriptions" and isinstance(data, dict):
+                return self._subscriptions(data)
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')
+
+        def _subscriptions(self, data: dict) -> None:
+            # Gmail is searched only when the user presses Scan, and only if Google is set up.
+            google = getattr(assistant, "cfg", {}).get("google", {}).get("enabled")
+            inbox = subscriptions.GmailReceipts() if google else None
+            try:
+                result = subscriptions.handle(data, subscriptions.default_store(), inbox)
+            except ValueError as exc:
+                return self._send(400, json.dumps({"error": str(exc)}).encode())
+            except Exception as exc:   # Gmail or the network failed: say so on the page
+                return self._send(502, json.dumps({"error": f"Gmail: {exc}"}).encode())
+            return self._send(200, json.dumps(result).encode())
 
     return Handler
 
