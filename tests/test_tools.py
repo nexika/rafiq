@@ -117,3 +117,64 @@ def test_only_the_public_internet_is_fetched(url, addresses, ok):
 def test_open_in_browser_only_opens_web_addresses():
     assert web.open_in_browser("file:///etc/passwd").startswith("error")
     assert web.open_in_browser("javascript:alert(1)").startswith("error")
+
+
+class FakePlayerctl:
+    """Stands in for playerctl: each player has a status and what it is playing; records the commands."""
+
+    def __init__(self, players: dict[str, tuple[str, str]]):
+        self.players, self.sent = players, []
+
+    def __call__(self, args):
+        assert args[0] == "playerctl"
+        if args[1:] == ["--list-all"]:
+            out = "".join(f"{p}\n" for p in self.players) or "No players found\n"
+            return type("Result", (), {"returncode": 0 if self.players else 1, "stdout": out, "stderr": ""})()
+        assert args[1] == "--player"
+        status, playing = self.players[args[2]]
+        if args[3] == "status":
+            out = status
+        elif args[3] == "metadata":
+            out = playing
+        else:
+            self.sent.append((args[2], args[3]))
+            out = ""
+        return type("Result", (), {"returncode": 0, "stdout": out + "\n", "stderr": ""})()
+
+
+def test_media_controls_the_player_that_is_playing():
+    run = FakePlayerctl({"vlc": ("Paused", "Old film"), "spotify": ("Playing", "Fairuz - Kifak Inta")})
+    assert pc.media("pause", run=run) == "paused spotify"
+    assert run.sent == [("spotify", "pause")]
+
+
+def test_media_resumes_a_paused_player_when_nothing_plays():
+    run = FakePlayerctl({"firefox": ("Stopped", ""), "vlc": ("Paused", "Old film")})
+    assert pc.media("play", run=run) == "playing vlc"
+    assert run.sent == [("vlc", "play")]
+
+
+@pytest.mark.parametrize("action, command", [
+    ("next", "next"), ("previous", "previous"), ("toggle", "play-pause"), ("stop", "stop"),
+])
+def test_media_actions_map_to_playerctl(action, command):
+    run = FakePlayerctl({"spotify": ("Playing", "Fairuz - Kifak Inta")})
+    pc.media(action, run=run)
+    assert run.sent == [("spotify", command)]
+
+
+def test_media_says_what_is_playing():
+    run = FakePlayerctl({"spotify": ("Playing", "Fairuz - Kifak Inta")})
+    assert pc.media("status", run=run) == "spotify is playing: Fairuz - Kifak Inta"
+    assert run.sent == []
+
+
+def test_media_without_a_player_or_with_a_bad_action_is_an_error():
+    assert pc.media("pause", run=FakePlayerctl({})).startswith("error")
+    assert pc.media("rewind", run=FakePlayerctl({"vlc": ("Playing", "x")})).startswith("error")
+
+
+def test_media_without_playerctl_installed_is_an_error():
+    def missing(args):
+        raise FileNotFoundError("playerctl")
+    assert "playerctl" in pc.media("pause", run=missing)
