@@ -3,6 +3,7 @@ a tool that changes something outside Rafiq names the action, and Rafiq asks bef
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -47,12 +48,19 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google only when it is set up."""
-    from . import everyday, pc, web  # noqa: F401  (registers the tools)
+    """Import every skill module; Google only when it is set up. The scene tool names the scenes in
+    the config, so the brain knows which exist."""
+    from . import everyday, pc, scenes, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
-    return dict(REGISTRY)
+    tools = dict(REGISTRY)
+    found = scenes.scenes_from(cfg)
+    if found:
+        run = tools["run_scene"]
+        tools["run_scene"] = dataclasses.replace(run, description=f"{run.description} The scenes: "
+                                                 f"{scenes.describe(found)}.")
+    return tools
 
 
 def claude_schemas(tools: dict[str, Tool]) -> list[dict]:

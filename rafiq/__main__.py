@@ -65,8 +65,9 @@ def cmd_ask(args) -> int:
         print(lang.phrase("timer_done" if alarm.kind == "timer" else "reminder", alarm.tag, label=alarm.label))
 
     scheduler = Scheduler(config.data_dir() / "alarms.json", say_alarm)
-    brain = Brain(cfg, load_all(cfg), _terminal_confirm, on_event=show)
-    answer = brain.think(text, tag, Context(cfg, scheduler, tag))
+    tools = load_all(cfg)
+    brain = Brain(cfg, tools, _terminal_confirm, on_event=show)
+    answer = brain.think(text, tag, Context(cfg, scheduler, tag, confirm=_terminal_confirm, tools=tools))
     print(answer)
     if args.speak:
         Speaker(cfg).say(answer, lang.script_language(answer, tag))

@@ -12,7 +12,9 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import numpy as np
 
@@ -22,7 +24,8 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
-from .tools import load_all
+from .tools import Tool, load_all
+from .tools import scenes as scenes_mod
 from .tts import Speaker
 
 MIN_UTTERANCE_SECONDS = 0.35
@@ -32,10 +35,13 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler and the language of the current request."""
+    """What a tool may use: settings, the scheduler and the language of the current request; for a
+    scene, the other tools and a way to ask before one that changes something."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
+    confirm: Callable[[str, str], bool] | None = None
+    tools: dict[str, Tool] | None = None
 
 
 @dataclass
@@ -80,8 +86,8 @@ class Assistant:
         self.stt = Transcriber(speech["whisper_model"], speech["languages"])
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler)
         self.tools = load_all(self.cfg)
+        self.ctx = Context(self.cfg, self.scheduler, confirm=self.confirm, tools=self.tools)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
@@ -180,10 +186,30 @@ class Assistant:
             return
         self.tag = tag
         self.ctx.tag = tag
+        scene = scenes_mod.match(text, scenes_mod.scenes_from(self.cfg))
+        if scene is not None:                            # "film mode": no need to think about it
+            self.play_scene(scene, tag)
+            return
         self.set_state("thinking")
         answer = self.brain.think(text, tag, self.ctx)
         self.say(answer, lang.script_language(answer, tag))
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def play_scene(self, scene: scenes_mod.Scene, tag: str) -> None:
+        """Run a scene's steps and say what the steps marked to be read aloud returned, or that it's done."""
+        self.ctx.tag = tag
+        self.set_state("thinking")
+        outcomes = scenes_mod.play(scene, self.ctx)
+        self.events.publish("scene", {"id": scene.id, "steps": [[o.tool, o.result[:200]] for o in outcomes]})
+        spoken = " ".join(o.result for o in outcomes if o.speak and not o.result.startswith(("error", "skipped")))
+        self.say(spoken or lang.phrase("scene_done", tag), lang.script_language(spoken, tag) if spoken else tag)
+
+    def start_the_day(self) -> None:
+        """At the first start of the day, queue the day-start scene (music, lights, the daily brief)."""
+        name = self.cfg.get("day_start", {}).get("scene")
+        today = datetime.now().astimezone().date()
+        if name and scenes_mod.first_start_today(config_mod.data_dir() / "day_start.json", today):
+            self.submit("scene", name=name)
 
     # ------------------------------------------------------------------ jobs from other threads
 
@@ -205,6 +231,11 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "scene":
+                    scene = scenes_mod.scenes_from(self.cfg).get(data["name"])
+                    if scene is None:
+                        raise KeyError(f"no scene called {data['name']!r} (day_start.scene)")
+                    self.play_scene(scene, self.tag)
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")
@@ -266,6 +297,7 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        self.start_the_day()
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
         self.set_state("idle")

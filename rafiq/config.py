@@ -46,6 +46,16 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # Scenes: names (in any language) and the tool calls they run; see rafiq/tools/scenes.py.
+    # "Turn everything off" ends by offering to shut down; add your lights and music steps before it.
+    "scenes": {
+        "all_off": {
+            "names": ["turn everything off", "everything off", "éteins tout", "apaga todo", "alles aus",
+                      "mach alles aus", "أطفئ كل شيء", "اقفل كل حاجة", "طفي كل حاجة"],
+            "steps": [{"tool": "power", "args": {"action": "shutdown"}}],
+        },
+    },
+    "day_start": {"scene": ""},          # a scene to run at the first start of each day
     "anthropic_api_key": "",
 }
 

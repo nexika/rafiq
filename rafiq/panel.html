@@ -124,6 +124,7 @@ function handle(e) {
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
     case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "brain": stateEl.dataset.backend = e.backend; break;
+    case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
     case "wake": if (e.score !== undefined) add("note", "Heard the name (match " + e.score + ", wakes below "
       + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";

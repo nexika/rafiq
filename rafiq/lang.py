@@ -136,6 +136,8 @@ PHRASES = {
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "scene_done": {"en": "Done.", "fr": "C'est fait.", "es": "Hecho.", "de": "Erledigt.", "ar": "تم.",
+                   "ar-EG": "تمام، خلصت."},
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
