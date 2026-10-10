@@ -1,3 +1,5 @@
+[![CI](https://github.com/nexika/rafiq/actions/workflows/ci.yml/badge.svg)](https://github.com/nexika/rafiq/actions/workflows/ci.yml)
+
 # Rafiq (رفيق)
 
 A voice assistant for your Linux desktop that speaks English, French, Spanish, German, Modern Standard
@@ -26,7 +28,7 @@ would say, not formal فصحى. Timers and reminders are spoken in the language 
 Linux with PipeWire (Fedora, Ubuntu 22.10+), Python 3.11 or newer, `ffmpeg`.
 
 ```bash
-git clone <this repo> rafiq && cd rafiq
+git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
 .venv/bin/rafiq doctor
