@@ -19,6 +19,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -130,6 +131,33 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+## Smart plugs and energy meters
+
+Shelly and Tasmota plugs are reached over their local HTTP API, with no cloud; anything else can go
+through Home Assistant. List each plug under `[[plugs]]` with the name you will say:
+
+```toml
+[[plugs]]
+name = "PC"
+kind = "shelly"                 # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
+host = "192.168.1.40"
+ask_before_off = true           # confirm out loud before turning it off
+
+[[plugs]]
+name = "heater"
+kind = "home-assistant"
+entity = "switch.heater"
+power_entity = "sensor.heater_power"   # optional, W or kW
+energy_entity = "sensor.heater_energy" # optional, kWh
+
+[home_assistant]
+url = "http://homeassistant.local:8123"
+token = ""                      # a long-lived access token, or set HASS_TOKEN
+```
+
+Rafiq only picks a plug by its name, never an address. Plugs protected by a password are not
+supported yet.
 
 ## Settings
 

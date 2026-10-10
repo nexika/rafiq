@@ -47,11 +47,15 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google only when it is set up."""
+    """Import every skill module; Google and the smart plugs only when they are set up."""
     from . import everyday, pc, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
+    if cfg.get("plugs"):
+        from . import plugs
+
+        plugs.configure(cfg)
     return dict(REGISTRY)
 
 

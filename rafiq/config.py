@@ -1,6 +1,6 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY), then the file, and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, HASS_TOKEN), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    "home_assistant": {"url": "", "token": ""},   # token: a long-lived access token, or HASS_TOKEN
+    "plugs": [],
     "anthropic_api_key": "",
 }
 
@@ -77,6 +79,8 @@ def load(path: Path | None = None) -> dict:
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
     if os.environ.get("ANTHROPIC_API_KEY"):
         cfg["anthropic_api_key"] = os.environ["ANTHROPIC_API_KEY"]
+    if os.environ.get("HASS_TOKEN"):
+        cfg["home_assistant"]["token"] = os.environ["HASS_TOKEN"]
     return cfg
 
 

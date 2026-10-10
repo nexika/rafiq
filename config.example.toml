@@ -32,3 +32,10 @@ port = 8765
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+# Smart plugs: one [[plugs]] block per plug. See the README for Home Assistant.
+# [[plugs]]
+# name = "PC"
+# kind = "shelly"               # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
+# host = "192.168.1.40"
+# ask_before_off = true         # confirm out loud before turning it off
