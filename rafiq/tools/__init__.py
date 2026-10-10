@@ -46,13 +46,21 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
     return register
 
 
+# Skills that need an account: loaded only when their config section says enabled = true.
+OPTIONAL = ("google", "instagram")
+
+
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google only when it is set up."""
+    """Import every skill module; Google and Instagram only when they are set up."""
+    import importlib
+
     from . import everyday, pc, web  # noqa: F401  (registers the tools)
 
-    if cfg.get("google", {}).get("enabled"):
-        from . import google  # noqa: F401
-    return dict(REGISTRY)
+    enabled = {name for name in OPTIONAL if cfg.get(name, {}).get("enabled")}
+    for name in enabled:
+        importlib.import_module(f"{__name__}.{name}")
+    off = {f"{__name__}.{name}" for name in OPTIONAL if name not in enabled}
+    return {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
 
 
 def claude_schemas(tools: dict[str, Tool]) -> list[dict]:

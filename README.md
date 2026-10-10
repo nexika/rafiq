@@ -19,6 +19,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -130,6 +131,21 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+## Instagram statistics
+
+Followers gained or lost, new posts and views on recent videos, compared with yesterday, for every
+Instagram Business or Creator account linked to your Facebook Pages (official Instagram Graph API).
+
+1. Create an app at [Meta for Developers](https://developers.facebook.com/) and set
+   `INSTAGRAM_APP_ID` and `INSTAGRAM_APP_SECRET` (or `app_id` and `app_secret` under `[instagram]`).
+2. In the Graph API Explorer, get a user token with `instagram_basic`, `instagram_manage_insights` and
+   `pages_show_list`.
+3. Run `rafiq instagram-setup <token>`: Rafiq swaps it for a long-lived token, refreshed by itself.
+4. Set `enabled = true` under `[instagram]` in the config.
+
+Each answer saves a snapshot of the day in `~/.config/rafiq/data/instagram.json` (kept 90 days); the
+next day's answer compares with it.
 
 ## Settings
 

@@ -46,6 +46,8 @@ DEFAULTS: dict = {
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
     "google": {"enabled": False},
+    # accounts: usernames to report on; empty for every account linked to the token.
+    "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
     "anthropic_api_key": "",
 }
 

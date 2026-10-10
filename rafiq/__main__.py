@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | instagram-setup"""
 
 from __future__ import annotations
 
@@ -121,6 +121,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    instagram = config.home() / "instagram" / "token.json"
+    _check("Instagram statistics", instagram.is_file() and cfg["instagram"].get("enabled", False),
+           "connected" if instagram.is_file() else "run: rafiq instagram-setup <token>")
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     if brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
@@ -164,6 +167,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_instagram_setup(args) -> int:
+    from .tools.instagram import setup
+
+    print(setup(args.token))
+    print("Then set [instagram] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -191,6 +202,9 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
+    insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")
+    insta.set_defaults(fn=cmd_instagram_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)
