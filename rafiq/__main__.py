@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -169,6 +169,33 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_install_service(_args) -> int:
+    """Start Rafiq at every login, as a systemd user service."""
+    from . import service
+
+    try:
+        path = service.install()
+    except service.ServiceError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"Rafiq now starts at login ({path}) and is running.")
+    print("Logs: journalctl --user -u rafiq -f")
+    print(f"Exported keys are not seen by the service: put ANTHROPIC_API_KEY=... lines in {service.env_file()}")
+    return 0
+
+
+def cmd_uninstall_service(_args) -> int:
+    from . import service
+
+    try:
+        removed = service.uninstall()
+    except service.ServiceError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print("Rafiq no longer starts at login." if removed else "Rafiq was not set to start at login.")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -196,6 +223,9 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    sub.add_parser("install-service", help="start Rafiq at every login (systemd user service)").set_defaults(
+        fn=cmd_install_service)
+    sub.add_parser("uninstall-service", help="stop starting Rafiq at login").set_defaults(fn=cmd_uninstall_service)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)

@@ -39,6 +39,13 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 
+### Start at login
+
+`rafiq install-service` makes Rafiq a systemd user service: it starts when you log in, restarts if
+it fails, and logs to the journal (`journalctl --user -u rafiq -f`). Running it again keeps a single
+Rafiq. The service does not see keys exported in your shell, so put them in
+`~/.config/rafiq/rafiq.env` as `ANTHROPIC_API_KEY=...` lines. `rafiq uninstall-service` removes it.
+
 ## The brain: Claude, with Ollama as the fallback
 
 - **Claude** (recommended): fast, good at tools and at all six languages. Set an API key from
