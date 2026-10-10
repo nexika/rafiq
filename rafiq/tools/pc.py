@@ -9,10 +9,13 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import threading
 import time
 from configparser import ConfigParser
+from dataclasses import dataclass
 from pathlib import Path
 
+from .. import lang
 from . import tool
 
 APP_DIRS = ["/usr/share/applications", "/usr/local/share/applications", "~/.local/share/applications",
@@ -66,7 +69,7 @@ def find_app(query: str, entries: list[dict]) -> dict | None:
 
 @tool("open_app", "Open an application by name, e.g. 'Firefox', 'Files', 'Calculator', 'Terminal'.",
       {"name": {"type": "string", "description": "the app's name, in English where possible"}},
-      required=("name",))
+      required=("name",), level="act")
 def open_app(name: str) -> str:
     app = find_app(name, desktop_entries())
     if not app:
@@ -77,7 +80,8 @@ def open_app(name: str) -> str:
 
 
 @tool("list_apps", "Names of the installed applications, to find the right one to open.",
-      {"filter": {"type": "string", "description": "only names containing this"}})
+      {"filter": {"type": "string", "description": "only names containing this"}},
+      level="safe", expose=True, card="list")
 def list_apps(filter: str = "") -> str:  # noqa: A002
     names = sorted({e["name"] for e in desktop_entries() if filter.lower() in e["name"].lower()})
     return ", ".join(names[:80]) or "none"
@@ -96,7 +100,7 @@ def parse_volume(text: str) -> tuple[int, bool]:
 @tool("volume", "Get or change the speaker volume.",
       {"level": {"type": "integer", "description": "set the volume to this percent, 0 to 100"},
        "change": {"type": "integer", "description": "raise (positive) or lower (negative) by this many percent"},
-       "mute": {"type": "boolean", "description": "true to mute, false to unmute"}})
+       "mute": {"type": "boolean", "description": "true to mute, false to unmute"}}, level="act")
 def volume(level: int | None = None, change: int | None = None, mute: bool | None = None) -> str:
     current, muted = parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
     if mute is not None:
@@ -141,7 +145,7 @@ def active_player(run=_run) -> tuple[str, str] | None:
       "next, previous, or say what is playing.",
       {"action": {"type": "string", "enum": [*MEDIA, "status"],
                   "description": "toggle switches between play and pause; status says what is playing"}},
-      required=("action",))
+      required=("action",), level="act")
 def media(action: str, run=_run) -> str:
     if action not in MEDIA and action != "status":
         return f"error: action is one of {', '.join([*MEDIA, 'status'])}"
@@ -162,9 +166,106 @@ def media(action: str, run=_run) -> str:
     return f"{MEDIA_DONE[action]} {player}"
 
 
+# ---------------------------------------------------------------------- audio output
+
+@dataclass
+class Sink:
+    id: int
+    name: str
+    default: bool
+
+
+def parse_sinks(text: str) -> list[Sink]:
+    """The audio outputs in `wpctl status`: the Sinks list of the Audio section."""
+    sinks, section, in_sinks = [], "", False
+    for line in text.splitlines():
+        if line and not line[0].isspace() and line[0] not in "│├└":
+            section = line.strip()
+        tree = line.strip(" │")
+        if tree.startswith(("├─", "└─")):
+            in_sinks = section == "Audio" and tree.endswith("Sinks:")
+            continue
+        m = re.match(r"(\*?)\s*(\d+)\.\s+(.+?)\s*(\[vol:.*\])?$", tree)
+        if in_sinks and m:
+            sinks.append(Sink(int(m.group(2)), m.group(3), m.group(1) == "*"))
+    return sinks
+
+
+# What people call each kind of output in the six languages, and words in the names of such devices.
+OUTPUT_WORDS = {
+    "headphones": ["headphone", "headset", "earphone", "earbud", "casque", "écouteur", "ecouteur", "auricular",
+                   "cascos", "kopfhörer", "kopfhoerer", "سماعات الرأس", "سماعة الرأس", "سماعات الأذن",
+                   "سماعات", "سماعة", "هيدفون", "هيدسيت"],
+    "speakers": ["speaker", "enceinte", "haut-parleur", "haut parleur", "altavoz", "altavoces", "bocina",
+                 "lautsprecher", "boxen", "مكبرات الصوت", "مكبر الصوت", "سبيكر", "السماعات الخارجية"],
+    "tv": ["tv", "television", "télé", "tele", "télévision", "televisión", "fernseher", "تلفزيون",
+           "تليفزيون", "شاشة"],
+}
+SINK_HINTS = {"headphones": ["headphone", "headset", "buds", "airpods"],
+              "speakers": ["speaker", "analog stereo"],
+              "tv": ["hdmi", "displayport", "tv"]}
+
+
+def _says(text: str, word: str) -> bool:
+    """`word` in `text`, at the start of a word for Latin script (so "tv" is not inside "tvoje"); anywhere
+    for Arabic, whose words take prefixes such as ال."""
+    if any("\u0600" <= c <= "\u06ff" for c in word):
+        return word in text
+    return re.search(r"(?<!\w)" + re.escape(word), text) is not None
+
+
+def output_kind(spoken: str) -> str | None:
+    """headphones, speakers or tv from what the user called the output, in any of the six languages."""
+    q = spoken.lower().strip()
+    words = sorted(((w, kind) for kind, ws in OUTPUT_WORDS.items() for w in ws), key=lambda p: -len(p[0]))
+    return next((kind for w, kind in words if _says(q, w)), None)
+
+
+def find_sink(spoken: str, sinks: list[Sink], aliases: dict) -> Sink | None:
+    """The output the user named: a name from the config ([audio.outputs], by its own name or by kind),
+    then part of the device's name, then a device that looks like that kind."""
+    q = spoken.lower().strip()
+    if not q:
+        return None
+    kind = output_kind(q)
+
+    def named(part: str) -> Sink | None:
+        return next((s for s in sinks if part.lower() in s.name.lower()), None)
+
+    for key, part in aliases.items():
+        if (_says(q, key.lower()) or key.lower() == kind) and named(str(part)):
+            return named(str(part))
+    if named(q):
+        return named(q)
+    for hint in SINK_HINTS.get(kind, []):
+        if named(hint):
+            return named(hint)
+    return None
+
+
+def _outputs(sinks: list[Sink]) -> str:
+    return ", ".join(s.name + (" (current)" if s.default else "") for s in sinks) or "none"
+
+
+@tool("audio_output", "Switch where Rafiq's voice and the computer's sound play, e.g. 'headphones', 'speakers', "
+      "'TV', or a name the user set; with no name, list the outputs.",
+      {"name": {"type": "string", "description": "the output as the user said it, in their language"}}, level="act")
+def audio_output(name: str = "", ctx=None) -> str:
+    sinks = parse_sinks(_run(["wpctl", "status"]).stdout)
+    if not name.strip():
+        return "outputs: " + _outputs(sinks)
+    aliases = ctx.cfg.get("audio", {}).get("outputs", {}) if ctx else {}
+    sink = find_sink(name, sinks, aliases)
+    if not sink:
+        return f"error: no output matches {name!r}; outputs: {_outputs(sinks)}"
+    result = _run(["wpctl", "set-default", str(sink.id)])
+    return f"now playing on {sink.name}" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
+
+
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.")
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.",
+      level="safe", expose=True, card="facts")
 def system_status() -> str:
     import psutil
 
@@ -188,7 +289,7 @@ def system_status() -> str:
 
 # ---------------------------------------------------------------------- lock and power
 
-@tool("lock_screen", "Lock the screen.")
+@tool("lock_screen", "Lock the screen.", level="act")
 def lock_screen() -> str:
     session = os.environ.get("XDG_SESSION_ID")
     result = _run(["loginctl", "lock-session"] + ([session] if session else []))
@@ -198,13 +299,86 @@ def lock_screen() -> str:
 POWER = {"shutdown": (["systemctl", "poweroff"], "shut down the computer"),
          "restart": (["systemctl", "reboot"], "restart the computer"),
          "suspend": (["systemctl", "suspend"], "put the computer to sleep")}
+WARN_AT = 10            # seconds before a delayed shutdown, the last spoken warning
 
 
-@tool("power", "Shut down, restart or suspend the computer. Rafiq asks the user first.",
+class DelayedShutdown:
+    """One shutdown counting down. It lives only in Rafiq's memory: if Rafiq stops, the countdown
+    stops with it, so starting Rafiq again never powers the computer off by surprise."""
+
+    def __init__(self, run=None, spawn=None):
+        self.run = run or (lambda args: _run(args))
+        self.spawn = spawn or self._thread
+        self.wait = None                     # tests replace the wait; None waits for a cancel
+        self.cancelled = threading.Event()
+        self.thread: threading.Thread | None = None
+        self.lock = threading.Lock()
+        self.pending = False
+
+    def _thread(self, fn) -> None:
+        self.thread = threading.Thread(target=fn, name="rafiq-shutdown", daemon=True)
+        self.thread.start()
+
+    def start(self, seconds: int, command: list[str], on_warn, on_fail=None) -> bool:
+        """Count down, call on_warn(seconds left) WARN_AT seconds before the end, then run the
+        command. False when a countdown is already running."""
+        with self.lock:
+            if self.pending:
+                return False
+            self.pending = True
+            cancelled = self.cancelled = threading.Event()
+
+        def count():
+            waits = [seconds - WARN_AT, WARN_AT] if seconds > WARN_AT else [seconds]
+            for i, step in enumerate(waits):
+                if (self.wait or cancelled.wait)(step):
+                    return
+                if i < len(waits) - 1:
+                    on_warn(WARN_AT)
+            with self.lock:
+                if cancelled.is_set():
+                    return
+                self.pending = False
+            result = self.run(command)
+            if on_fail and result is not None and result.returncode != 0:
+                on_fail()
+
+        self.spawn(count)
+        return True
+
+    def cancel(self) -> bool:
+        with self.lock:
+            was, self.pending = self.pending, False
+            self.cancelled.set()
+        return was
+
+
+SHUTDOWN = DelayedShutdown()
+
+
+@tool("power", "Shut down, restart or suspend the computer. Rafiq asks the user first. A shutdown "
+               "waits a little (30 seconds by default) and can be stopped with cancel_shutdown.",
       {"action": {"type": "string", "enum": list(POWER)}}, required=("action",),
-      confirm=lambda args: POWER.get(args.get("action", ""), (None, "change the power state"))[1])
-def power(action: str) -> str:
+      confirm=lambda args: POWER.get(args.get("action", ""), (None, "change the power state"))[1], level="critical")
+def power(action: str, ctx=None) -> str:
     if action not in POWER:
         return f"error: action is one of {', '.join(POWER)}"
+    delay = int(ctx.cfg.get("pc", {}).get("shutdown_delay", 30)) if ctx else 0
+    if action == "shutdown" and delay > 0:
+        tag = ctx.tag
+        say = getattr(ctx, "say", None) or (lambda text, tag: None)
+        started = SHUTDOWN.start(
+            delay, POWER["shutdown"][0],
+            on_warn=lambda left: say(lang.phrase("shutdown_soon", tag, seconds=str(left)), tag),
+            on_fail=lambda: say(lang.phrase("shutdown_failed", tag), tag))
+        if not started:
+            return "a shutdown is already counting down; cancel_shutdown stops it"
+        return f"shutting down in {delay} seconds; the user can say 'cancel the shutdown' to stop it"
     result = _run(POWER[action][0])
     return "done" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
+
+
+@tool("cancel_shutdown", "Stop a shutdown that is counting down (\"cancel the shutdown\", \"annule "
+                         "l'extinction\", \"ألغِ إيقاف التشغيل\", \"إلغي القفل\").", level="act")
+def cancel_shutdown() -> str:
+    return "the shutdown is cancelled" if SHUTDOWN.cancel() else "no shutdown is pending"
