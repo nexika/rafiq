@@ -17,7 +17,7 @@ def now() -> datetime:
 
 @tool("get_time", "The current date and time, here or in another time zone.",
       {"timezone": {"type": "string", "description": "IANA time zone such as Europe/Paris or Africa/Cairo; "
-                                                     "empty for the user's own"}})
+                                                     "empty for the user's own"}}, mcp=True)
 def get_time(timezone: str = "") -> str:
     when = now()
     if timezone:
@@ -65,7 +65,7 @@ def set_reminder(when: str, label: str, ctx=None) -> str:
     return "set: " + _describe(alarm, now())
 
 
-@tool("list_timers", "The timers and reminders that are still pending.")
+@tool("list_timers", "The timers and reminders that are still pending.", mcp=True)
 def list_timers(ctx=None) -> str:
     pending = ctx.scheduler.pending()
     return "\n".join(_describe(a, now()) for a in pending) if pending else "none pending"
@@ -104,7 +104,7 @@ def _get_json(url: str, params: dict) -> dict:
 
 @tool("weather", "Current weather and the forecast for the next days.",
       {"city": {"type": "string", "description": "city name; empty for the user's own city"},
-       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}})
+       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}}, mcp=True)
 def weather(city: str = "", days: int = 2, ctx=None, get=_get_json) -> str:
     city = city or (ctx.cfg.get("place", {}).get("city") if ctx else "") or ""
     if not city:
@@ -167,7 +167,7 @@ def safe_eval(expression: str) -> float:
 
 
 @tool("calculate", "Work out an arithmetic expression, e.g. '15/100*240' or 'sqrt(2)*3'.",
-      {"expression": {"type": "string"}}, required=("expression",))
+      {"expression": {"type": "string"}}, required=("expression",), mcp=True)
 def calculate(expression: str) -> str:
     try:
         value = safe_eval(expression)
@@ -220,7 +220,7 @@ def convert_value(value: float, from_unit: str, to_unit: str) -> float:
 
 @tool("convert_units", "Convert between units of length, mass, volume, speed, area or temperature.",
       {"value": {"type": "number"}, "from_unit": {"type": "string", "description": "e.g. km, lb, °F, cup"},
-       "to_unit": {"type": "string"}}, required=("value", "from_unit", "to_unit"))
+       "to_unit": {"type": "string"}}, required=("value", "from_unit", "to_unit"), mcp=True)
 def convert_units(value: float, from_unit: str, to_unit: str) -> str:
     try:
         result = convert_value(float(value), from_unit, to_unit)

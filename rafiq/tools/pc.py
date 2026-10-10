@@ -116,7 +116,7 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
 
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.")
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.", mcp=True)
 def system_status() -> str:
     import psutil
 

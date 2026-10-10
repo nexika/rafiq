@@ -123,6 +123,21 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 
+## Rafiq's tools in other programs (MCP)
+
+`rafiq mcp` offers Rafiq's harmless tools to MCP clients such as Claude Desktop or Claude Code, over
+stdio: the time, the weather, pending timers and reminders, how the computer is doing, arithmetic and
+unit conversion. Nothing that changes anything is offered (no power, email, apps, volume, or setting
+timers), and never a tool that would ask you first. Every call is logged to
+`~/.config/rafiq/data/mcp.log`.
+
+```bash
+claude mcp add rafiq -- /path/to/rafiq/.venv/bin/rafiq mcp
+```
+
+For Claude Desktop, add to `claude_desktop_config.json`:
+`"mcpServers": {"rafiq": {"command": "/path/to/rafiq/.venv/bin/rafiq", "args": ["mcp"]}}`.
+
 ## Google calendar and Gmail
 
 1. In a [Google Cloud project](https://console.cloud.google.com/), enable the Calendar and Gmail APIs,

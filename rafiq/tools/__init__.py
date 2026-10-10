@@ -18,6 +18,8 @@ class Tool:
     # None: runs without asking. A string or a function of the arguments: the action to confirm out
     # loud first, in words the user hears ("shut down the computer").
     confirm: str | Callable | None = None
+    # Offered to other programs through `rafiq mcp`: only tools that read something and change nothing.
+    mcp: bool = False
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -39,9 +41,10 @@ class Tool:
 REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None):
+def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None,
+         mcp: bool = False):
     def register(fn: Callable) -> Callable:
-        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm)
+        REGISTRY[name] = Tool(name, description, fn, params or {}, tuple(required), confirm, mcp)
         return fn
     return register
 

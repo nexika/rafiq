@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | mcp | google-setup"""
 
 from __future__ import annotations
 
@@ -156,6 +156,12 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_mcp(_args) -> int:
+    from . import mcp_server
+
+    return mcp_server.run()
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -190,6 +196,8 @@ def main(argv=None) -> int:
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("mcp", help="offer the harmless tools to MCP clients such as Claude Desktop (stdio)").set_defaults(
+        fn=cmd_mcp)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
