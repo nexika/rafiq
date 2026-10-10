@@ -2,6 +2,8 @@
 
 Both backends get the same system prompt and the same tools. A turn loops: the model asks for tools,
 Rafiq runs them (asking the user first for any that change something), the model answers in words.
+Before that, the router picks the tools a request needs, so a simple request reaches the model with
+a short list, or none for small talk.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
+from . import router
 from .tools import Tool, claude_schemas, ollama_schemas
 
 MAX_STEPS = 6
@@ -103,13 +106,17 @@ class Brain:
     def think(self, text: str, tag: str, ctx=None) -> str:
         """Answer one thing the user said. Tries Claude, then Ollama in auto mode."""
         history = self.memory.recent(self.clock(), tag)
+        if self.cfg["brain"].get("routing", True):
+            route = router.route(text, self.tools)
+        else:
+            route = router.Route("all", self.tools)
         errors = []
         for backend in self.backends():
             try:
                 run = self._claude_turn if backend == "claude" else self._ollama_turn
-                answer = run(history, text, tag, ctx)
+                answer = run(history, text, tag, ctx, route.tools)
                 self.memory.add(text, answer, self.clock(), tag)
-                self.on_event("brain", {"backend": backend})
+                self.on_event("brain", {"backend": backend, "route": route.name})
                 return answer
             except BrainError as exc:
                 errors.append(f"{backend}: {exc}")
@@ -118,8 +125,9 @@ class Brain:
 
     # ------------------------------------------------------------------ tools
 
-    def _run_tool(self, name: str, args: dict, tag: str, ctx) -> str:
-        tool = self.tools.get(name)
+    def _run_tool(self, name: str, args: dict, tag: str, ctx, tools: dict[str, Tool]) -> str:
+        """Run a tool the model asked for; only the ones it was offered for this request."""
+        tool = tools.get(name)
         if tool is None:
             return f"error: there is no tool named {name}"
         action = tool.action(args)
@@ -159,17 +167,18 @@ class Brain:
             self._claude = anthropic.Anthropic(api_key=self.cfg["anthropic_api_key"], max_retries=1, timeout=30)
         return self._claude
 
-    def _claude_turn(self, history: list[Turn], text: str, tag: str, ctx) -> str:
+    def _claude_turn(self, history: list[Turn], text: str, tag: str, ctx, tools: dict[str, Tool]) -> str:
         import anthropic
 
         messages = ([{"role": t.role, "content": t.content} for t in history]
                     + [{"role": "user", "content": with_note(text, tag)}])
-        schemas = claude_schemas(self.tools)
+        # The API wants no tools field at all rather than an empty list.
+        extra = {"tools": claude_schemas(tools)} if tools else {}
         for _ in range(MAX_STEPS):
             try:
                 resp = self._claude_client().messages.create(
                     model=self.cfg["brain"]["claude_model"], max_tokens=self.cfg["brain"]["max_tokens"],
-                    system=system_prompt(self.cfg), tools=schemas, messages=messages)
+                    system=system_prompt(self.cfg), messages=messages, **extra)
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
@@ -177,20 +186,21 @@ class Brain:
             if not calls:
                 return " ".join(b.text for b in resp.content if b.type == "text").strip()
             messages.append({"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": c.id, "content": self._run_tool(c.name, c.input or {}, tag, ctx)}
+                {"type": "tool_result", "tool_use_id": c.id,
+                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools)}
                 for c in calls]})
         raise BrainError("too many tool steps")
 
     # ------------------------------------------------------------------ Ollama
 
-    def _ollama_turn(self, history: list[Turn], text: str, tag: str, ctx) -> str:
+    def _ollama_turn(self, history: list[Turn], text: str, tag: str, ctx, tools: dict[str, Tool]) -> str:
         import httpx
 
         brain = self.cfg["brain"]
         messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
                     + [{"role": t.role, "content": t.content} for t in history]
                     + [{"role": "user", "content": with_note(text, tag)}])
-        schemas = ollama_schemas(self.tools)
+        schemas = ollama_schemas(tools)
         for _ in range(MAX_STEPS):
             try:
                 resp = httpx.post(f"{brain['ollama_url']}/api/chat", timeout=120, json={
@@ -213,5 +223,5 @@ class Brain:
                     except ValueError:
                         args = {}
                 messages.append({"role": "tool", "tool_name": fn.get("name", ""),
-                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx)})
+                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, tools)})
         raise BrainError("too many tool steps")

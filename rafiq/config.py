@@ -19,6 +19,8 @@ DEFAULTS: dict = {
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "max_tokens": 600,
+        # Offer the model only the tools a request needs (none for small talk); off: every tool, always.
+        "routing": True,
     },
     "speech": {
         "whisper_model": "small",       # tiny, base, small, medium; medium is better for Arabic but slower
