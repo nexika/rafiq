@@ -91,6 +91,7 @@ class Assistant:
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
+        self.interrupted = threading.Event()                # "stop" said over Rafiq's last sentence
         self.state = "starting"
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
@@ -142,6 +143,7 @@ class Assistant:
             return ""
 
     def _interrupted(self) -> None:
+        self.interrupted.set()
         self.speaker.stop()
         self.events.publish("interrupted", {})
 
@@ -182,7 +184,10 @@ class Assistant:
             self.pending_answer.get_nowait()
         self.events.publish("confirm", {"action": action, "tag": tag})
         for _attempt in range(2):
+            self.interrupted.clear()
             self.say(lang.phrase("confirm", tag, action=action), tag)
+            if self.interrupted.is_set():    # "stop" over the question is a no
+                break
             self.set_state("listening")
             deadline = time.monotonic() + CONFIRM_SECONDS
             while time.monotonic() < deadline:

@@ -1,9 +1,12 @@
+import queue
 import subprocess
+import threading
 
 import numpy as np
 import pytest
 
 from rafiq import lang
+from rafiq.assistant import Assistant
 from rafiq.audio import FRAME, EchoGate, echo_cancel_source
 from rafiq.bargein import BargeIn
 
@@ -92,3 +95,54 @@ def test_no_echo_cancel_module_or_no_pactl_means_none():
 
     assert echo_cancel_source(plain) is None
     assert echo_cancel_source(missing) is None
+
+
+
+def test_a_stale_listener_does_not_stop_the_next_speech():
+    """Whisper still busy when stop() gave up waiting: that thread must not act once it wakes up."""
+    busy, release, stopped = threading.Event(), threading.Event(), []
+
+    def slow(audio):
+        busy.set()
+        release.wait(5)
+        return "stop"
+
+    frames = iter([frame(0.05)] * 40 + [frame(0.3)] * 15 + [frame(0.05)] * 30)
+    barge = BargeIn(slow, lambda: stopped.append(True))
+    barge.start(lambda timeout: next(frames, None))
+    assert busy.wait(5)
+    old = barge._thread
+    barge._done.set()                    # what stop() leaves behind when its join times out
+    barge._thread = None
+    barge.start(lambda timeout: None)    # the next sentence starts listening
+    release.set()
+    old.join(5)
+    barge.stop()
+    assert stopped == []
+
+
+class Silent:
+    def publish(self, *_):
+        pass
+
+    def stop(self):
+        pass
+
+
+def test_saying_stop_over_a_confirmation_cancels_it():
+    a = object.__new__(Assistant)
+    a.events = a.speaker = Silent()
+    a.pending_answer, a.interrupted = queue.Queue(), threading.Event()
+    a.set_state = lambda state: None
+    said, listened = [], []
+
+    def say(text, tag):
+        said.append(text)
+        if len(said) == 1:
+            a._interrupted()                     # the user says "stop" over the question
+
+    a.say = say
+    a.next_utterance = lambda timeout: listened.append(1) or np.zeros(16000, dtype="float32")
+    a.hear = lambda audio: ("yes", "en")         # a stray "yes" afterwards must not count
+    assert a.confirm("shut down the computer", "en") is False
+    assert listened == [] and said[-1] == lang.phrase("cancelled", "en")

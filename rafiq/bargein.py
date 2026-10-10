@@ -30,10 +30,13 @@ class BargeIn:
         self.gate.reset()
         self.endpointer.reset()
 
-    def push(self, frame: np.ndarray) -> bool:
-        """Feed one frame heard while Rafiq speaks; True when it was told to stop (and on_stop ran)."""
+    def push(self, frame: np.ndarray, done: threading.Event | None = None) -> bool:
+        """Feed one frame heard while Rafiq speaks; True when it was told to stop (and on_stop ran).
+        Nothing happens once `done` is set: Rafiq may have finished while Whisper was transcribing."""
         utterance = self.endpointer.push(frame, 1.0 if self.gate.loud(frame) else 0.0)
         if utterance is None or not lang.is_stop(self.transcribe(utterance)):
+            return False
+        if done is not None and done.is_set():
             return False
         self.on_stop()
         return True
@@ -43,8 +46,9 @@ class BargeIn:
     def start(self, read: Callable[[float], np.ndarray | None]) -> None:
         """Listen on a thread of its own, reading frames with read(timeout), until stop()."""
         self.reset()
-        self._done.clear()
-        self._thread = threading.Thread(target=self._listen, args=(read,), name="rafiq-barge-in", daemon=True)
+        self._done = threading.Event()       # a new one: a thread stop() gave up on keeps its own, set
+        self._thread = threading.Thread(target=self._listen, args=(read, self._done), name="rafiq-barge-in",
+                                        daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -53,8 +57,8 @@ class BargeIn:
             self._thread.join(timeout=5)
             self._thread = None
 
-    def _listen(self, read) -> None:
-        while not self._done.is_set():
+    def _listen(self, read, done: threading.Event) -> None:
+        while not done.is_set():
             frame = read(0.1)
-            if frame is not None and self.push(frame):
+            if frame is not None and self.push(frame, done):
                 return
