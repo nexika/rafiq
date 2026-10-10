@@ -11,6 +11,7 @@ import re
 import subprocess
 import time
 from configparser import ConfigParser
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import tool
@@ -116,7 +117,7 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
 
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.")
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime, GPU.")
 def system_status() -> str:
     import psutil
 
@@ -135,7 +136,99 @@ def system_status() -> str:
         parts.append(f"hottest sensor {hottest:.0f}°C")
     up = int(time.time() - psutil.boot_time())
     parts.append(f"up {up // 3600} h {up % 3600 // 60} min")
+    parts += [describe_gpu(g) for g in gpus()]
     return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------- graphics card
+
+DRM = Path("/sys/class/drm")
+AMD = "0x1002"
+
+
+@dataclass
+class Gpu:
+    name: str
+    load: float | None = None  # percent busy
+    temperature: float | None = None  # °C
+    memory_used: int | None = None  # bytes of video memory
+    memory_total: int | None = None
+
+
+def _read_number(path: Path) -> float | None:
+    try:
+        return float(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def amd_gpus(drm: Path = DRM) -> list[Gpu]:
+    """AMD cards through the amdgpu driver's files: no extra tool needed. card1-eDP-1 and the like are
+    screens, not cards, so only cardN is read."""
+    found = []
+    for card in sorted(drm.glob("card[0-9]*")):
+        device = card / "device"
+        try:
+            if "-" in card.name or (device / "vendor").read_text().strip() != AMD:
+                continue
+        except OSError:
+            continue
+        temp = next((t for t in map(_read_number, sorted(device.glob("hwmon/*/temp1_input"))) if t is not None),
+                    None)
+        used, total = _read_number(device / "mem_info_vram_used"), _read_number(device / "mem_info_vram_total")
+        found.append(Gpu("AMD GPU", load=_read_number(device / "gpu_busy_percent"),
+                         temperature=temp / 1000 if temp is not None else None,
+                         memory_used=int(used) if used is not None else None,
+                         memory_total=int(total) if total is not None else None))
+    return found
+
+
+def nvidia_gpus(nvml=None) -> list[Gpu]:
+    """NVIDIA cards through NVML (pip install nvidia-ml-py). Without it or without the driver: none."""
+    if nvml is None:
+        try:
+            import pynvml as nvml
+        except ImportError:
+            return []
+    try:
+        nvml.nvmlInit()
+    except nvml.NVMLError:
+        return []
+    found = []
+    try:
+        for i in range(nvml.nvmlDeviceGetCount()):
+            handle = nvml.nvmlDeviceGetHandleByIndex(i)
+            name = nvml.nvmlDeviceGetName(handle)
+            memory = nvml.nvmlDeviceGetMemoryInfo(handle)
+            found.append(Gpu(name.decode() if isinstance(name, bytes) else name,
+                             load=nvml.nvmlDeviceGetUtilizationRates(handle).gpu,
+                             temperature=nvml.nvmlDeviceGetTemperature(handle, nvml.NVML_TEMPERATURE_GPU),
+                             memory_used=memory.used, memory_total=memory.total))
+    except nvml.NVMLError:
+        pass  # keep the cards read so far
+    finally:
+        nvml.nvmlShutdown()
+    return found
+
+
+def gpus() -> list[Gpu]:
+    return nvidia_gpus() + amd_gpus()
+
+
+def describe_gpu(gpu: Gpu) -> str:
+    figures = []
+    if gpu.load is not None:
+        figures.append(f"{gpu.load:.0f}% busy")
+    if gpu.temperature is not None:
+        figures.append(f"{gpu.temperature:.0f}°C")
+    if gpu.memory_used is not None and gpu.memory_total:
+        figures.append(f"video memory {gpu.memory_used / 2**30:.1f} of {gpu.memory_total / 2**30:.1f} GB used")
+    return f"{gpu.name} " + ", ".join(figures) if figures else f"{gpu.name}: no figures"
+
+
+@tool("gpu_status", "How the graphics card is doing: load, temperature, video memory.")
+def gpu_status() -> str:
+    return ", ".join(describe_gpu(g) for g in gpus()) or "no graphics card figures available"
 
 
 # ---------------------------------------------------------------------- lock and power

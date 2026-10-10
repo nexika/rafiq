@@ -15,7 +15,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 
 | Skill | Examples |
 |---|---|
-| This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
+| This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
@@ -31,6 +31,7 @@ Linux with PipeWire (Fedora, Ubuntu 22.10+), Python 3.11 or newer, `ffmpeg`.
 git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
+.venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
 .venv/bin/rafiq doctor
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
