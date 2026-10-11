@@ -26,6 +26,7 @@ from .brain import Brain
 from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
+from .tasks import ClaudeAgent, Task, Tasks
 from .tools import load_all
 from .tts import Speaker
 
@@ -38,13 +39,14 @@ CONFIRM_SECONDS = 10.0
 class Context:
     """What a tool may use: settings, the scheduler, the language of the current request, a way
     to say something later (a countdown) from another thread, who to tell when the mode changes
-    (the panel shows it), and the long-term memory."""
+    (the panel shows it), the long-term memory, and the background tasks (None without Claude)."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
     say: Callable[[str, str], None] | None = None
     on_mode: Callable[[str], None] | None = None
     facts: Facts | None = None
+    tasks: Tasks | None = None
 
 
 @dataclass
@@ -101,6 +103,8 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
+        if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
+            self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -330,6 +334,14 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def _task_done(self, task: Task) -> None:
+        """Said on this thread, between requests, like an alarm."""
+        if task.state == "done":
+            text = lang.phrase("task_done", task.tag, result=task.result)
+        else:
+            text = lang.phrase("task_failed", task.tag, goal=task.goal)
+        self.submit("say", text=text, tag=lang.script_language(text, task.tag))
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:

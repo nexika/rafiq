@@ -74,6 +74,14 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "tasks": {
+        # Background research ("research the best e-bike under 2000 euros"); needs Claude.
+        "model": "",                     # empty: brain.claude_model
+        "max_tokens": 2000,
+        # US dollars per million tokens, [input, output], to show what each task cost.
+        "prices": {"claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2.00, 10.00],
+                   "claude-opus-5-5": [4.00, 20.00]},
+    },
     "interruption": {
         # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.
         "enabled": True,

@@ -59,6 +59,9 @@ class FakeBrain:
     def __init__(self, cfg, tools, confirm, on_event=None, facts=None):
         self.asked = []
 
+    def backends(self):
+        return ["ollama"]
+
     def think(self, text, tag, ctx=None):
         self.asked.append(text)
         return "an answer"

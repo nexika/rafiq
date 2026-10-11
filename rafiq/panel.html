@@ -155,6 +155,9 @@ function handle(e) {
     case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
     case "brain": stateEl.dataset.backend = e.backend; break;
+    case "task": add(e.state === "failed" ? "note err" : "note", "Background task “" + e.goal + "”: " + e.state
+      + (e.state === "running" ? "" : " (" + (e.cost == null ? "cost unknown" : "$" + e.cost.toFixed(4)) + ")\n"
+      + e.result)); break;
     case "calibrated": add("note", "Listened to the room: speech above " + e.threshold + ", "
       + e.end_seconds + " s of silence ends a request (microphone at " + e.rate + " Hz)"); break;
     case "mode": modeEl.value = e.mode; break;
