@@ -25,6 +25,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_canc
 from .bargein import BargeIn
 from .brain import Brain
 from .facts import Facts
+from .paper_print import MorningPaper
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
@@ -108,6 +109,8 @@ class Assistant:
         self.presence = self._make_presence()
         self.facts = Facts(config_mod.data_dir() / "memory.json")
         self.tools = load_all(self.cfg)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.paper = MorningPaper(self.cfg)
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools)
@@ -370,6 +373,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "paper":
+                    self.offer_paper()
                 elif kind == "brief":
                     self.play_brief()
                 elif kind == "scene":
@@ -382,6 +387,15 @@ class Assistant:
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")
+
+    def offer_paper(self) -> None:
+        """The timer's offer: ask, and print on a yes. Silent when there is nothing to print."""
+        result = self.paper.print_today(lambda action: self.confirm(action, self.tag))
+        self.events.publish("paper", {"result": result})
+        if result.startswith("printed"):
+            self.say(lang.phrase("paper_printed", self.tag), self.tag)
+        elif result.startswith("error: printing failed"):
+            self.say(lang.phrase("paper_failed", self.tag), self.tag)
 
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"

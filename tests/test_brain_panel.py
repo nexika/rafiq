@@ -274,6 +274,12 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assert assistant.jobs == [("text", {"text": "what time is it"})]
 
 
+def test_the_morning_paper_timers_offer_reaches_the_running_rafiq(panel):
+    assistant, port = panel
+    assert request(port, "/api/paper", {})[0] == 200
+    assert assistant.jobs == [("paper", {})]
+
+
 def test_the_mute_button_and_rafiq_mute_reach_the_assistant(panel):
     assistant, port = panel
     assert request(port, "/api/mute", {})[0] == 200

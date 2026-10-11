@@ -85,6 +85,9 @@ feeds = []                      # RSS or Atom addresses, e.g. ["https://feeds.bb
 tech_feeds = []
 priorities = []                 # ["Send the report"]
 deadlines = []                  # [{title = "Tax return", date = "2026-10-15"}]
+printer = ""                    # a CUPS printer name (lpstat -p); empty: the default printer
+file = ""                       # the day's PDF to print, "{date}" becomes YYYY-MM-DD; empty: data/paper/<date>.pdf
+after_brief = false             # also offer to print it after the first brief of the day
 
 [phone]                         # notes and commands from an iOS or Android shortcut: `rafiq phone`
 enabled = false

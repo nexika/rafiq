@@ -28,6 +28,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Daily brief | "brief me", "good morning": the time, weather, today's calendar, new email and what is due today in one answer; `brief.at_first_start = true` says it at the first start of each day |
+| Morning paper | "print my paper" (asks first, never twice a day) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
@@ -452,6 +453,19 @@ supported yet.
 2. `.venv/bin/pip install -e ".[obs]"`
 3. Under `[obs]` in the config set `enabled = true` and the `password` (or set `OBS_WEBSOCKET_PASSWORD`).
 4. For "clip that", turn on the replay buffer in OBS (Settings > Output > Replay Buffer) and start it.
+
+## The morning paper on paper
+
+Rafiq prints the day's paper with CUPS (`lp`), once a day at most and only after you say yes. It
+prints `~/.config/rafiq/data/paper/YYYY-MM-DD.pdf` (or `file` under `[paper]`, with `{date}` in it).
+
+- Every morning at a fixed time: `rafiq paper timer --at 07:00` writes a systemd user timer; turn it on
+  with `systemctl --user daemon-reload && systemctl --user enable --now rafiq-paper.timer`. At that
+  time the running Rafiq asks out loud (or in the panel) whether to print.
+- After the first brief of the day: `after_brief = true` under `[paper]`.
+- Now, from a terminal: `rafiq paper print` (asks first).
+
+A lock file (`data/paper.lock`) holds the date of the last print, so it never comes out twice.
 
 ## Settings
 

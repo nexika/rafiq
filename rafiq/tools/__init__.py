@@ -106,7 +106,22 @@ OPTIONAL = ("google", "discord", "instagram", "obs", "spotify")
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; the optional ones, Home Assistant, Hue, the smart plugs and presence only
     when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
-    from . import background, content, everyday, finance, lists, media, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
+    from . import (  # noqa: F401  (registers the tools)
+        background,
+        content,
+        everyday,
+        finance,
+        lists,
+        media,
+        memory,
+        notes,
+        paper,
+        pc,
+        scenes,
+        screen,
+        style,
+        web,
+    )
 
     off = set()
     for name in OPTIONAL:
