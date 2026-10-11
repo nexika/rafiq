@@ -271,6 +271,8 @@ function handle(e) {
     case "heard": add("msg you", e.text || "…", "You · " + (LANG[e.tag] || e.tag)); break;
     case "typed": add("msg you", e.text, "You (typed)"); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
+    case "interpret": add("note", (e.on ? "Interpreting: " : "Stopped interpreting: ")
+      + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
     case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
     case "brain": stateEl.dataset.backend = e.backend; break;

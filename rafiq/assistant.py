@@ -8,6 +8,8 @@ wake-word listener for the microphone.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import queue
 import threading
@@ -20,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, notify, overlay, presence, timing, wake
+from . import interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -42,6 +44,8 @@ MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
 LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,6 +84,9 @@ class Events:
         """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
         are not replayed to a panel opened later."""
         event = {"kind": kind, "time": time.time(), **data}
+        # The log is redacted (privacy.RedactFilter); the panel, on this computer only, is not.
+        logger.log(logging.DEBUG if kind == "state" or not keep else logging.INFO, "%s %s", kind,
+                   json.dumps(data, ensure_ascii=False, default=str))
         with self.lock:
             if keep:
                 self.history.append(event)
@@ -296,18 +303,19 @@ class Assistant:
                 return utterance
         return None
 
-    def hear(self, audio: np.ndarray):
+    def hear(self, audio: np.ndarray, languages: list[str] | None = None):
         self.set_state("thinking")
         with timing.Timer("stt", model=getattr(self.stt.local, "size", "")):
-            heard = self.transcribe(audio, hint=self.tag)
+            heard = self.transcribe(audio, hint=self.tag, languages=languages)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
 
-    def transcribe(self, audio: np.ndarray, hint: str | None = None):
+    def transcribe(self, audio: np.ndarray, hint: str | None = None, languages: list[str] | None = None):
         with self.stt_lock:
-            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
-                return self.stt.local.transcribe(audio)
+            # Offline mode: nothing leaves the computer. Interpreting: Whisper, narrowed to the two languages.
+            if modes.offline(self.cfg) or languages:
+                return self.stt.local.transcribe(audio, languages=languages)
             return self.stt.transcribe(audio, hint=hint)
 
     # ------------------------------------------------------------------ talking
@@ -382,6 +390,10 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        pair = interpret.parse_request(text)
+        if pair:
+            self.interpret(pair)
+            return
         if lang.is_show_again(text):
             if not self.overlay.show_again():
                 self.say(lang.phrase("nothing_to_show", tag), tag)
@@ -413,6 +425,15 @@ class Assistant:
         self.publish_spending(tag)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
+    def interpret(self, pair: interpret.Pair) -> None:
+        """Interpreter mode: say what each person says in the other's language until one says stop."""
+        def listen(timeout: float):
+            self.set_state("listening")
+            return self.next_utterance(timeout=timeout)
+
+        interpret.Session(pair, listen, self.hear, self.brain.translate, self.say, self.events.publish).run()
+        self.follow_up_until = 0.0
+
     def publish_spending(self, tag: str) -> None:
         """Show the spending in the panel; say so once a day when a cap is near or reached."""
         self.events.publish("spending", self.budget.summary())
@@ -441,6 +462,10 @@ class Assistant:
     def submit(self, kind: str, **data) -> None:
         self.jobs.put((kind, data))
 
+    def announce(self, text: str, tag: str) -> None:
+        """Say the result of a background task, without the private data in it (privacy.redact)."""
+        self.submit("result", text=text, tag=tag)
+
     def _run_jobs(self) -> None:
         while True:
             try:
@@ -458,6 +483,8 @@ class Assistant:
                     self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "result":
+                    self.say(privacy.redact(data["text"]), data["tag"])
                 elif kind == "show_again":
                     self.overlay.show_again()
                 elif kind == "paper":

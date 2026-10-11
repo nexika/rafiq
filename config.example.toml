@@ -25,6 +25,7 @@ max_seconds = 120               # from the request to the answer
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+mixed = true                    # Egyptian Arabic with English words ("افتحلي الـ settings"): keep them in Latin letters
 end_silence_seconds = 0.7       # this much silence ends what you say; a noisy room adds a little
 stt_engine = "auto"             # auto: Whisper here, the cloud only for stt_by_language or when Whisper can't run
                                 # local: never the cloud; azure or openai: every language
@@ -136,6 +137,9 @@ ask_first = true                # ask before each screenshot that goes to Claude
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[privacy]
+log_days = 30                   # the log (data/logs/rafiq.log) is redacted and deleted after this many days
 
 [spotify]
 enabled = false                 # true after `rafiq spotify-setup`

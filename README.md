@@ -21,6 +21,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Interpreter | "interpret between me and her, Egyptian and German", "ترجم بيني وبينه بالمصري والفرنساوي": each turn is said in the other language until someone says "stop" or "كفاية" |
 | Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
@@ -38,6 +39,10 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
+English words inside Arabic work too: "افتحلي الـ settings", "شغّل الـ playlist بتاعتي" or
+"ابعت email لسارة" reach the brain with the English words in Latin letters. To see how well Whisper
+hears your own mixed speech, record sentences as `name.wav` with their text in `name.txt` and run
+`rafiq stt-score <folder>` (it compares the small and medium models, with and without this handling).
 
 ## Install
 
@@ -51,7 +56,7 @@ git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
 .venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
-.venv/bin/rafiq doctor
+.venv/bin/rafiq doctor       # checks every integration and suggests models for this machine
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
@@ -62,6 +67,10 @@ for a second and fits its speech thresholds to the noise, so stay quiet for a mo
 
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
+
+`rafiq backup` saves your settings, keys and recordings to
+`~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
+uploads anything: the archive holds your keys, so keep it out of public places.
 
 ### Start at login
 
@@ -386,6 +395,9 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+- The log (`~/.config/rafiq/data/logs/rafiq.log`) has email addresses, keys, phone numbers and
+  amounts replaced by a mark, and is deleted after 30 days (`[privacy] log_days`). Results from
+  background tasks are redacted the same way before they are said aloud.
 
 ## Always on
 
