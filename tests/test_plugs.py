@@ -149,7 +149,7 @@ def test_plug_tools_load_only_when_plugs_are_set_up():
 
 
 def test_home_assistant_token_comes_from_the_environment(monkeypatch):
-    monkeypatch.setenv("HASS_TOKEN", "from-env")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "from-env")
     assert config.load()["home_assistant"]["token"] == "from-env"
 
 

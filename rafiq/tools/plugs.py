@@ -245,7 +245,7 @@ def _confirm_off(args: dict) -> str | None:
 @tool("plug_switch", "Turn a smart plug on or off, by its name.",
       {"name": {"type": "string", "description": "the plug's name, e.g. 'PC' or 'desk lamp'"},
        "on": {"type": "boolean", "description": "true to turn it on, false to turn it off"}},
-      required=("name", "on"), confirm=_confirm_off)
+      required=("name", "on"), confirm=_confirm_off, level="critical")
 def plug_switch(name: str, on: bool) -> str:
     plug = find_plug(name)
     if not plug:
@@ -258,7 +258,7 @@ def plug_switch(name: str, on: bool) -> str:
 
 
 @tool("plug_status", "Whether smart plugs are on and how much power they draw now (watts) and have used (kWh).",
-      {"name": {"type": "string", "description": "one plug's name; empty for every plug"}})
+      {"name": {"type": "string", "description": "one plug's name; empty for every plug"}}, level="private")
 def plug_status(name: str = "") -> str:
     if name:
         plug = find_plug(name)
