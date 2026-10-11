@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import kws
+from . import config, kws
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 
 NAME_FORMS = ["Rafiq", "يا رفيق"]
@@ -81,7 +81,7 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
     out = kws.folder()
     for old in out.glob("*.wav"):
         old.unlink()
-    mic, vad = Microphone(), SileroVAD()
+    mic, vad = Microphone.from_config(config.load()), SileroVAD()
     mel = kws.Mel()
 
     def record(prompt: str, timeout: float = 8.0, required: bool = True) -> np.ndarray | None:

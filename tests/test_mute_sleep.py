@@ -12,7 +12,11 @@ from rafiq.__main__ import main
 
 class FakeMic:
     def __init__(self, **_kwargs):
-        self.frames, self.muted = queue.Queue(), False
+        self.frames, self.muted, self.device = queue.Queue(), False, None
+
+    @classmethod
+    def from_config(cls, cfg):
+        return cls()
 
     def read(self, timeout=0.5):
         try:
@@ -50,12 +54,18 @@ class FakeSpeaker:
     def stop(self):
         pass
 
+    def stream(self):
+        return SimpleNamespace(put=self.say, wait=lambda: None, close=lambda: True)
+
 
 class FakeBrain:
-    def __init__(self, cfg, tools, confirm, on_event=None):
+    def __init__(self, cfg, tools, confirm, on_event=None, facts=None):
         self.asked = []
 
-    def think(self, text, tag, ctx=None):
+    def backends(self):
+        return ["ollama"]
+
+    def think(self, text, tag, ctx=None, on_speech=None):
         self.asked.append(text)
         return "an answer"
 
