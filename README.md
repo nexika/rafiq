@@ -52,7 +52,7 @@ git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
 .venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
-.venv/bin/rafiq doctor
+.venv/bin/rafiq doctor       # checks every integration and suggests models for this machine
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
@@ -63,6 +63,10 @@ for a second and fits its speech thresholds to the noise, so stay quiet for a mo
 
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
+
+`rafiq backup` saves your settings, keys and recordings to
+`~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
+uploads anything: the archive holds your keys, so keep it out of public places.
 
 ### Start at login
 
@@ -375,6 +379,9 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+- The log (`~/.config/rafiq/data/logs/rafiq.log`) has email addresses, keys, phone numbers and
+  amounts replaced by a mark, and is deleted after 30 days (`[privacy] log_days`). Results from
+  background tasks are redacted the same way before they are said aloud.
 
 ## Always on
 

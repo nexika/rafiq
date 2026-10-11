@@ -8,6 +8,8 @@ wake-word listener for the microphone.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import queue
 import threading
@@ -20,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import interpret, kws, lang, modes, overlay, presence, timing, wake
+from . import interpret, kws, lang, modes, overlay, presence, privacy, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -42,6 +44,8 @@ MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
 LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,6 +84,9 @@ class Events:
         """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
         are not replayed to a panel opened later."""
         event = {"kind": kind, "time": time.time(), **data}
+        # The log is redacted (privacy.RedactFilter); the panel, on this computer only, is not.
+        logger.log(logging.DEBUG if kind == "state" or not keep else logging.INFO, "%s %s", kind,
+                   json.dumps(data, ensure_ascii=False, default=str))
         with self.lock:
             if keep:
                 self.history.append(event)
@@ -445,6 +452,10 @@ class Assistant:
     def submit(self, kind: str, **data) -> None:
         self.jobs.put((kind, data))
 
+    def announce(self, text: str, tag: str) -> None:
+        """Say the result of a background task, without the private data in it (privacy.redact)."""
+        self.submit("result", text=text, tag=tag)
+
     def _run_jobs(self) -> None:
         while True:
             try:
@@ -460,6 +471,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "result":
+                    self.say(privacy.redact(data["text"]), data["tag"])
                 elif kind == "show_again":
                     self.overlay.show_again()
                 elif kind == "paper":
