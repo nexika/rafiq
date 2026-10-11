@@ -1,5 +1,5 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations.
+a text box, yes/no buttons for confirmations, the mode switch, the choice of style and a model picker.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -15,6 +15,9 @@ import queue
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
+
+from . import modes, persona
+from .brain import BrainError
 
 MAX_BODY = 10_000
 
@@ -69,6 +72,9 @@ def make_handler(assistant, token: str, port: int):
                 for event in list(assistant.events.history):
                     self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
                 self.wfile.write(f"data: {json.dumps({'kind': 'state', 'state': assistant.state})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'kind': 'mode', 'mode': assistant.mode})}\n\n".encode())
+                style = persona.active(getattr(assistant, "cfg", {}))
+                self.wfile.write(f"data: {json.dumps({'kind': 'persona', 'persona': style})}\n\n".encode())
                 self.wfile.flush()
                 while True:
                     try:
@@ -112,10 +118,32 @@ def make_handler(assistant, token: str, port: int):
                 assistant.submit("text", text=data["text"][:2000])
             elif path == "/api/listen":
                 assistant.submit("listen")
+            elif path == "/api/mute" and isinstance(data.get("muted", False), bool):
+                assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put(data["yes"])
+            elif path == "/api/mode" and data.get("mode") in modes.MODES:
+                assistant.submit("mode", mode=data["mode"])
+            elif path == "/api/persona" and data.get("name") in persona.PERSONAS:
+                persona.choose(data["name"])
+                assistant.events.publish("persona", {"persona": data["name"]})
             elif path == "/api/stop":
                 assistant.speaker.stop()
+            elif path == "/api/brain":
+                return self._send(200, json.dumps(assistant.brain.status()).encode())
+            elif path == "/api/models" and isinstance(data.get("backend"), str):
+                try:
+                    models = assistant.brain.models(data["backend"])
+                except BrainError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                return self._send(200, json.dumps({"models": models}).encode())
+            elif path == "/api/model" and isinstance(data.get("backend"), str) and isinstance(data.get("model"), str):
+                try:   # the provider is asked first, so a model the key cannot use is never picked
+                    assistant.brain.choose(data["backend"], data["model"])
+                except BrainError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                assistant.events.publish("brain", {"backend": data["backend"], "mode": data["backend"],
+                                                   "model": data["model"]})
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')
