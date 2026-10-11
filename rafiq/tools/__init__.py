@@ -100,13 +100,13 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 # Skills that need an account or another app, loaded only when enabled in their config section.
-OPTIONAL = ("google", "discord", "instagram", "obs")
+OPTIONAL = ("google", "discord", "instagram", "obs", "spotify")
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; the optional ones, Home Assistant, Hue, the smart plugs and presence only
     when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
-    from . import background, everyday, finance, lists, media, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
+    from . import background, content, everyday, finance, lists, media, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
     for name in OPTIONAL:

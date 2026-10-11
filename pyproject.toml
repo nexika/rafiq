@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 offline-voice = ["piper-tts>=1.2"]
+paper = ["playwright>=1.45"]
 obs = ["obsws-python>=1.6"]
 nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
