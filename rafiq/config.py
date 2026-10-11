@@ -104,6 +104,7 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
     # accounts: usernames to report on; empty for every account linked to the token.
     "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
     "presence": {
