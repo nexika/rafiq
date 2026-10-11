@@ -1,209 +1,208 @@
+import socket
+import threading
+
 import numpy as np
 import pytest
 
-from rafiq import __main__ as cli
-from rafiq import satellite
-from rafiq.satellite import LinkClosed, Refused, Satellite
+from rafiq import config, satellite
+from rafiq.brain import with_note
+from rafiq.stt import Heard
+from rafiq.tools import Tool
 
-SECOND = np.full(16000, 0.25, dtype="float32")
-
-
-class FakeLink:
-    """The server's side of the connection: a script of messages to receive, and what was sent."""
-
-    def __init__(self, incoming=()):
-        self.incoming = list(incoming)
-        self.sent = []
-        self.closed = False
-
-    def send(self, message):
-        self.sent.append(message)
-
-    def recv(self, timeout):
-        if not self.incoming:
-            raise LinkClosed("the server went away")
-        item = self.incoming.pop(0)
-        return None if item == "nothing" else item
-
-    def close(self):
-        self.closed = True
-
-    def kinds(self):
-        return [m["type"] if isinstance(m, dict) else "pcm" for m in self.sent]
+TOKEN = "k" * 32
 
 
-class FakeEars:
-    """Utterances heard, in order; None means nothing was said before the timeout."""
-
-    def __init__(self, utterances=()):
-        self.utterances = list(utterances)
-        self.muted = []
-        self.drained = 0
-
-    def next_utterance(self, timeout):
-        return self.utterances.pop(0) if self.utterances else None
-
-    def mute(self, muted):
-        self.muted.append(muted)
-
-    def drain(self):
-        self.drained += 1
+def make_cfg(**device):
+    cfg = config.load()
+    cfg["satellites"]["devices"] = {"kitchen": {"token": TOKEN, "room": "kitchen", **device}}
+    return cfg
 
 
-class FakePlayer:
-    def __init__(self):
-        self.played = []
+class FakeBrain:
+    """Answers from a script; asks to confirm when the request mentions shutting down."""
 
-    def play(self, audio, rate):
-        self.played.append((audio, rate))
+    def __init__(self, tools, confirm, log):
+        self.tools, self.confirm, self.log = tools, confirm, log
 
-
-def make(link, ears=None, score=0.1, threshold=0.3, **kw):
-    return Satellite(server="ws://192.168.1.10:8766/satellite", name="kitchen", token="t" * 32,
-                     connect=lambda url: link, ears=ears or FakeEars(), player=FakePlayer(),
-                     wake_score=lambda audio: score, threshold=threshold, **kw)
-
-
-WELCOME = {"type": "welcome", "room": "kitchen"}
+    def think(self, text, tag, ctx):
+        self.log.append((text, tag, ctx.room, sorted(self.tools)))
+        if "shut down" in text:
+            return "Shutting down." if self.confirm("shut down the computer", tag) else "I didn't."
+        return f"It is noon in the {ctx.room}."
 
 
-def test_hello_names_the_satellite_and_carries_its_token():
-    link = FakeLink([WELCOME])
-    with pytest.raises(LinkClosed):
-        make(link).session()
-    hello = link.sent[0]
-    assert hello["type"] == "hello" and hello["name"] == "kitchen" and hello["token"] == "t" * 32
-    assert hello["protocol"] == satellite.PROTOCOL and hello["rate"] == 16000 and hello["format"] == "s16le"
+def tools():
+    return {"get_time": Tool("get_time", "time", lambda: "noon"),
+            "power": Tool("power", "power off", lambda: "done", confirm="shut down the computer")}
 
 
-def test_a_refused_satellite_stops_instead_of_retrying():
-    link = FakeLink([{"type": "refused", "reason": "unknown token"}])
-    with pytest.raises(Refused, match="unknown token"):
-        make(link).session()
-    assert make(FakeLink([{"type": "refused", "reason": "x"}])).run() == 2
+@pytest.fixture
+def hub():
+    """A hub on a free port of this computer, with a fake transcriber that 'hears' a queued text."""
+    heard, log, servers = [], [], []
+
+    def start(cfg=None):
+        cfg = cfg or make_cfg()
+        h = satellite.Hub(cfg, transcribe=lambda audio: Heard(heard.pop(0), "en", 1.0),
+                          make_brain=lambda tools, confirm: FakeBrain(tools, confirm, log),
+                          tools=tools(), scheduler=None)
+        server = h.serve("127.0.0.1", 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return server.server_address[1]
+
+    yield start, heard, log
+    for server in servers:
+        server.shutdown()
+        server.server_close()
 
 
-def test_the_name_heard_sends_the_utterance_to_the_server():
-    link = FakeLink([WELCOME, "nothing"])
-    with pytest.raises(LinkClosed):
-        make(link, FakeEars([SECOND]), score=0.1, threshold=0.3).session()
-    assert link.kinds()[1] == "wake" and link.kinds()[-1] == "end"
-    assert link.sent[1]["score"] == pytest.approx(0.1)
-    pcm = b"".join(m for m in link.sent if isinstance(m, bytes))
-    assert len(pcm) == 16000 * 2
-    assert np.frombuffer(pcm, dtype="<i2")[0] == int(0.25 * 32767)
+def audio(seconds=0.5):
+    return np.zeros(int(seconds * 16000), dtype="float32")
 
 
-def test_speech_that_is_not_the_name_stays_on_the_satellite():
-    link = FakeLink([WELCOME, "nothing"])
-    with pytest.raises(LinkClosed):
-        make(link, FakeEars([SECOND]), score=0.5, threshold=0.3).session()
-    assert link.kinds() == ["hello"]
+def test_pcm_round_trip_keeps_the_samples():
+    samples = np.array([0.0, 0.5, -0.5, 1.0, -1.0], dtype="float32")
+    back = satellite.from_pcm(satellite.to_pcm(samples))
+    assert np.allclose(back, samples, atol=1 / 32767)
 
 
-def test_when_the_server_listens_the_next_utterance_goes_without_the_name():
-    link = FakeLink([WELCOME, {"type": "listen", "seconds": 6}, "nothing"])
-    ears = FakeEars([SECOND])
-    with pytest.raises(LinkClosed):
-        make(link, ears, score=9.0, threshold=0.3).session()
-    assert link.kinds()[1:] == ["pcm", "pcm", "pcm", "pcm", "end"]
+def test_frames_round_trip_over_a_socket():
+    a, b = socket.socketpair()
+    with a, b:
+        satellite.send_json(a, {"type": "hello", "name": "kitchen"})
+        satellite.send_audio(a, np.array([0.25, -0.25], dtype="float32"))
+        assert satellite.recv(b) == ("json", {"type": "hello", "name": "kitchen"})
+        kind, samples = satellite.recv(b)
+        assert kind == "audio" and np.allclose(samples, [0.25, -0.25], atol=1e-4)
+        a.close()
+        assert satellite.recv(b) is None
 
 
-def test_nothing_said_after_listen_is_reported():
-    link = FakeLink([WELCOME, {"type": "listen", "seconds": 6}])
-    with pytest.raises(LinkClosed):
-        make(link, FakeEars([])).session()
-    assert link.kinds()[1:] == ["silence"]
+def test_an_oversized_frame_is_refused():
+    a, b = socket.socketpair()
+    with a, b:
+        a.sendall(b"J" + (satellite.MAX_FRAME + 1).to_bytes(4, "big"))
+        with pytest.raises(satellite.ProtocolError):
+            satellite.recv(b)
 
 
-def test_the_answer_is_played_with_the_microphone_muted():
-    tone = (np.arange(800) % 100).astype("<i2")
-    link = FakeLink([WELCOME, {"type": "play", "rate": 22050}, tone[:400].tobytes(), tone[400:].tobytes(),
-                     {"type": "play_end"}])
-    ears = FakeEars()
-    sat = make(link, ears)
-    with pytest.raises(LinkClosed):
-        sat.session()
-    (audio, rate), = sat.player.played
-    assert rate == 22050 and np.array_equal(audio, tone)
-    assert ears.muted == [True, False] and ears.drained == 1
+def test_devices_need_a_long_token():
+    cfg = config.load()
+    cfg["satellites"]["devices"] = {"kitchen": {"token": TOKEN, "room": "kitchen"}, "weak": {"token": "1234"}}
+    assert list(satellite.devices(cfg)) == ["kitchen"]
 
 
-def test_it_reconnects_with_growing_waits_until_stopped():
-    attempts, waits = [], []
-
-    def connect(url):
-        attempts.append(url)
-        if len(attempts) == 4:
-            sat.stop()
-        raise OSError("connection refused")
-
-    sat = Satellite(server="ws://10.0.0.2:8766/satellite", name="kitchen", token="t" * 32, connect=connect,
-                    ears=FakeEars(), player=FakePlayer(), wake_score=lambda a: 1.0, threshold=0.3,
-                    sleep=waits.append)
-    assert sat.run() == 0
-    assert waits == [1, 2, 4]
+def test_authenticate_checks_name_and_token():
+    devices = satellite.devices(make_cfg())
+    assert satellite.authenticate(devices, "kitchen", TOKEN).room == "kitchen"
+    assert satellite.authenticate(devices, "kitchen", "x" * 32) is None
+    assert satellite.authenticate(devices, "garage", TOKEN) is None
+    assert satellite.authenticate(devices, "kitchen", None) is None
 
 
-def test_a_welcomed_session_resets_the_wait():
-    links = [FakeLink([WELCOME]), FakeLink([WELCOME])]
-    waits = []
-
-    def connect(url):
-        if not links:
-            sat.stop()
-            raise OSError("gone")
-        return links.pop(0)
-
-    sat = Satellite(server="ws://10.0.0.2:8766/satellite", name="kitchen", token="t" * 32, connect=connect,
-                    ears=FakeEars(), player=FakePlayer(), wake_score=lambda a: 1.0, threshold=0.3,
-                    sleep=waits.append)
-    sat.run()
-    assert waits == [1, 1]
+def test_room_tools_hide_blocked_and_risky_tools():
+    device = satellite.devices(make_cfg(blocked_tools=["get_time"]))["kitchen"]
+    assert list(satellite.room_tools(tools(), device)) == ["power"]
+    device = satellite.devices(make_cfg(risky="block"))["kitchen"]
+    assert list(satellite.room_tools(tools(), device)) == ["get_time"]
 
 
-@pytest.mark.parametrize("attempt, wait", [(0, 1), (1, 2), (3, 8), (5, 30), (40, 30)])
-def test_backoff_doubles_and_stops_at_thirty_seconds(attempt, wait):
-    assert satellite.backoff(attempt) == wait
+def test_the_note_names_the_room():
+    assert "in the kitchen" in with_note("turn on the light", "en", room="kitchen")
+    assert "in the" not in with_note("turn on the light", "en")
 
 
-@pytest.mark.parametrize("url, ok", [
-    ("ws://192.168.1.10:8766/satellite", True),
-    ("wss://rafiq.example.org/satellite", True),
-    ("ws://rafiq.example.org/satellite", False),     # a token in clear text over the internet
-    ("http://192.168.1.10:8766", False),
-    ("", False),
+def test_a_wrong_token_is_turned_away(hub):
+    start, _, _ = hub
+    port = start()
+    with pytest.raises(satellite.ProtocolError, match="token"):
+        satellite.Client("127.0.0.1", port, "kitchen", "x" * 32).connect()
+
+
+def test_a_request_is_answered_with_the_room_known(hub):
+    start, heard, log = hub
+    port = start()
+    heard.append("Rafiq, what time is it?")
+    spoken = []
+    with satellite.Client("127.0.0.1", port, "kitchen", TOKEN) as client:
+        assert client.room == "kitchen"
+        said = client.request(audio(), speak=lambda text, tag: spoken.append(text))
+    assert said == ["It is noon in the kitchen."] == spoken
+    assert log[0][:3] == ("what time is it?", "en", "kitchen")
+
+
+def test_a_risky_action_is_confirmed_on_the_satellite(hub):
+    start, heard, _ = hub
+    port = start()
+    heard += ["shut down the computer", "yes"]
+    spoken = []
+    with satellite.Client("127.0.0.1", port, "kitchen", TOKEN) as client:
+        said = client.request(audio(), speak=lambda text, tag: spoken.append(text), listen=lambda: audio())
+    assert said[-1] == "Shutting down."
+    assert any("shut down the computer" in s for s in spoken[:-1])
+
+
+def test_a_risky_action_answered_no_is_not_done(hub):
+    start, heard, _ = hub
+    port = start()
+    heard.append("shut down the computer")
+    with satellite.Client("127.0.0.1", port, "kitchen", TOKEN) as client:
+        said = client.request(audio(), speak=lambda text, tag: None, listen=lambda: False)
+    assert said[-1] == "I didn't."
+
+
+def test_blocked_tools_never_reach_the_brain_in_that_room(hub):
+    start, heard, log = hub
+    port = start(make_cfg(risky="block"))
+    heard.append("what time is it")
+    with satellite.Client("127.0.0.1", port, "kitchen", TOKEN) as client:
+        client.request(audio(), speak=lambda text, tag: None)
+    assert log[0][3] == ["get_time"]
+
+
+def test_simulate_reports_the_answer_and_latency(hub):
+    start, heard, _ = hub
+    port = start()
+    heard.append("what time is it")
+    result = satellite.simulate("127.0.0.1", port, "kitchen", TOKEN, audio())
+    assert result.said == ["It is noon in the kitchen."]
+    assert result.room == "kitchen"
+    assert 0 <= result.seconds < 5
+
+
+@pytest.mark.parametrize("address, expected", [
+    ("192.168.1.10:9000", ("192.168.1.10", 9000)),
+    ("rafiq.lan", ("rafiq.lan", 8766)),
+    ("[fd00::1]:8766", ("fd00::1", 8766)),
 ])
-def test_server_address_must_be_websocket_and_private_unless_encrypted(url, ok):
-    if ok:
-        satellite.check_server(url)
-    else:
-        with pytest.raises(ValueError):
-            satellite.check_server(url)
+def test_parse_hub(address, expected):
+    assert satellite.parse_hub(address) == expected
 
 
-def test_service_unit_runs_the_satellite_and_restarts_it():
-    unit = satellite.service_unit("/opt/rafiq/.venv/bin/python")
-    assert "ExecStart=/opt/rafiq/.venv/bin/python -m rafiq satellite" in unit
-    assert "Restart=always" in unit and "RestartPreventExitStatus=2" in unit
-    assert "WantedBy=default.target" in unit
+def test_satellite_simulate_command_prints_the_answer(hub, tmp_path, capsys):
+    import wave
+
+    from rafiq.__main__ import main
+
+    start, heard, _ = hub
+    port = start()
+    heard.append("what time is it")
+    path = tmp_path / "request.wav"
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(satellite.to_pcm(audio()))
+    assert main(["satellite", "simulate", str(path), "--hub", f"127.0.0.1:{port}", "--name", "kitchen",
+                 "--token", TOKEN]) == 0
+    out = capsys.readouterr().out
+    assert "said: It is noon in the kitchen." in out and "answered in" in out
 
 
-def test_the_command_explains_a_missing_server(capsys):
-    assert cli.main(["satellite"]) == 1
-    assert "server" in capsys.readouterr().err
+def test_satellite_token_command_prints_a_config_snippet(capsys):
+    from rafiq.__main__ import main
 
-
-def test_the_command_prints_the_service_unit(capsys):
-    assert cli.main(["satellite", "--unit"]) == 0
-    assert "[Service]" in capsys.readouterr().out
-
-
-def test_the_token_comes_from_the_environment_first(monkeypatch, rafiq_home):
-    rafiq_home.mkdir(parents=True)
-    (rafiq_home / "config.toml").write_text('[satellite]\ntoken = "from-file"\n')
-    from rafiq import config
-
-    assert satellite.token(config.load()) == "from-file"
-    monkeypatch.setenv("RAFIQ_SATELLITE_TOKEN", "from-env")
-    assert satellite.token(config.load()) == "from-env"
+    assert main(["satellite", "token", "--name", "garage", "--room", "garage"]) == 0
+    out = capsys.readouterr().out
+    assert "[satellites.devices.garage]" in out and 'room = "garage"' in out

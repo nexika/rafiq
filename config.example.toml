@@ -3,18 +3,53 @@
 user_name = ""                  # how Rafiq refers to you
 
 [brain]
-mode = "auto"                   # auto: Claude when ANTHROPIC_API_KEY is set, else Ollama
+mode = "auto"                   # auto: Claude, then OpenAI, for each whose key is set; then Ollama
+profile = "everyday"            # the mode at start: everyday, quality or offline (switch by voice or in the panel)
 claude_model = "claude-haiku-5-5"
+quality_model = "claude-opus-5-5"   # quality mode's model
+openai_model = "gpt-5-mini"     # needs OPENAI_API_KEY
+openai_url = "https://api.openai.com/v1"   # or any server that speaks OpenAI's chat completions
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
+ollama_tools = "local"          # the tools Ollama gets: "local" (a smaller set), "all", or a list of names
+persona = "neutral"             # neutral, concise or butler (a dry, witty butler); "be more concise" switches it by voice
+
+[brain.limits]                  # a request that keeps calling tools is stopped, and Rafiq says so
+max_rounds = 6                  # model requests per answer
+max_tool_calls = 12             # tool calls per answer
+max_seconds = 120               # from the request to the answer
+
+[brain.prices]                  # dollars per million tokens, to show Claude's spend in the panel
+# claude-haiku-5-5 = { input = 1.0, output = 5.0 }
 
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+mixed = true                    # Egyptian Arabic with English words ("افتحلي الـ settings"): keep them in Latin letters
+end_silence_seconds = 0.7       # this much silence ends what you say; a noisy room adds a little
+stt_engine = "auto"             # auto: Whisper here, the cloud only for stt_by_language or when Whisper can't run
+                                # local: never the cloud; azure or openai: every language
+offline = false                 # true: what you say never leaves this computer
+openai_model = "gpt-4o-mini-transcribe"   # needs OPENAI_API_KEY
+
+[speech.stt_by_language]        # send a language Whisper hears badly to a cloud service
+# ar = "azure"                  # Azure's Egyptian recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+
+[speech.azure_locales]
+ar = "ar-EG"                    # or ar-SA for Modern Standard Arabic
+
+[audio]
+device = ""                     # a microphone by index or part of its name (`rafiq doctor` lists them)
+rate = 0                        # the sample rate to try first; 0: 16 kHz, else whatever the device takes
+auto_calibration = true         # listen to the room for a second at start-up and fit the speech thresholds
 
 [voice]
-engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper
-rate = "+0%"                    # speak faster ("+10%") or slower ("-10%")
+engine = "auto"                 # auto: Azure, ElevenLabs, Kokoro, then Piper, each when it is set up
+rate = "+0%"                    # speak faster ("+10%") or slower ("-10%"); Azure and Edge only
+
+[voice.elevenlabs_voices]       # ElevenLabs voice ids (set ELEVENLABS_API_KEY); default reads every language
+# default = "JBFqnCBsd6RMkjVDRZzb"
+# ar-EG = "<an Egyptian voice id from the Voice Library>"
 
 [voice.voices]                  # Azure voice names: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
 en = "en-US-AndrewNeural"
@@ -24,18 +59,224 @@ de = "de-DE-ConradNeural"
 ar = "ar-SA-HamedNeural"
 ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 
+[budget]
+daily_cap = 0.0                 # in dollars; 0 is no cap. At 80% Rafiq warns, at the cap it goes offline
+monthly_cap = 0.0               # until the next day (or month)
+
+[budget.token_prices]           # dollars per million tokens; check the current Claude price list
+claude-haiku-5-5 = { input = 1.0, output = 5.0 }
+
+[budget.character_prices]       # dollars per million characters read aloud
+azure = 15.0
+[tasks]                         # background research, said aloud when ready; needs Claude
+model = ""                      # empty: the brain's claude_model; each task's cost is shown in the panel
+[audio.outputs]                 # "switch to the headphones": a name -> part of the output's name in `wpctl status`
+# headphones = "WH-1000XM4"     # headphones, speakers and tv also match "casque", "Lautsprecher", "سماعات"...
+# desk = "USB Audio"
+
+[interruption]                  # say "stop", "attends", "espera", "warte", "توقف" or "استنى" over Rafiq
+enabled = true
+factor = 1.8                    # how much louder than Rafiq's own voice you must be; raise it if it stops itself
+echo_cancel = true              # after `pactl load-module module-echo-cancel`, listen through it
+
 [place]
-city = ""                       # for "what's the weather?" without a city
+city = ""                       # for "what's the weather?" without a city; empty: GNOME's location service
+ip_lookup = false               # true: if GNOME has no location, find it from your IP (sends it to ipapi.co)
+
+[notes]
+folder = ""                     # empty: ~/.config/rafiq/data/notes; or a folder you choose, such as an Obsidian vault
+[pc]
+shutdown_delay = 30             # "shut down" waits this long; "cancel the shutdown" stops it. 0: at once
 
 [panel]
 port = 8765
 
+[prayer]
+enabled = false                 # prayer times, the Hijri date, Ramadan countdowns, Quran recitation
+method = "egyptian"             # egyptian, umm_al_qura, mwl, isna, karachi, dubai, kuwait, qatar, singapore, france
+asr = "standard"                # or "hanafi"
+# latitude = 30.0444            # else the city in [place]
+# longitude = 31.2357
+# timezone = "Africa/Cairo"     # else this computer's
+hijri_adjust = 0                # +1 or -1 day to match the local moon sighting
+reciter = "alafasy"             # abdul_basit, husary, minshawi, sudais, muaiqly
+language = "en"                 # the language reminders are said in: en, ar, ar-EG, ...
+
+[prayer.adjust]                 # minutes to add to a calculated time, e.g. fajr = 2
+[prayer.reminders]              # minutes before a prayer, e.g. fajr = 10; none until you set them
+[history]
+retention_days = 7              # what you asked and Rafiq answered, kept on this computer; 0 keeps nothing
+[dev]
+project = ""                    # the folder for "run the tests", "what's my git status?" (or set it in the panel)
+
+[overlay]
+display = "auto"                # answers on screen as desktop notifications; "off" for none
+seconds = 8                     # how long an answer stays on screen
+silent = false                  # true: answer on screen only, never out loud
+
+[satellites]                    # devices in other rooms (rafiq satellite token --name kitchen)
+host = "127.0.0.1"              # this computer's address on a private network, to let satellites in
+port = 8766
+tls_cert = ""                   # with tls_key: encrypt the connection
+tls_key = ""
+
+# [satellites.devices.kitchen]
+# token = "..."
+# room = "kitchen"
+# risky = "ask"                 # or "block": no actions that need a yes from this room
+# blocked_tools = []
+
+[satellite]                     # this computer as a satellite of another Rafiq (rafiq satellite run)
+hub = ""                        # "192.168.1.10:8766"
+name = ""
+token = ""
+tls = false
+tls_ca = ""                     # for a self-signed hub certificate
+
+[paper]                         # the morning paper: rafiq paper (rafiq paper --demo to try it)
+title = "Rafiq"
+languages = ["en"]              # ["en", "ar"] prints headings in both; Arabic first lays the page out right to left
+feeds = []                      # RSS or Atom addresses, e.g. ["https://feeds.bbci.co.uk/news/rss.xml"]
+tech_feeds = []
+priorities = []                 # ["Send the report"]
+deadlines = []                  # [{title = "Tax return", date = "2026-10-15"}]
+printer = ""                    # a CUPS printer name (lpstat -p); empty: the default printer
+file = ""                       # the day's PDF to print, "{date}" becomes YYYY-MM-DD; empty: data/paper/<date>.pdf
+after_brief = false             # also offer to print it after the first brief of the day
+
+[phone]                         # notes and commands from an iOS or Android shortcut: `rafiq phone`
+enabled = false
+host = "127.0.0.1"              # this computer only; "0.0.0.0" to reach it on your home Wi-Fi
+port = 8767
+
+[screen]
+ollama_model = ""               # a local vision model (e.g. "qwen2.5vl:7b") to read the screen offline
+ask_first = true                # ask before each screenshot that goes to Claude, in the cloud
+
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
-[satellite]                     # only on a satellite (rafiq satellite), see docs/satellite.md
-server = ""                     # the main computer: ws://192.168.1.10:8766/satellite, or wss:// elsewhere
-name = ""                       # the room; default: the host name
-token = ""                      # or RAFIQ_SATELLITE_TOKEN
-input_device = ""               # "" for the default, a number, or part of the device name
-output_device = ""
+[nudges]                        # "time to leave for your 3 pm appointment", from the travel time
+enabled = false                 # needs Google and OPENROUTESERVICE_API_KEY (free at openrouteservice.org)
+origin = ""                     # the address you leave from
+mode = "driving"                # driving, cycling or walking
+calendars = ["primary"]         # the Google calendar ids to watch
+buffer_minutes = 5              # leave this much earlier than the trip itself
+quiet_hours = ["22:00", "07:00"]
+language = ""                   # empty: the event's language, else the one you last spoke
+[privacy]
+log_days = 30                   # the log (data/logs/rafiq.log) is redacted and deleted after this many days
+
+[spotify]
+enabled = false                 # true after `rafiq spotify-setup`
+client_id = ""                  # your Spotify developer app (or SPOTIFY_CLIENT_ID)
+port = 8888                     # the app's redirect URI must be http://127.0.0.1:8888/callback
+
+[deadlines]                     # deadlines from iCal feeds (the .ics or webcal:// address a calendar publishes)
+feeds = []                      # e.g. [{ name = "Loopstr", url = "https://..." }] or ["https://..."]
+cache_minutes = 15
+
+[brief]
+at_first_start = false          # true: say the daily brief at the first start of each day
+language = "en"                 # en, fr, es, de, ar or ar-EG
+
+[discord]
+enabled = false                 # true once your bot is invited; its token goes in DISCORD_BOT_TOKEN
+user_id = ""                    # your Discord user id, for "who mentioned me"
+
+[instagram]
+enabled = false                 # true after `rafiq instagram-setup <token>`
+accounts = []                   # usernames to report on; empty for all linked accounts
+# app_id and app_secret of your Meta app, or set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET
+
+[home_assistant]                # Nest, Hue, smart plugs...: profile > long-lived access token in Home Assistant
+url = ""                        # e.g. http://homeassistant.local:8123
+token = ""                      # or set HOME_ASSISTANT_TOKEN
+
+[wake_on_lan]                   # "wake the gaming PC"; see docs/wake-on-lan.md
+broadcast = "255.255.255.255"   # or your network's, e.g. "192.168.1.255"
+port = 9
+
+[wake_on_lan.machines]          # name -> network card address (`ip link` on that computer)
+# "gaming pc" = "aa:bb:cc:dd:ee:ff"
+# nas = { mac = "11:22:33:44:55:66", broadcast = "192.168.2.255" }
+
+# Games and launchers the app menu does not show. "Launch Borderlands" opens them; "add an app called X"
+# adds one to apps.json in this folder, after asking. Each runs as an argument list, never a shell line.
+# [apps."Borderlands 2"]
+# steam = 49520                 # the game id, or "steam://rungameid/49520"
+# [apps.Minecraft]
+# flatpak = "com.mojang.Minecraft"
+# [apps.RetroArch]
+# command = ["retroarch", "--fullscreen"]
+
+# Scenes: say a name (in any language you list) and Rafiq runs the steps, each a tool call. Steps that
+# change something (power) are asked about first; a step whose tool is missing is skipped.
+[scenes.film]
+names = ["film mode", "mode film", "modo película", "Filmmodus", "وضع الفيلم", "مود الفيلم"]
+steps = [
+    { tool = "volume", args = { level = 40 } },
+]
+
+# Built in: "turn everything off" (and the same in the other languages) offers to shut down.
+# Put your music and lights steps before the power step (tool names depend on what is set up):
+# [scenes.all_off]
+# steps = [{ tool = "music_pause" }, { tool = "lights", args = { on = false } },
+#          { tool = "power", args = { action = "shutdown" } }]
+
+# [scenes.morning]
+# names = ["good morning", "bonjour"]
+# steps = [
+#     { tool = "open_app", args = { name = "Spotify" } },
+#     { tool = "volume", args = { level = 30 }, hours = [5, 12] },   # only from 05:00 to 12:00
+#     { tool = "daily_brief", speak = true },                          # read its answer aloud
+# ]
+
+[day_start]
+scene = ""                      # e.g. "morning": runs at the first start of each day
+
+[hue]
+enabled = false                 # true after `rafiq hue-setup`
+
+[hue.rooms]                     # names you say -> the Hue app's room names, for other languages
+# "الصالة" = "Living room"
+# "chambre" = "Bedroom"
+
+# Smart plugs: one [[plugs]] block per plug. See the README for Home Assistant.
+# [[plugs]]
+# name = "PC"
+# kind = "shelly"               # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
+# host = "192.168.1.40"
+# ask_before_off = true         # confirm out loud before turning it off
+
+[presence]                      # react when your phone leaves or comes home (see the README)
+phone_ip = ""                   # the phone's fixed IP, e.g. "192.168.1.20"; empty: off
+phone_mac = ""                  # optional; only this MAC counts
+away_minutes = 10               # off the Wi-Fi this long before the away scene
+away_command = []               # the away scene, e.g. ["/home/you/bin/lights", "off"]
+home_command = []               # the welcome-home scene
+welcome = true                  # also say "welcome home"
+
+[obs]                           # OBS Studio 28+: Tools > WebSocket Server Settings > Enable
+enabled = false                 # true to say "start recording", "switch to the camera scene", "clip that"
+host = "localhost"
+port = 4455
+password = ""                   # or set OBS_WEBSOCKET_PASSWORD
+
+[server]                        # rafiq run --server: the brain only, for `rafiq agent` on a PC
+host = "127.0.0.1"              # a LAN or Tailscale address; any other needs tls_cert and tls_key
+port = 8766
+tls_cert = ""
+tls_key = ""
+
+[agent]                         # rafiq agent: lend this PC to a server; the token goes in RAFIQ_AGENT_TOKEN
+server = ""                     # e.g. "http://100.101.12.3:8766"
+name = ""                       # as given to `rafiq agent-token NAME` on the server
+
+[gestures]
+enabled = false                 # webcam hand gestures at start (pip install -e ".[gestures]"); see README
+hold_seconds = 0.6              # how long to hold a gesture; `rafiq gestures calibrate` tunes these
+cooldown_seconds = 1.0          # the pause before the next gesture counts
+camera = 0                      # which webcam
+[notify]
+quiet_hours = ""                # e.g. "22:00-07:00": `rafiq notify` messages are shown, not spoken
