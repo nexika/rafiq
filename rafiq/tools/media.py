@@ -95,7 +95,7 @@ def direct(text: str, tag: str, opener: Callable[[str], object] | None = None) -
 
 @tool("play_media", "Open a series, film, song or artist on Netflix, YouTube or Spotify (its search page).",
       {"service": {"type": "string", "enum": list(NAMES)}, "query": {"type": "string"}},
-      required=("service", "query"))
+      required=("service", "query"), level="act")
 def play_media(service: str, query: str) -> str:
     service = service.lower().strip()
     if service not in NAMES:

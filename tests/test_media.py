@@ -69,9 +69,22 @@ class FakeBrain:
     def __init__(self):
         self.asked = []
 
-    def think(self, text, tag, ctx=None):
+    def think(self, text, tag, ctx=None, on_speech=None):
         self.asked.append(text)
         return "from the model"
+
+
+class FakeStream:
+    def put(self, text):
+        pass
+
+    def close(self):
+        pass
+
+
+class FakeSpeaker:
+    def stream(self):
+        return FakeStream()
 
 
 def bare_assistant(said):
@@ -82,6 +95,9 @@ def bare_assistant(said):
     a.ctx = Context(a.cfg, scheduler=None)
     a.brain = FakeBrain()
     a.say = lambda text, tag: said.append((text, tag))
+    a.speaker = FakeSpeaker()
+    a.speech = None
+    a.set_state = lambda state: None
     return a
 
 
@@ -92,4 +108,6 @@ def test_respond_plays_directly_without_the_model(monkeypatch):
     a.respond("شغل أم كلثوم على سبوتيفاي", "ar-EG")
     assert a.brain.asked == [] and len(opened) == 1 and "أم كلثوم" in said[0][0]
     a.respond("what time is it", "en")
-    assert a.brain.asked == ["what time is it"] and said[-1] == ("from the model", "en")
+    assert a.brain.asked == ["what time is it"]
+    last = a.events.history[-1]
+    assert (last["kind"], last["text"], last["tag"]) == ("said", "from the model", "en")
