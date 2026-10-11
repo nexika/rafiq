@@ -102,6 +102,7 @@ port = 9
 # flatpak = "com.mojang.Minecraft"
 # [apps.RetroArch]
 # command = ["retroarch", "--fullscreen"]
+
 # Scenes: say a name (in any language you list) and Rafiq runs the steps, each a tool call. Steps that
 # change something (power) are asked about first; a step whose tool is missing is skipped.
 [scenes.film]
