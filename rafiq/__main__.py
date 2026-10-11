@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | toolcheck | google-setup | install-service | uninstall-service"""
+"""rafiq run | ask | say | doctor | mcp | toolcheck | google-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -240,6 +240,12 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_mcp(_args) -> int:
+    from . import mcp_server
+
+    return mcp_server.run()
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -306,6 +312,8 @@ def main(argv=None) -> int:
     mute.add_argument("state", nargs="?", choices=("on", "off"), help="on: stop listening; default: toggle")
     mute.set_defaults(fn=cmd_mute)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("mcp", help="offer the harmless tools to MCP clients such as Claude Desktop (stdio)").set_defaults(
+        fn=cmd_mcp)
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
