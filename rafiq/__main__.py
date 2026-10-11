@@ -374,6 +374,11 @@ def cmd_doctor(_args) -> int:
     hue = config.home() / "hue.json"
     _check("Philips Hue", hue.is_file() and cfg["hue"].get("enabled", False),
            "paired" if hue.is_file() else "run: rafiq hue-setup")
+    from . import nudges
+
+    if nudges.settings(cfg)["enabled"]:
+        why = nudges.missing(cfg)
+        _check("calendar nudges", why is None, why or f"from {nudges.settings(cfg)['origin']}")
     print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
