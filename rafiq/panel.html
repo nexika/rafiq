@@ -135,6 +135,21 @@ header .grow { flex: 1; min-width: 0; }
 #picker button { padding: 6px 12px; }
 #picker-note { color: var(--muted); }
 #picker-note.err { color: var(--err); }
+#privacy { font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+  color: var(--muted); white-space: nowrap; }
+#privacy[data-offline="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+#privacy[data-offline="false"] { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
+#history[hidden], #log[hidden] { display: none; }
+#history .bar { display: flex; gap: 8px; margin-bottom: 14px; }
+#history ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+#history li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px;
+  display: flex; gap: 10px; align-items: flex-start; }
+#history li div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#history li .meta { display: block; font-size: 12px; color: var(--muted); }
+#history li p { margin: 2px 0; }
+#history li .said { color: var(--muted); }
+button.danger { color: var(--err); }
+@media (max-width: 520px) { header { flex-wrap: wrap; } #privacy { order: 3; } }
 </style>
 </head>
 <body data-page="talk">
@@ -162,6 +177,8 @@ header .grow { flex: 1; min-width: 0; }
       </select>
     </label>
     <a href="/subscriptions" class="navlink">Subscriptions</a>
+    <span id="privacy" title="What leaves this computer">…</span>
+    <button type="button" id="show-history" aria-pressed="false">History</button>
   </header>
   <nav role="tablist">
     <button role="tab" data-page="talk" aria-selected="true">Talk</button>
@@ -184,6 +201,16 @@ header .grow { flex: 1; min-width: 0; }
       <select id="model" aria-label="Model" hidden></select>
       <button type="button" id="use" hidden>Use</button>
       <span id="picker-note" role="status"></span>
+    </div>
+    <div id="history" role="region" hidden aria-label="What Rafiq heard">
+      <div class="bar">
+        <input type="text" id="search" placeholder="Search what you said or Rafiq answered…" dir="auto"
+          autocomplete="off" aria-label="Search the history">
+        <button type="button" class="danger" id="clear-history">Delete all</button>
+      </div>
+      <ul id="entries"></ul>
+      <p class="empty" id="no-entries" hidden>Nothing kept. Only what you say after “Rafiq” or type here is
+        kept, on this computer, for a few days.</p>
     </div>
     <div id="log" aria-live="polite">
       <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
@@ -267,6 +294,7 @@ function add(cls, text, meta) {
   const el = document.createElement("div");
   el.className = cls;
   el.dir = "auto";
+  el.dataset.text = text;
   if (meta) { const m = document.createElement("span"); m.className = "meta"; m.textContent = meta; el.append(m); }
   el.append(document.createTextNode(text));
   log.append(el);
@@ -347,8 +375,63 @@ function handle(e) {
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
     case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
       if (page === "models") show("models"); break;
+    case "privacy": showPrivacy(e); break;
+    case "forgotten":
+      for (const el of [...log.querySelectorAll(".msg")]) if (e.texts.includes(el.dataset.text)) el.remove();
+      if (!historyBox.hidden) loadHistory(); break;
   }
 }
+const NAMES = { claude: "Claude", openai: "OpenAI", ollama: "Ollama", azure: "Azure voice", edge: "Edge voice",
+  elevenlabs: "ElevenLabs voice", kokoro: "Kokoro", piper: "Piper" };
+const named = (c) => NAMES[c] || c;
+function showPrivacy(p) {
+  const badge = document.getElementById("privacy");
+  badge.dataset.offline = p.offline;
+  badge.textContent = p.offline ? "Offline: nothing leaves this computer" : "Online: " + p.cloud.map(named).join(", ");
+  badge.title = "Thinking: " + named(p.brain) + " · Voice: " + named(p.voice)
+    + (p.offline ? "" : "\nRequests are sent to: " + p.cloud.map(named).join(", "));
+}
+
+// ---- history: what Rafiq heard and answered, kept on this computer
+const historyBox = document.getElementById("history"), entriesEl = document.getElementById("entries");
+async function loadHistory() {
+  const q = document.getElementById("search").value;
+  const r = await fetch("/api/history?token=" + encodeURIComponent(TOKEN) + "&q=" + encodeURIComponent(q));
+  if (!r.ok) return add("note err", "The panel could not read the history (" + r.status + ").");
+  const data = await r.json();
+  showPrivacy(data.privacy);
+  entriesEl.replaceChildren(...data.entries.map(entryEl));
+  document.getElementById("no-entries").hidden = data.entries.length > 0;
+}
+function entryEl(e) {
+  const li = document.createElement("li"), body = document.createElement("div");
+  const meta = document.createElement("span"), heard = document.createElement("p"), said = document.createElement("p");
+  meta.className = "meta";
+  meta.textContent = new Date(e.time * 1000).toLocaleString() + " · " + (e.source === "typed" ? "typed" : "said")
+    + " · " + (LANG[e.tag] || e.tag);
+  heard.textContent = e.heard; heard.dir = "auto";
+  said.textContent = e.said; said.dir = "auto"; said.className = "said";
+  body.append(meta, heard, said);
+  const del = document.createElement("button");
+  del.type = "button"; del.textContent = "Delete"; del.className = "danger";
+  del.setAttribute("aria-label", "Delete: " + e.heard);
+  del.onclick = async () => { await post("/api/history/delete", { id: e.id }); loadHistory(); };
+  li.append(body, del);
+  return li;
+}
+document.getElementById("show-history").onclick = (ev) => {
+  const open = historyBox.hidden;
+  historyBox.hidden = !open; log.hidden = open;
+  ev.currentTarget.setAttribute("aria-pressed", open);
+  ev.currentTarget.textContent = open ? "Conversation" : "History";
+  if (open) loadHistory();
+};
+let searchTimer;
+document.getElementById("search").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadHistory, 250); };
+document.getElementById("clear-history").onclick = async () => {
+  if (!confirm("Delete everything Rafiq kept of what you said?")) return;
+  await post("/api/history/clear"); loadHistory();
+};
 const readingBox = document.getElementById("reading"), pauseBtn = document.getElementById("pause");
 function showReading(e) {
   readingBox.classList.toggle("on", e.state !== "idle");

@@ -1,4 +1,5 @@
 import queue
+import threading
 
 import numpy as np
 import pytest
@@ -82,6 +83,7 @@ def assistant(heard: str, embedding=None, panel=None):
     embedding is `embedding`, and the panel's button gives `panel` (None: nobody clicks)."""
     a = Assistant.__new__(Assistant)
     a.events, a.pending_answer, a.said = Events(), queue.Queue(), []
+    a.speech, a.interrupted = None, threading.Event()
     a.voice_print = voiceid.build(voice(ME, 6))[0] if embedding is not None else None
     a.embedder = FakeEmbedder(embedding) if embedding is not None else None
     a.say = lambda text, tag: a.said.append(text)
