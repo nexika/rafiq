@@ -16,8 +16,8 @@ import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-CLOUD_BRAINS = {"claude"}
-CLOUD_VOICES = {"azure", "edge"}
+CLOUD_BRAINS = {"claude", "openai"}
+CLOUD_VOICES = {"azure", "edge", "elevenlabs"}
 DAY = 86400
 
 

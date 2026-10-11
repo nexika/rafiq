@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -150,7 +151,7 @@ class FakeBrain:
 
         self.memory, self.asked = Memory(), []
 
-    def think(self, text, tag, ctx=None):
+    def think(self, text, tag, ctx=None, on_speech=None):
         self.asked.append(text)
         answer = f"answer to {text}"
         self.memory.add(text, answer, 0.0, tag)
@@ -170,6 +171,9 @@ class FakeSpeaker:
     def engines(self):
         return ["piper"]
 
+    def stream(self):
+        return SimpleNamespace(put=lambda text, tag: None, close=lambda: True)
+
     def stop(self):
         pass
 
@@ -178,6 +182,8 @@ def make_assistant(tmp_path, clock):
     import queue
 
     from rafiq.assistant import Assistant, Context
+    from rafiq.practice import Practice
+    from rafiq.reader import Reader
 
     a = Assistant.__new__(Assistant)
     a.cfg = {"speech": {"follow_up_seconds": 6}}
@@ -185,6 +191,9 @@ def make_assistant(tmp_path, clock):
     a.history = make(tmp_path, clock)
     a.ctx, a.tag, a.state, a.jobs = Context({}, None), "en", "idle", []
     a.pending_answer = queue.Queue()
+    a.practice, a.silent = Practice(tmp_path / "practice.json"), False
+    a.reader = Reader(interrupt=lambda: None)
+    a.publish_spending = lambda tag: None
     return a
 
 
