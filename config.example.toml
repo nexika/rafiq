@@ -91,6 +91,19 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[prayer]
+enabled = false                 # prayer times, the Hijri date, Ramadan countdowns, Quran recitation
+method = "egyptian"             # egyptian, umm_al_qura, mwl, isna, karachi, dubai, kuwait, qatar, singapore, france
+asr = "standard"                # or "hanafi"
+# latitude = 30.0444            # else the city in [place]
+# longitude = 31.2357
+# timezone = "Africa/Cairo"     # else this computer's
+hijri_adjust = 0                # +1 or -1 day to match the local moon sighting
+reciter = "alafasy"             # abdul_basit, husary, minshawi, sudais, muaiqly
+language = "en"                 # the language reminders are said in: en, ar, ar-EG, ...
+
+[prayer.adjust]                 # minutes to add to a calculated time, e.g. fajr = 2
+[prayer.reminders]              # minutes before a prayer, e.g. fajr = 10; none until you set them
 [history]
 retention_days = 7              # what you asked and Rafiq answered, kept on this computer; 0 keeps nothing
 [dev]

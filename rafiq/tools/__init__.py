@@ -100,7 +100,7 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 # Skills that need an account or another app, loaded only when enabled in their config section.
-OPTIONAL = ("google", "discord", "instagram", "obs", "spotify")
+OPTIONAL = ("google", "discord", "instagram", "obs", "prayer", "spotify")
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:

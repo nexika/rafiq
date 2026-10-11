@@ -681,6 +681,9 @@ class Assistant:
             self.say(lang.phrase("paper_failed", self.tag), self.tag)
 
     def _alarm_due(self, alarm: Alarm) -> None:
+        if alarm.kind == "prayer-plan":
+            self._plan_prayers()
+            return
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag,
                     cards=[{"kind": "timer", "text": alarm.label}])
@@ -725,6 +728,17 @@ class Assistant:
         else:
             text = lang.phrase("task_failed", task.tag, goal=task.goal)
         self.submit("say", text=text, tag=lang.script_language(text, task.tag))
+
+    def _plan_prayers(self) -> None:
+        """Prayer reminders for today and tomorrow, when the user has set some."""
+        if not self.cfg.get("prayer", {}).get("enabled"):
+            return
+        from .tools import prayer
+
+        try:
+            prayer.plan_day(self.cfg, self.scheduler)
+        except Exception as exc:                 # no network for the city, a wrong setting: say so in the panel
+            self.events.publish("error", {"error": f"prayer reminders: {type(exc).__name__}: {exc}"})
 
     def _nudger(self) -> Nudger | None:
         """Calendar nudges, when turned on and everything they need is set up."""
@@ -795,6 +809,7 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        self._plan_prayers()
         if self.nudger:
             self.nudger.start(self._nudge_due)
         if self.presence:

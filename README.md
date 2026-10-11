@@ -35,6 +35,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Daily brief | "brief me", "good morning": the time, weather, today's calendar, new email and what is due today in one answer; `brief.at_first_start = true` says it at the first start of each day |
 | Morning paper | "print my paper" (asks first, never twice a day) |
+| Prayer (off until `prayer.enabled = true`) | "when is maghrib?", "what's the Hijri date?", "how long until iftar?", "recite Surat Al-Mulk", "play Al-Baqarah verses 1 to 5 by Husary", "stop the recitation" |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
@@ -296,6 +297,23 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
 
+## Prayer times, the Hijri date and the Quran
+
+Off by default: set `enabled = true` under `[prayer]` (see `config.example.toml`).
+
+- **Prayer times** are calculated on this computer from the sun's position, for `prayer.latitude` and
+  `prayer.longitude` (or the city in `[place]`), with the method you choose: Egyptian General
+  Authority of Survey (the default), Umm al-Qura, Muslim World League, ISNA, Karachi, Dubai, Kuwait,
+  Qatar, Singapore or France, and the standard or Hanafi asr. Rafiq always names the method it used.
+  They agree with aladhan.com to the minute for Cairo and Mecca; if your mosque differs, move any
+  prayer by minutes under `[prayer.adjust]`.
+- **Reminders**: none until you set them, e.g. `fajr = 10` under `[prayer.reminders]` for ten minutes
+  before fajr, said in `prayer.language`.
+- **The Hijri date** follows the Umm al-Qura calendar (2018 to 2039, the tabular calendar outside it).
+  Where the month starts with the moon sighting, `prayer.hijri_adjust = 1` or `-1` moves it a day.
+- **Ramadan**: during Ramadan, prayer times come with the time left until iftar and until suhoor ends.
+- **Recitation** streams verse by verse from [EveryAyah](https://everyayah.com), which allows it;
+  nothing is saved. Reciters: alafasy (default), abdul_basit, husary, minshawi, sudais, muaiqly.
 ## Hand gestures
 
 With a webcam, held hand gestures control the computer:

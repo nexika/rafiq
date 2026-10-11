@@ -147,6 +147,16 @@ DEFAULTS: dict = {
               "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "prayer": {
+        "enabled": False,
+        "method": "egyptian",            # egyptian, umm_al_qura, mwl, isna, karachi, dubai, kuwait, qatar, ...
+        "asr": "standard",               # or "hanafi"
+        "adjust": {},                    # minutes per prayer, e.g. {"fajr": 2}
+        "reminders": {},                 # minutes before, e.g. {"fajr": 10}; none until you set them
+        "language": "en",                # the language reminders are said in
+        "hijri_adjust": 0,               # days, to match the local moon sighting
+        "reciter": "alafasy",
+    },
     "dev": {"project": ""},             # the folder "run the tests" works in; also set from the panel
     "privacy": {"log_days": 30},     # the log (data/logs) is redacted and deleted after this many days
     # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
