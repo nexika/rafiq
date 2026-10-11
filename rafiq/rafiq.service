@@ -1,0 +1,21 @@
+# Rafiq as a systemd user service. Install (see docs/hosting.md):
+#   mkdir -p ~/.config/systemd/user && cp rafiq/rafiq.service ~/.config/systemd/user/
+#   systemctl --user enable --now rafiq
+#   sudo loginctl enable-linger $USER     # keep it running when you are logged out
+# ExecStart assumes the checkout is ~/rafiq; change the path if it is elsewhere.
+
+[Unit]
+Description=Rafiq voice assistant
+After=network-online.target pipewire.service
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/rafiq/.venv/bin/rafiq run
+Restart=on-failure
+RestartSec=5
+# Keys: put ANTHROPIC_API_KEY=... and the others in this file (readable only by you).
+EnvironmentFile=-%h/.config/rafiq/env
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
