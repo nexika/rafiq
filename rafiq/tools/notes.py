@@ -36,7 +36,7 @@ _KIND_PARAM = {"type": "string", "enum": list(KINDS),
 
 @tool("note_add", "Write down a note or an idea the user dictates, in their own words and language.",
       {"text": {"type": "string", "description": "the note, as the user said it"}, "kind": _KIND_PARAM},
-      required=("text",))
+      required=("text",), level="act")
 def note_add(text: str, kind: str = "note", ctx=None) -> str:
     text = " ".join(text.split())
     kind = kind or "note"
@@ -56,7 +56,8 @@ def note_add(text: str, kind: str = "note", ctx=None) -> str:
 
 
 @tool("note_random", "A random note from the user's notes, by default one of their ideas.",
-      {"kind": _KIND_PARAM | {"description": "idea (default), note, todo or shopping"}})
+      {"kind": _KIND_PARAM | {"description": "idea (default), note, todo or shopping"}},
+      level="private")
 def note_random(kind: str = "idea", ctx=None, rng: random.Random | None = None) -> str:
     kind = kind or "idea"
     if kind not in KINDS:
@@ -70,7 +71,8 @@ def note_random(kind: str = "idea", ctx=None, rng: random.Random | None = None) 
 
 
 @tool("notes_on", "The notes of every kind the user wrote on one day, by default today.",
-      {"day": {"type": "string", "description": "date as YYYY-MM-DD; empty for today"}})
+      {"day": {"type": "string", "description": "date as YYYY-MM-DD; empty for today"}},
+      level="private")
 def notes_on(day: str = "", ctx=None) -> str:
     try:
         wanted = date.fromisoformat(day).isoformat() if day else f"{now():%Y-%m-%d}"
