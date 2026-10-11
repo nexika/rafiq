@@ -104,7 +104,8 @@ def find(devices: list[dict], device: str) -> dict | str:
 
 
 @tool("home_devices", "List the user's home devices (lights, plugs, Nest thermostats...) and whether each is on.",
-      {"query": {"type": "string", "description": "only devices whose name contains these words"}})
+      {"query": {"type": "string", "description": "only devices whose name contains these words"}},
+      level="private")
 def home_devices(query: str = "", ctx=None) -> str:
     try:
         devices = _devices(connect(ctx.cfg))
@@ -123,7 +124,7 @@ def home_devices(query: str = "", ctx=None) -> str:
       {"device": {"type": "string", "description": "the device's name or id, from home_devices"},
        "state": {"type": "string", "enum": ["on", "off"]}},
       required=("device", "state"),
-      confirm=lambda a: f"turn {a.get('state', '')} {a.get('device', '')}")
+      confirm=lambda a: f"turn {a.get('state', '')} {a.get('device', '')}", level="critical")
 def home_switch(device: str, state: str, ctx=None) -> str:
     state = (state or "").strip().lower()
     if state not in ("on", "off"):

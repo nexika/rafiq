@@ -15,10 +15,11 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 
 | Skill | Examples |
 |---|---|
-| This computer | "open Firefox", "volume to 30", "mute", "how's the battery?", "lock the screen", "shut down" (asks first) |
+| This computer | "open Firefox", "volume to 30", "mute", "switch to the headphones", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
+| Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
@@ -28,6 +29,9 @@ would say, not formal فصحى. Timers and reminders are spoken in the language 
 
 Linux with PipeWire (Fedora, Ubuntu 22.10+), Python 3.11 or newer, `ffmpeg`.
 
+New to this? [INSTALL_WITH_AI.md](INSTALL_WITH_AI.md) ([بالعربية](INSTALL_WITH_AI.ar.md)) is a prompt
+to paste into any chatbot, which then walks you through the install one command at a time.
+
 ```bash
 git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
@@ -36,8 +40,20 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
+`rafiq doctor` lists your microphones; pick one with `[audio] device` in the settings. A microphone
+that refuses 16 kHz is opened at a rate it takes and resampled. At start-up Rafiq listens to the room
+for a second and fits its speech thresholds to the noise, so stay quiet for a moment
+(`[audio] auto_calibration = false` turns this off).
+
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
+
+### Start at login
+
+`rafiq install-service` makes Rafiq a systemd user service: it starts when you log in, restarts if
+it fails, and logs to the journal (`journalctl --user -u rafiq -f`). Running it again keeps a single
+Rafiq. The service does not see keys exported in your shell, so put them in
+`~/.config/rafiq/rafiq.env` as `ANTHROPIC_API_KEY=...` lines. `rafiq uninstall-service` removes it.
 
 ## The brain: Claude, with Ollama as the fallback
 
@@ -51,13 +67,30 @@ The first start downloads the Whisper models (about 550 MB). Offline voices go i
 
 `rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
 
+### Modes: everyday, quality, offline
+
+- **Everyday** (the default): the fast model, `brain.claude_model`.
+- **Quality**: the strongest model, `brain.quality_model` (`claude-opus-5-5`), slower and costlier.
+- **Offline**: nothing leaves the computer: only Ollama and the Piper voices, whatever `brain.mode`
+  and `voice.engine` say. Speech-to-text is always local.
+
+Switch by voice ("Rafiq, switch to offline mode", "what mode are you in?"), with the switch at the
+top of the panel, or for a session with `rafiq run --mode quality`. `brain.profile` in the config
+sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
+
 ## The voice
 
 | Engine | Languages | Needs |
 |---|---|---|
 | **Azure AI Speech** (default when a key is set) | all six, Egyptian voices `ar-EG-ShakirNeural` and `ar-EG-SalmaNeural` | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`; the free tier covers 500,000 characters a month |
+| **ElevenLabs** (next when a key is set) | all six through one multilingual voice (`eleven_flash_v2_5`); it speaks Arabic but not in a chosen dialect, so pick an Egyptian voice from the Voice Library for `ar-EG` in `[voice.elevenlabs_voices]` | `ELEVENLABS_API_KEY` |
+| **Kokoro** (offline, next when its files are there) | en, fr, es only (Kokoro has no Arabic or German, so those go to Piper) | `pip install -e ".[kokoro]"` and `kokoro-v1.0.onnx`, `voices-v1.0.bin` in `~/.config/rafiq/data/kokoro/` |
 | **Piper** (offline) | en, fr, es, de, ar; no Egyptian voice, so Egyptian is read by the Jordanian Arabic voice | voice files in `~/.config/rafiq/data/piper/` |
 | Edge read-aloud | the same voices as Azure | nothing, but it is unofficial and Microsoft blocked it in October 2026 |
+
+`voice.engine` picks one engine (`azure`, `elevenlabs`, `kokoro`, `piper`, `edge`); Piper is always
+tried after it. The Kokoro files are on the
+[kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases) (model-files-v1.0).
 
 Download the Piper voices once:
 
@@ -66,6 +99,25 @@ cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voic
   en_US-ryan-medium fr_FR-tom-medium es_ES-davefx-medium de_DE-thorsten-medium ar_JO-kareem-medium
 ```
 
+## Hearing: Whisper, with the cloud for chosen languages
+
+Whisper runs on your computer and hears every language by default. For a language it hears badly,
+send that language to a cloud service; Whisper still tells the language first, on your computer:
+
+```toml
+[speech.stt_by_language]
+ar = "azure"      # Azure's Egyptian Arabic recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+```
+
+| Service | Needs |
+|---|---|
+| **Azure AI Speech** | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` (the same key as the voice); `speech.azure_locales` picks the recogniser |
+| **OpenAI** (`gpt-4o-mini-transcribe`) | `OPENAI_API_KEY` |
+
+When Whisper can't run, a cloud service with a key hears everything; when the cloud can't be
+reached, Whisper does. The name "Rafiq" is always heard on your computer. `speech.stt_engine = "local"`
+or `speech.offline = true` keeps what you say on your computer.
+
 ## Use it
 
 ```bash
@@ -73,13 +125,24 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
-Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
+Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R. Add a second one
+for `rafiq mute`, such as Ctrl+Alt+M (GNOME on Wayland does not let apps grab keys themselves). While
+muted Rafiq ignores the microphone, even its name; the Talk button and `rafiq listen` still work once.
+
+Say **"go to sleep"** ("نام", "mets-toi en veille") to end a conversation at once: Rafiq stops waiting
+for a follow-up and drops a question it was asking before an action.
+
+**To interrupt Rafiq**, say "stop", "attends", "espera", "warte", "توقف" or "استنى" while it speaks.
+The microphone stays open: you must be about 1.8 times louder than Rafiq's own voice (`[interruption]
+factor`). With PipeWire, `pactl load-module module-echo-cancel` removes most of that echo and Rafiq
+listens through it on its own. `enabled = false` mutes the microphone while Rafiq speaks, as before.
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
-and Yes/No buttons when it asks before an action.
+Yes/No buttons when it asks before an action, and the choice of style.
 
 ## The wake word
 
@@ -116,6 +179,8 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels.
+- "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
+  (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
@@ -131,6 +196,10 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
 2. Save its JSON as `~/.config/rafiq/google/credentials.json`.
 3. Run `rafiq google-setup` and approve in the browser.
 4. Set `enabled = true` under `[google]` in the config.
+
+Rafiq reads every calendar in your list, subscribed ones too, and adds or deletes events (after asking)
+in your primary calendar only. A token made before Rafiq read the calendar list only sees the primary
+calendar: run `rafiq google-setup` again to give it the others.
 
 ## Home devices (Nest, Hue, plugs)
 
@@ -156,6 +225,10 @@ optional.
 ```bash
 .venv/bin/ruff check . && .venv/bin/python -m pytest -q
 ```
+
+How the code fits together, how to add a skill and how to send a pull request:
+[CONTRIBUTING.md](CONTRIBUTING.md) ([بالعربية](CONTRIBUTING.ar.md)). AI coding assistants read
+[CLAUDE.md](CLAUDE.md).
 
 ## License
 
