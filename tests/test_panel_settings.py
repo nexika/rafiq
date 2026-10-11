@@ -106,6 +106,24 @@ class FakeClaude:
     def create(self, **_kwargs):
         return self.replies.pop(0)
 
+    def stream(self, **_kwargs):
+        reply = self.replies.pop(0)
+        texts = [b.text for b in reply.content if b.type == "text"]
+
+        class Stream:
+            text_stream = texts
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def get_final_message(self):
+                return reply
+
+        return Stream()
+
 
 def claude_brain(events, prices=None):
     cfg = config.load()

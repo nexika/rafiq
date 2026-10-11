@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rafiq · Subscriptions</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1f1e; --muted: #6b706d; --line: #e3e2dc;
+  --accent: #0f766e; --accent-soft: #ccebe7; --warn: #b45309; --warn-soft: #fdecc8; --err: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111413; --panel: #191d1c; --ink: #e8ebe9; --muted: #9aa29e; --line: #2a302e;
+    --accent: #2dd4bf; --accent-soft: #123b37; --warn: #fbbf24; --warn-soft: #3b2f12; --err: #f87171;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans Arabic", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+a { color: var(--accent); }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.card .big { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.card .small { color: var(--muted); font-size: 13px; }
+.alert { background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 12px; padding: 8px 12px;
+  margin-bottom: 8px; }
+ul.rows { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; }
+ul.rows li { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); }
+ul.rows li:first-child { border-top: 0; }
+ul.rows .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+ul.rows .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.muted { color: var(--muted); font-size: 13px; }
+.bar { height: 8px; border-radius: 4px; background: var(--accent); min-width: 2px; }
+.split li { flex-wrap: wrap; }
+.split .track { flex-basis: 100%; background: var(--accent-soft); border-radius: 4px; }
+form { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+input, select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); min-width: 0; }
+button { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink); padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+button:focus-visible, input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#status { min-height: 1.5em; color: var(--muted); font-size: 14px; }
+#status.err { color: var(--err); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Subscriptions</h1>
+    <a href="/">← Rafiq</a>
+  </header>
+  <p class="muted">Kept in a file on this computer. Rafiq reads it only when you ask about your subscriptions.</p>
+  <div class="totals" id="totals"></div>
+  <div id="alerts" style="margin-top:14px"></div>
+
+  <section id="pending-box" hidden>
+    <h2>Found in your email: merge?</h2>
+    <ul class="rows" id="pending"></ul>
+  </section>
+
+  <h2>Coming up (30 days)</h2>
+  <ul class="rows" id="upcoming"></ul>
+
+  <h2>By category (per month)</h2>
+  <ul class="rows split" id="split"></ul>
+
+  <h2>All subscriptions</h2>
+  <ul class="rows" id="all"></ul>
+
+  <h2>Add one</h2>
+  <form id="add">
+    <input name="name" placeholder="Name" required aria-label="Name" dir="auto">
+    <input name="amount" type="number" step="0.01" min="0.01" placeholder="Amount" required aria-label="Amount">
+    <input name="currency" value="EUR" maxlength="3" aria-label="Currency">
+    <select name="period" aria-label="Period">
+      <option>monthly</option><option>yearly</option><option>quarterly</option><option>weekly</option>
+    </select>
+    <input name="next_charge" type="date" required aria-label="Next charge">
+    <input name="category" placeholder="Category" aria-label="Category" dir="auto">
+    <button class="primary" type="submit">Add</button>
+  </form>
+  <p style="margin-top:20px"><button id="scan">Look for receipts in Gmail</button></p>
+  <div id="status" role="status"></div>
+</main>
+<script>
+const TOKEN = "__TOKEN__";
+const $ = (id) => document.getElementById(id);
+const money = (n, c) => Number(n).toFixed(2) + " " + c;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) { e.textContent = text; e.dir = "auto"; }
+  return e;
+}
+function row(parts, buttons) {
+  const li = el("li");
+  parts.forEach(([cls, text]) => li.append(el("span", cls, text)));
+  (buttons || []).forEach(([label, fn, primary]) => {
+    const b = el("button", primary ? "primary" : "", label);
+    b.onclick = fn;
+    li.append(b);
+  });
+  return li;
+}
+function fill(id, items, empty) {
+  const box = $(id);
+  box.replaceChildren(...items);
+  if (!items.length) box.append(row([["grow muted", empty]]));
+}
+function say(text, err) { $("status").textContent = text; $("status").className = err ? "err" : ""; }
+
+async function send(body) {
+  const r = await fetch("/api/subscriptions", { method: "POST",
+    headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { say(data.error || "Something went wrong (" + r.status + ").", true); return null; }
+  await load();
+  return data;
+}
+
+async function load() {
+  const r = await fetch("/api/subscriptions?token=" + encodeURIComponent(TOKEN));
+  if (!r.ok) { say("Could not reach Rafiq (" + r.status + ").", true); return; }
+  const d = await r.json();
+  const totals = Object.entries(d.totals).map(([c, t]) => {
+    const card = el("div", "card");
+    card.append(el("div", "small", "Per month · " + c), el("div", "big", money(t.monthly, c)),
+                el("div", "small", money(t.yearly, c) + " a year"));
+    return card;
+  });
+  $("totals").replaceChildren(...totals);
+  if (!totals.length) $("totals").append(el("p", "muted", "No subscriptions yet: add one below."));
+
+  $("alerts").replaceChildren(...d.alerts.map((a) => el("div", "alert", a.kind === "tomorrow"
+    ? "⚠ " + a.name + " charges you tomorrow: " + money(a.amount, a.currency)
+    : "⚠ " + a.name + " changed from " + money(a.previous, a.currency) + " to " + money(a.amount, a.currency))));
+
+  $("pending-box").hidden = !d.pending.length;
+  fill("pending", d.pending.map((p) => row(
+    [["grow", p.name + " · " + p.period + " · " + p.category], ["num", money(p.amount, p.currency)]],
+    [["Merge", () => send({ action: "confirm", id: p.id }), true], ["Ignore", () => send({ action: "reject", id: p.id })]])), "");
+
+  fill("upcoming", d.upcoming.map((u) => row([["num muted", u.date], ["grow", u.name], ["num", money(u.amount, u.currency)]])),
+       "Nothing in the next 30 days.");
+
+  const split = [];
+  for (const [c, cats] of Object.entries(d.categories)) {
+    const top = Math.max(...Object.values(cats));
+    for (const [cat, v] of Object.entries(cats).sort((a, b) => b[1] - a[1])) {
+      const li = row([["grow", cat], ["num", money(v, c)]]);
+      const track = el("div", "track"), bar = el("div", "bar");
+      bar.style.width = (100 * v / top) + "%";
+      track.append(bar);
+      li.append(track);
+      split.push(li);
+    }
+  }
+  fill("split", split, "No categories yet.");
+
+  fill("all", d.subscriptions.map((s) => row(
+    [["grow", s.name + " · " + s.category], ["muted", s.period + ", next " + s.due], ["num", money(s.amount, s.currency)]],
+    [["Remove", () => confirm("Remove " + s.name + "?") && send({ action: "remove", id: s.id })]])), "None yet.");
+}
+
+$("add").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const body = Object.fromEntries(new FormData(ev.target));
+  body.action = "add";
+  body.amount = Number(body.amount);
+  if (await send(body)) { ev.target.reset(); say("Added."); }
+};
+$("scan").onclick = async () => {
+  say("Searching Gmail…");
+  const r = await send({ action: "scan" });
+  if (r) say(r.found ? r.found + " found: merge or ignore each one above." : "No new subscriptions found.");
+};
+load();
+</script>
+</body>
+</html>

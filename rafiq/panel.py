@@ -1,6 +1,7 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box and yes/no buttons for confirmations. A settings drawer switches the brain's mode and model
-and the voices; only the allowlist in config.py can be written, and keys never reach the page.
+a text box, yes/no buttons for confirmations, the mode switch, the choice of style and a model picker. A settings
+drawer switches the brain's mode and model and the voices; only the allowlist in config.py can be written, and keys
+never reach the page.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -16,7 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import lang
+from . import lang, modes, persona, subscriptions
+from .brain import BrainError
 
 MAX_BODY = 10_000
 
@@ -52,12 +54,16 @@ def make_handler(assistant, token: str, port: int):
             if not self._host_ok():
                 return self._send(403, b'{"error":"wrong host"}')
             url = urlparse(self.path)
-            if url.path == "/":
-                page = resources.files("rafiq").joinpath("panel.html").read_text(encoding="utf-8")
+            pages = {"/": "panel.html", "/subscriptions": "subscriptions.html"}
+            if url.path in pages:
+                page = resources.files("rafiq").joinpath(pages[url.path]).read_text(encoding="utf-8")
                 return self._send(200, page.replace("__TOKEN__", token).encode(), "text/html; charset=utf-8")
-            if url.path == "/events":
+            if url.path in ("/events", "/api/subscriptions"):
                 if not self._token_ok((parse_qs(url.query).get("token") or [None])[0]):
                     return self._send(403, b'{"error":"token"}')
+                if url.path == "/api/subscriptions":
+                    summary = subscriptions.summary(subscriptions.default_store())
+                    return self._send(200, json.dumps(summary, ensure_ascii=False).encode())
                 return self._stream()
             if url.path == "/api/status":
                 if not self._token_ok(self.headers.get("X-Rafiq-Token")):
@@ -75,6 +81,9 @@ def make_handler(assistant, token: str, port: int):
                 for event in list(assistant.events.history):
                     self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
                 self.wfile.write(f"data: {json.dumps({'kind': 'state', 'state': assistant.state})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'kind': 'mode', 'mode': assistant.mode})}\n\n".encode())
+                style = persona.active(getattr(assistant, "cfg", {}))
+                self.wfile.write(f"data: {json.dumps({'kind': 'persona', 'persona': style})}\n\n".encode())
                 self.wfile.flush()
                 while True:
                     try:
@@ -103,8 +112,17 @@ def make_handler(assistant, token: str, port: int):
                 assistant.submit("text", text=data["text"][:2000])
             elif path == "/api/listen":
                 assistant.submit("listen")
+            elif path == "/api/mute" and isinstance(data.get("muted", False), bool):
+                assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put(data["yes"])
+            elif path == "/api/paper":
+                assistant.submit("paper")
+            elif path == "/api/mode" and data.get("mode") in modes.MODES:
+                assistant.submit("mode", mode=data["mode"])
+            elif path == "/api/persona" and data.get("name") in persona.PERSONAS:
+                persona.choose(data["name"])
+                assistant.events.publish("persona", {"persona": data["name"]})
             elif path == "/api/stop":
                 assistant.speaker.stop()
             elif path == "/api/voice-test" and data.get("tag") in lang.TAGS:
@@ -114,9 +132,38 @@ def make_handler(assistant, token: str, port: int):
                     assistant.change_settings(data["changes"])
                 except ValueError as exc:
                     return self._send(400, json.dumps({"error": str(exc)}).encode())
+            elif path == "/api/subscriptions" and isinstance(data, dict):
+                return self._subscriptions(data)
+            elif path == "/api/brain":
+                return self._send(200, json.dumps(assistant.brain.status()).encode())
+            elif path == "/api/models" and isinstance(data.get("backend"), str):
+                try:
+                    models = assistant.brain.models(data["backend"])
+                except BrainError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                return self._send(200, json.dumps({"models": models}).encode())
+            elif path == "/api/model" and isinstance(data.get("backend"), str) and isinstance(data.get("model"), str):
+                try:   # the provider is asked first, so a model the key cannot use is never picked
+                    assistant.brain.choose(data["backend"], data["model"])
+                except BrainError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                assistant.events.publish("brain", {"backend": data["backend"], "mode": data["backend"],
+                                                   "model": data["model"]})
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')
+
+        def _subscriptions(self, data: dict) -> None:
+            # Gmail is searched only when the user presses Scan, and only if Google is set up.
+            google = getattr(assistant, "cfg", {}).get("google", {}).get("enabled")
+            inbox = subscriptions.GmailReceipts() if google else None
+            try:
+                result = subscriptions.handle(data, subscriptions.default_store(), inbox)
+            except ValueError as exc:
+                return self._send(400, json.dumps({"error": str(exc)}).encode())
+            except Exception as exc:   # Gmail or the network failed: say so on the page
+                return self._send(502, json.dumps({"error": f"Gmail: {exc}"}).encode())
+            return self._send(200, json.dumps(result).encode())
 
     return Handler
 
