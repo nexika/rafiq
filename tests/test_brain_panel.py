@@ -145,7 +145,7 @@ def test_system_prompt_has_no_time_or_language():
 
 class FakeAssistant:
     def __init__(self):
-        self.events, self.jobs, self.state = Events(), [], "idle"
+        self.events, self.jobs, self.state, self.mode = Events(), [], "idle", "everyday"
         import queue
 
         self.pending_answer = queue.Queue()
@@ -210,3 +210,16 @@ def test_another_host_name_is_refused(panel):
 def test_the_panel_will_not_listen_beyond_this_computer():
     with pytest.raises(ValueError):
         serve(FakeAssistant(), "0.0.0.0", 0, "t" * 40)
+
+
+def test_a_mode_chosen_in_the_panel_is_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/mode", {"mode": "offline"})[0] == 200
+    assert assistant.jobs == [("mode", {"mode": "offline"})]
+
+
+@pytest.mark.parametrize("body", [{"mode": "turbo"}, {"mode": 3}, {}])
+def test_an_unknown_mode_from_the_panel_is_refused(panel, body):
+    assistant, port = panel
+    assert request(port, "/api/mode", body)[0] == 400
+    assert assistant.jobs == []

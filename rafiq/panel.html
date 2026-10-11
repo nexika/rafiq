@@ -66,6 +66,9 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
   color: var(--ink); padding: 10px 14px; cursor: pointer; white-space: nowrap; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#mode { margin-left: auto; font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+#mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
 </style>
 </head>
@@ -77,6 +80,11 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <h1>Rafiq <span>رفيق</span></h1>
       <div id="state" role="status">connecting…</div>
     </div>
+    <select id="mode" aria-label="Mode" title="Everyday: fast. Quality: the strongest model. Offline: nothing leaves this computer.">
+      <option value="everyday">Everyday</option>
+      <option value="quality">Quality</option>
+      <option value="offline">Offline</option>
+    </select>
     <label>Style
       <select id="persona">
         <option value="neutral">Neutral</option>
@@ -108,6 +116,7 @@ const STATES = { idle: "Waiting for “Rafiq”", listening: "Listening…", thi
   speaking: "Speaking", starting: "Starting…", offline: "Not connected: is Rafiq running?" };
 const log = document.getElementById("log"), orb = document.getElementById("orb");
 const stateEl = document.getElementById("state"), confirmBox = document.getElementById("confirm");
+const modeEl = document.getElementById("mode");
 
 function add(cls, text, meta) {
   document.getElementById("empty")?.remove();
@@ -136,6 +145,7 @@ function handle(e) {
     case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
     case "brain": stateEl.dataset.backend = e.backend; break;
+    case "mode": modeEl.value = e.mode; break;
     case "wake": if (e.score !== undefined) add("note", "Heard the name (match " + e.score + ", wakes below "
       + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
@@ -156,6 +166,7 @@ document.getElementById("form").onsubmit = (ev) => {
   if (text) { post("/api/text", { text }); input.value = ""; }
 };
 document.getElementById("talk").onclick = () => post("/api/listen");
+modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });
 document.getElementById("persona").onchange = (ev) => post("/api/persona", { name: ev.target.value });
 document.getElementById("stop").onclick = () => post("/api/stop");
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });

@@ -8,7 +8,7 @@ import shutil
 import sys
 import threading
 
-from . import config, lang
+from . import config, lang, modes
 
 
 def cmd_run(args) -> int:
@@ -18,6 +18,8 @@ def cmd_run(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    if args.mode:
+        modes.switch(cfg, args.mode)
     print("Loading the speech models (the first start downloads them)...", flush=True)
     assistant = Assistant(cfg)
     if not args.no_panel:
@@ -50,6 +52,8 @@ def cmd_ask(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    if args.mode:
+        modes.switch(cfg, args.mode)
     text = " ".join(args.text)
     tag = args.lang or lang.dialect(lang.guess(text), text)
 
@@ -126,18 +130,22 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
     cloud = cloud_engines(cfg)
     speech = cfg["speech"]
-    _check("cloud speech to text", bool(cloud) or speech.get("offline", False),
-           "off (offline)" if speech.get("offline") else ", ".join(cloud) or
+    offline = speech.get("offline", False) or modes.offline(cfg)
+    _check("cloud speech to text", bool(cloud) or offline,
+           "off (offline)" if offline else ", ".join(cloud) or
            "set AZURE_SPEECH_KEY or OPENAI_API_KEY for languages Whisper hears badly")
     if speech.get("stt_by_language"):
         print("  speech to text by language: "
               + ", ".join(f"{k} {v}" for k, v in speech["stt_by_language"].items()))
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
-    if brain["mode"] == "auto":
+    if modes.offline(cfg):
+        order = ["ollama"]
+    elif brain["mode"] == "auto":
         order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
     else:
         order = [brain["mode"]]
@@ -212,11 +220,13 @@ def main(argv=None) -> int:
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
     run.add_argument("--brain", choices=("auto", "claude", "ollama"))
+    run.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
     ask.add_argument("--lang", choices=lang.TAGS)
     ask.add_argument("--brain", choices=("auto", "claude", "ollama"))
+    ask.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
     say = sub.add_parser("say", help="say a sentence, to try a voice")
