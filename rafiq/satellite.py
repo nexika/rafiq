@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import socket
 import socketserver
 import ssl
@@ -45,6 +46,10 @@ MIN_TOKEN = 16
 
 class ProtocolError(Exception):
     pass
+
+
+class Refused(ProtocolError):
+    """The hub does not know this satellite or its token: retrying will not help."""
 
 
 # ---------------------------------------------------------------------- frames
@@ -313,7 +318,7 @@ class Client:
         reply = recv_json(sock)
         if reply.get("type") != "welcome":
             sock.close()
-            raise ProtocolError(f"the hub refused: {reply.get('error', 'wrong token')}")
+            raise Refused(f"the hub refused: {reply.get('error', 'wrong token')}")
         self.sock, self.room = sock, str(reply.get("room", ""))
         return self
 
@@ -395,21 +400,99 @@ def parse_hub(address: str, default_port: int = 8766) -> tuple[str, int]:
     return host.strip("[]"), int(port)
 
 
+def settings(cfg: dict) -> tuple[str, int, str, str] | None:
+    """The hub's address, this satellite's name and its token ([satellite] token, or RAFIQ_SATELLITE_TOKEN
+    so a service can keep it out of the config); None when one is missing."""
+    sat = cfg["satellite"]
+    token = sat.get("token") or os.environ.get("RAFIQ_SATELLITE_TOKEN", "")
+    if not (sat.get("hub") and sat.get("name") and token):
+        return None
+    return (*parse_hub(sat["hub"]), sat["name"], token)
+
+
+def unit(python: str) -> str:
+    """A systemd user unit that keeps the satellite running. A user unit shares the user's PipeWire, so
+    a Spotify receiver (raspotify) can play on the same speaker. Exit code 2 (refused) is not retried."""
+    return f"""[Unit]
+Description=Rafiq satellite
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+ExecStart={python} -m rafiq satellite run
+Restart=always
+RestartSec=5
+# 2: the main computer refused this satellite; fix the settings instead of retrying forever.
+RestartPreventExitStatus=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def score_line(score: float, threshold: float) -> str:
+    """One utterance's wake score against the threshold (lower is closer to your recordings)."""
+    if score <= threshold:
+        return f"{score:.3f}  <= {threshold:.3f}  wakes"
+    return f"{score:.3f}  >  {threshold:.3f}  ignored"
+
+
+def print_scores(cfg: dict) -> int:
+    """Calibrate the wake word on this device: print the score of everything heard; nothing is sent.
+    Say "Rafiq" from where you will stand, and other sentences; then `rafiq enroll --sensitivity` if
+    the name scores above the threshold or other speech below it."""
+    from . import kws
+    from .audio import Endpointer, Microphone, SileroVAD
+
+    spotter = kws.Spotter.load()
+    if spotter is None:
+        print("No recordings of the name on this device: run `rafiq enroll` here first (or copy them).")
+        return 1
+    mel, mic, vad = kws.Mel(), Microphone.from_config(cfg), SileroVAD()
+    endpointer = Endpointer(max_seconds=cfg["speech"]["max_utterance_seconds"])
+    mic.start()
+    print("Speak; each utterance's score is printed. Ctrl+C stops.", flush=True)
+    try:
+        while True:
+            frame = mic.read(timeout=0.1)
+            audio = None if frame is None else endpointer.push(frame, vad(frame))
+            if audio is not None:
+                score = spotter.score(mel(audio[:int(kws.MAX_SECONDS * RATE)]))
+                print(score_line(score, spotter.threshold), flush=True)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        mic.stop()
+
+
+REFUSED_HINT = "Check [satellite] name and token against the hub's [satellites.devices]."
+
+
 def run_device(cfg: dict) -> int:
     """The loop on the satellite itself: wait for "Rafiq" with its own microphone, send the request to
     the hub, speak the answer. Uses the recordings from `rafiq enroll` on this device when there are
-    some, else a small Whisper model listens for the name."""
+    some, else a small Whisper model listens for the name. Returns 2 when the hub refuses it."""
     from . import kws
     from .audio import Endpointer, Microphone, SileroVAD
     from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
     from .tts import Speaker
 
-    sat = cfg["satellite"]
-    if not (sat.get("hub") and sat.get("name") and sat.get("token")):
+    found = settings(cfg)
+    if found is None:
         print("Set [satellite] hub, name and token in the config (the hub lists the same name and token).")
         return 1
-    host, port = parse_hub(sat["hub"])
-    mic, vad = Microphone(), SileroVAD()
+    host, port, name, token = found
+    client = Client(host, port, name, token, client_tls(cfg))
+    try:                             # before any device: a refused satellite stops the service at once
+        client.connect()
+        print(f"Connected; this is the {client.room}.", flush=True)
+    except Refused as exc:
+        print(f"{exc}. {REFUSED_HINT}")
+        return 2
+    except OSError as exc:
+        print(f"The hub is not reachable yet ({type(exc).__name__}); trying again at the first request.")
+    mic, vad = Microphone.from_config(cfg), SileroVAD()
     endpointer = Endpointer(max_seconds=cfg["speech"]["max_utterance_seconds"])
 
     def unmute():
@@ -445,9 +528,8 @@ def run_device(cfg: dict) -> int:
                                       prompt=WAKE_PROMPT)
         return wake.find(spotted.text)[0]
 
-    client = Client(host, port, sat["name"], sat["token"], client_tls(cfg))
     mic.start()
-    print(f'Satellite "{sat["name"]}" of {host}:{port}. Say "Rafiq". Ctrl+C stops.', flush=True)
+    print(f'Satellite "{name}" of {host}:{port}. Say "Rafiq". Ctrl+C stops.', flush=True)
     try:
         while True:
             audio = utterance(None)
@@ -463,6 +545,9 @@ def run_device(cfg: dict) -> int:
                     client.connect()
                     print(f"Connected; this is the {client.room}.", flush=True)
                 client.request(audio, speak=speaker.say, listen=lambda: utterance(10.0))
+            except Refused as exc:
+                print(f"{exc}. {REFUSED_HINT}")
+                return 2
             except (OSError, ProtocolError) as exc:
                 client.close()
                 print(f"The hub did not answer ({type(exc).__name__}); trying again next time.", flush=True)

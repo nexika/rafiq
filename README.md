@@ -374,6 +374,11 @@ set `tls_cert` and `tls_key` under `[satellites]` (and `tls = true`, with `tls_c
 certificate, under `[satellite]`): keep satellites on a private network otherwise. Actions that need a
 yes are asked on the satellite and answered there.
 
+**On a Raspberry Pi**, [docs/satellite.md](docs/satellite.md) covers the install, the speakerphone,
+tuning the wake word (`rafiq satellite scores`), running it as a service at boot (`rafiq satellite
+unit`) and sharing the speaker with a Spotify receiver. A satellite the hub refuses stops with exit
+code 2, so the service doesn't retry it forever.
+
 ## Presence: when your phone leaves or comes home
 
 When your phone has been off the home Wi-Fi for 10 minutes, Rafiq plays the away scene; when it is
