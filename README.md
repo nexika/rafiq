@@ -17,6 +17,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 |---|---|
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
+| Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
@@ -24,7 +25,8 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
-| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
+| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
+| Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
 | Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
 | OBS Studio | "start recording" (asks first), "go live" (asks first), "switch to the camera scene", "clip that" |
@@ -321,6 +323,21 @@ Discord's rules, and a user token is refused).
 2. Invite it to your servers with the **View Channels** and **Read Message History** permissions.
 3. Put its token in `DISCORD_BOT_TOKEN` (or `bot_token` under `[discord]`), your own Discord user id in
    `user_id` (Developer Mode, then right-click your name, Copy User ID), and set `enabled = true`.
+
+## Instagram statistics
+
+Followers gained or lost, new posts and views on recent videos, compared with yesterday, for every
+Instagram Business or Creator account linked to your Facebook Pages (official Instagram Graph API).
+
+1. Create an app at [Meta for Developers](https://developers.facebook.com/) and set
+   `INSTAGRAM_APP_ID` and `INSTAGRAM_APP_SECRET` (or `app_id` and `app_secret` under `[instagram]`).
+2. In the Graph API Explorer, get a user token with `instagram_basic`, `instagram_manage_insights` and
+   `pages_show_list`.
+3. Run `rafiq instagram-setup <token>`: Rafiq swaps it for a long-lived token, refreshed by itself.
+4. Set `enabled = true` under `[instagram]` in the config.
+
+Each answer saves a snapshot of the day in `~/.config/rafiq/data/instagram.json` (kept 90 days); the
+next day's answer compares with it.
 
 ## Home devices (Nest, Hue, plugs)
 
