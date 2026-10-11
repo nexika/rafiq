@@ -63,6 +63,10 @@ for a second and fits its speech thresholds to the noise, so stay quiet for a mo
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 
+`rafiq backup` saves your settings, keys and recordings to
+`~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
+uploads anything: the archive holds your keys, so keep it out of public places.
+
 ### Start at login
 
 `rafiq install-service` makes Rafiq a systemd user service: it starts when you log in, restarts if

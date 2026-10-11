@@ -1,6 +1,6 @@
 """rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
 phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
-uninstall-service | wake-pc"""
+uninstall-service | wake-pc | backup"""
 
 from __future__ import annotations
 
@@ -616,6 +616,19 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    """Save settings, recordings and everything else Rafiq keeps to a private archive on this computer."""
+    from . import maintain
+
+    try:
+        path = maintain.backup(args.to)
+    except (maintain.MaintenanceError, OSError) as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved {path} (readable only by you; it holds your keys, keep it off public places).")
+    return 0
+
+
 def cmd_spotify_setup(_args) -> int:
     from .tools.spotify import setup
 
@@ -746,6 +759,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    backup = sub.add_parser("backup", help="save settings and recordings to a private local archive")
+    backup.add_argument("--to", type=Path, help="the folder for the archive (default: <settings>/backups)")
+    backup.set_defaults(fn=cmd_backup)
     wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
     wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
     wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
