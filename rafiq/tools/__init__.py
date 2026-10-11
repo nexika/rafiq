@@ -134,6 +134,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         from . import presence  # noqa: F401
     else:
         off.add(f"{__name__}.presence")
+    from . import brief  # noqa: F401  (last: it gathers the others)
     # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
     tools = {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
     found = scenes.scenes_from(cfg)

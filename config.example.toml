@@ -84,6 +84,10 @@ ask_first = true                # ask before each screenshot that goes to Claude
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
+[brief]
+at_first_start = false          # true: say the daily brief at the first start of each day
+language = "en"                 # en, fr, es, de, ar or ar-EG
+
 [discord]
 enabled = false                 # true once your bot is invited; its token goes in DISCORD_BOT_TOKEN
 user_id = ""                    # your Discord user id, for "who mentioned me"

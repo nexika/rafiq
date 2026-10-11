@@ -25,6 +25,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
+| Daily brief | "brief me", "good morning": the time, weather, today's calendar, new email and what is due today in one answer; `brief.at_first_start = true` says it at the first start of each day |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |

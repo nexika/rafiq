@@ -104,6 +104,8 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    # The daily brief, said once a day at the first start, in this language tag (en, fr, ..., ar-EG).
+    "brief": {"at_first_start": False, "language": "en"},
     # A Discord bot token (DISCORD_BOT_TOKEN), never a user token; user_id is your own Discord id.
     "discord": {"enabled": False, "bot_token": "", "user_id": ""},
     "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
