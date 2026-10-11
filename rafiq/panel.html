@@ -299,6 +299,7 @@ function handle(e) {
     case "muted": add("note", e.muted ? "Muted" : "Listening again");
       muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
     case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;
+    case "notify": add("note", "🔔 " + e.text + (e.spoken ? "" : " (not spoken: muted or quiet hours)")); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
     case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
       if (page === "models") show("models"); break;

@@ -216,6 +216,18 @@ timer or music when the answer used one. It never takes the focus, and the next 
 Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
 `[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
 
+**Spoken notifications** tell you when a long job ends, so you can stop watching terminals:
+
+```bash
+rafiq notify --done "the benchmark"   # "Finished: the benchmark", in the language you last spoke
+make test; rafiq notify --failed tests
+rafiq mute                            # muted: shown in the panel, not spoken
+rafiq hooks claude-code               # a Claude Code Stop hook ("Finished: Claude Code")
+rafiq hooks shell                     # `announce <command>` and `watch-ci` (GitHub Actions) for your shell
+```
+
+Set `notify.quiet_hours = "22:00-07:00"` in the config to keep them silent at night.
+
 ## The wake word
 
 **Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"

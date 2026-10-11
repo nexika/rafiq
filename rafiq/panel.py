@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import lang, modes, permissions, persona, status, subscriptions
+from . import lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
 
 MAX_BODY = 10_000
@@ -165,6 +165,10 @@ def make_handler(assistant, token: str, port: int):
                 assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put("always" if data["yes"] and data.get("always") is True else data["yes"])
+            elif (path == "/api/notify" and isinstance(data.get("text"), str) and data["text"].strip()
+                  and data.get("event", "") in notify.EVENTS and data.get("lang") in (None, *lang.TAGS)):
+                assistant.submit("notify", text=data["text"][:500], event=data.get("event", ""),
+                                 lang=data.get("lang"))
             elif path == "/api/show":
                 assistant.submit("show_again")
             elif path == "/api/paper":

@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import interpret, kws, lang, modes, overlay, presence, privacy, timing, wake
+from . import interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -325,6 +325,16 @@ class Assistant:
         if not self.silent:
             self.speaker.say(text, tag)
 
+    def notify(self, text: str, event: str, tag: str | None, now: datetime | None = None) -> None:
+        """A long job ended (`rafiq notify`): say so in the conversation's language, unless muted or
+        in quiet hours, when the panel shows it only."""
+        tag = tag or self.tag
+        sentence = notify.message(text, event, tag)
+        spoken = notify.should_speak(self.cfg, self.muted, now)
+        self.events.publish("notify", {"text": sentence, "event": event, "spoken": spoken})
+        if spoken:
+            self.speaker.say(sentence, lang.script_language(sentence, tag))
+
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
         panel's yes and no buttons answer too, and its Always button ("always": yes, and don't ask
@@ -469,6 +479,8 @@ class Assistant:
                     self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag))
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
+                elif kind == "notify":
+                    self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
                 elif kind == "result":

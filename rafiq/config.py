@@ -210,6 +210,8 @@ DEFAULTS: dict = {
     "plugs": [],                         # smart plugs, one table each; see the README
     # OBS Studio 28+ with its WebSocket server on; OBS_WEBSOCKET_PASSWORD overrides the password here.
     "obs": {"enabled": False, "host": "localhost", "port": 4455, "password": "", "timeout": 5},
+    # Notifications from long jobs (`rafiq notify`) are shown but not spoken in these hours.
+    "notify": {"quiet_hours": ""},   # e.g. "22:00-07:00"
     "anthropic_api_key": "",
     "openai_api_key": "",
 }
