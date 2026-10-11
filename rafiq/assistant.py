@@ -28,7 +28,7 @@ from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
-from .tools import Tool, brief, load_all
+from .tools import Tool, brief, load_all, media
 from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
 
@@ -319,6 +319,12 @@ class Assistant:
             self.play_scene(scene, tag)
             return
         self.set_state("thinking")
+        # "Put X on Netflix" and the like need no model: the page opens at once.
+        direct = media.direct(text, tag)
+        if direct:
+            self.say(direct, lang.script_language(direct, tag))
+            self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+            return
         self.speech = self.speaker.stream()
         try:
             answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)

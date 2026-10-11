@@ -104,7 +104,7 @@ OPTIONAL = ("google", "discord", "instagram", "obs")
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; the optional ones, Home Assistant, Hue, the smart plugs and presence only
     when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
-    from . import background, everyday, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
+    from . import background, content, everyday, lists, media, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
     for name in OPTIONAL:
@@ -134,6 +134,10 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         from . import presence  # noqa: F401
     else:
         off.add(f"{__name__}.presence")
+    if cfg.get("deadlines", {}).get("feeds"):
+        from . import agenda  # noqa: F401
+    else:
+        off.add(f"{__name__}.agenda")
     from . import brief  # noqa: F401  (last: it gathers the others)
     # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
     tools = {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
