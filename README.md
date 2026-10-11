@@ -167,6 +167,7 @@ rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
 rafiq wake-pc aa:bb:cc:dd:ee:ff           # start a computer that is off (Wake-on-LAN must be on)
 rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
+rafiq show                # show the last answer on screen again
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
@@ -192,6 +193,11 @@ charges tomorrow or its amount changed, and a split by category. They are kept i
 subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and
 proposes what it finds; each one is merged only when you press Merge, and a new price for a known
 subscription updates it and raises the "amount changed" alert.
+
+**On screen**, each answer also appears as a desktop notification, with a line for the weather, a
+timer or music when the answer used one. It never takes the focus, and the next answer replaces it.
+Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
+`[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
 
 ## The wake word
 
@@ -360,6 +366,12 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 
+## Always on
+
+Rafiq can run day and night on this PC, a mini-PC, a NAS, a Raspberry Pi or a VPS, as a systemd
+service. [docs/hosting.md](docs/hosting.md) explains where to run it and how to keep its panel
+private. On the server, `rafiq status` says whether it is running and safe, and `rafiq update` pulls
+the new version, reinstalls it and restarts the service.
 ## From your phone
 
 Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").

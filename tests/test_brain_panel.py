@@ -308,6 +308,12 @@ def test_the_panel_will_not_listen_beyond_this_computer():
         serve(FakeAssistant(), "0.0.0.0", 0, "t" * 40)
 
 
+def test_show_again_is_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/show", {})[0] == 200
+    assert assistant.jobs == [("show_again", {})]
+
+
 def test_a_mode_chosen_in_the_panel_is_queued_for_the_assistant(panel):
     assistant, port = panel
     assert request(port, "/api/mode", {"mode": "offline"})[0] == 200

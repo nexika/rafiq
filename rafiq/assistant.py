@@ -20,8 +20,8 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, presence, timing, wake
-from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
+from . import kws, lang, modes, overlay, presence, timing, wake
+from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
 from .budget import Budget
@@ -39,6 +39,7 @@ from .tts import Speaker, SpeechStream
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
+LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
 
 
 @dataclass
@@ -66,20 +67,30 @@ class Context:
 
 @dataclass
 class Events:
-    """What happened, for the panel: the last 100 events, and a queue per open panel."""
+    """What happened, for the panel: the last 100 events, and a queue per open panel. Watchers are
+    called with each event as it happens (the answer overlay is one)."""
     history: deque = field(default_factory=lambda: deque(maxlen=100))
     listeners: list = field(default_factory=list)
+    watchers: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def publish(self, kind: str, data: dict) -> None:
+    def publish(self, kind: str, data: dict, keep: bool = True) -> None:
+        """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
+        are not replayed to a panel opened later."""
         event = {"kind": kind, "time": time.time(), **data}
         with self.lock:
-            self.history.append(event)
+            if keep:
+                self.history.append(event)
             for q in list(self.listeners):
                 try:
                     q.put_nowait(event)
                 except queue.Full:
                     pass
+        for watch in list(self.watchers):
+            try:
+                watch(kind, data)
+            except Exception:            # a broken watcher must not stop Rafiq from answering
+                pass
 
     def subscribe(self) -> queue.Queue:
         q: queue.Queue = queue.Queue(maxsize=200)
@@ -98,6 +109,9 @@ class Assistant:
         self.cfg = cfg or config_mod.load()
         speech = self.cfg["speech"]
         self.events = Events()
+        self.overlay = overlay.Overlay(overlay.pick_backend(self.cfg))
+        self.events.watchers.append(self.overlay.feed)
+        self.silent = bool(self.cfg["overlay"].get("silent"))   # answers on screen only
         self.jobs: queue.Queue = queue.Queue()
         self.mic = Microphone.from_config(self.cfg)
         if self.mic.device is None:          # no microphone chosen: the echo-cancelled one, if loaded
@@ -137,6 +151,7 @@ class Assistant:
         self.muted = False                   # `rafiq mute`: the name and follow-ups are not listened for
         self.interrupted = threading.Event()                # "stop" said over Rafiq's last sentence
         self.state = "starting"
+        self._level_at = 0.0
         self.speech: SpeechStream | None = None       # the answer being spoken while it is written
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
@@ -153,6 +168,23 @@ class Assistant:
         self.state = state
         self.events.publish("state", {"state": state})
 
+    def status(self) -> dict:
+        """What the panel's drawer shows: the settings it may change (never a key), the spend so far
+        and the timers and reminders waiting."""
+        return {"settings": config_mod.settable(self.cfg), "choices": config_mod.CHOICES,
+                "spend": self.brain.spend(),
+                "tasks": [{"kind": a.kind, "label": a.label, "due": a.due} for a in self.scheduler.pending()]}
+
+    def change_settings(self, changes: dict) -> None:
+        """Save settings changed in the panel; the brain and the voice read them on their next use."""
+        config_mod.save_settings(changes, self.cfg)
+        self.events.publish("settings", {"settings": config_mod.settable(self.cfg)})
+
+    def _publish_level(self, frame: np.ndarray) -> None:
+        now = time.monotonic()
+        if now - self._level_at >= LEVEL_SECONDS:
+            self._level_at = now
+            self.events.publish("level", {"level": level(frame)}, keep=False)
     @property
     def mode(self) -> str:
         return modes.current(self.cfg)
@@ -249,6 +281,7 @@ class Assistant:
                 continue
             if frame is None:
                 continue
+            self._publish_level(frame)
             utterance = self.endpointer.push(frame, self.vad(frame))
             if utterance is not None and len(utterance) / RATE >= MIN_UTTERANCE_SECONDS:
                 return utterance
@@ -270,9 +303,10 @@ class Assistant:
 
     # ------------------------------------------------------------------ talking
 
-    def say(self, text: str, tag: str) -> None:
-        self.events.publish("said", {"text": text, "tag": tag})
-        self.speaker.say(text, tag)
+    def say(self, text: str, tag: str, cards: list[dict] | None = None) -> None:
+        self.events.publish("said", {"text": text, "tag": tag, **({"cards": cards} if cards else {})})
+        if not self.silent:
+            self.speaker.say(text, tag)
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
@@ -328,6 +362,10 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        if lang.is_show_again(text):
+            if not self.overlay.show_again():
+                self.say(lang.phrase("nothing_to_show", tag), tag)
+            return
         if lang.is_sleep(text):
             self.go_to_sleep()
             return
@@ -344,12 +382,13 @@ class Assistant:
             self.say(direct, lang.script_language(direct, tag))
             self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
             return
-        self.speech = self.speaker.stream()
+        self.speech = None if self.silent else self.speaker.stream()   # silent: on screen only
         try:
-            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)
+            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put if self.speech else None)
             self.events.publish("said", {"text": answer, "tag": lang.script_language(answer, tag)})
         finally:
-            self.speech.close()
+            if self.speech:
+                self.speech.close()
             self.speech = None
         self.publish_spending(tag)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
@@ -396,7 +435,9 @@ class Assistant:
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "say":
-                    self.say(data["text"], data["tag"])
+                    self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "show_again":
+                    self.overlay.show_again()
                 elif kind == "paper":
                     self.offer_paper()
                 elif kind == "brief":
@@ -423,7 +464,8 @@ class Assistant:
 
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
-        self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+        self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag,
+                    cards=[{"kind": "timer", "text": alarm.label}])
 
     def start_of_day(self) -> None:
         """Queue the daily brief, if it is turned on and has not been said yet today."""

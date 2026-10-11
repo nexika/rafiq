@@ -274,7 +274,7 @@ def test_the_assistant_speaks_the_answer_as_it_comes_and_shows_it_once(ollama):
     assistant = Assistant.__new__(Assistant)       # no microphone or models
     assistant.cfg = config.load()
     assistant.cfg["speech"]["follow_up_seconds"] = 0
-    assistant.events, assistant.speech, assistant.tag = Events(), None, "en"
+    assistant.events, assistant.speech, assistant.tag, assistant.silent = Events(), None, "en", False
     assistant.ctx = type("Ctx", (), {"tag": "en"})()
     assistant.speaker = fake_speaker(log)
     assistant.brain = make_brain()

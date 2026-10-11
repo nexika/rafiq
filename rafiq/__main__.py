@@ -1,5 +1,6 @@
-"""rafiq run | ask | say | paper | agent | agent-token | satellite | gestures | doctor | phone | mcp | toolcheck |
-google-setup | spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service | wake-pc"""
+"""rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
+phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
+uninstall-service | wake-pc"""
 
 from __future__ import annotations
 
@@ -398,6 +399,24 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
+def cmd_status(_args) -> int:
+    """Is Rafiq up, and is it safe? Works over SSH on a server without a screen."""
+    from . import hosting
+
+    checks = hosting.status(config.load())
+    for check in checks:
+        _check(check.label, check.ok, check.detail)
+    return 0 if all(check.ok for check in checks) else 1
+
+
+def cmd_update(args) -> int:
+    from . import hosting
+
+    code, lines = hosting.update(check=args.check, restart=not args.no_restart)
+    print("\n".join(lines))
+    return code
+
+
 def cmd_toolcheck(_args) -> int:
     """Send a fixed list of requests to the local model, once with every tool and once with the set it
     gets, and print how often it picked the right tool and answered in the right language."""
@@ -471,6 +490,11 @@ def cmd_listen(_args) -> int:
 def cmd_mute(args) -> int:
     """Turn listening off and on: bind this to a keyboard shortcut too."""
     return _ask_running("/api/mute", {} if args.state is None else {"muted": args.state == "on"})
+
+
+def cmd_show(_args) -> int:
+    """Show the running Rafiq's last answer on screen again (also: say "show it again")."""
+    return _ask_running("/api/show", {})
 
 
 def cmd_enroll(args) -> int:
@@ -690,6 +714,7 @@ def main(argv=None) -> int:
     token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
     sat.add_argument("action", choices=("run", "simulate", "token"),
                      help="run: be a satellite; simulate: send a WAV to the hub; token: make a new device's token")
@@ -708,6 +733,12 @@ def main(argv=None) -> int:
     gestures.add_argument("action", choices=("on", "off", "demo", "calibrate"))
     gestures.set_defaults(fn=cmd_gestures)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("status", help="is Rafiq running, its version, and is the panel private").set_defaults(
+        fn=cmd_status)
+    update = sub.add_parser("update", help="pull the new version, reinstall it and restart the service")
+    update.add_argument("--check", action="store_true", help="only say whether there is a new version")
+    update.add_argument("--no-restart", action="store_true", help="don't restart the rafiq service")
+    update.set_defaults(fn=cmd_update)
     sub.add_parser("phone", help="show how to set up a phone shortcut for the phone bridge").set_defaults(
         fn=cmd_phone)
     sub.add_parser("mcp", help="offer the harmless tools to MCP clients such as Claude Desktop (stdio)").set_defaults(

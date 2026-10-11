@@ -210,6 +210,7 @@ class Brain:
         self.memory = Memory()
         self.clock = clock
         self._claude = None
+        self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
 
     # ------------------------------------------------------------------ choosing a backend
 
@@ -348,6 +349,7 @@ class Brain:
         if action and not self.confirm(action, tag):
             self.on_event("tool", {"name": name, "args": args, "result": "declined"})
             return "The user said no; it was not done. Tell them briefly that you didn't do it."
+        self.on_event("tool_start", {"name": name})
         if tool.slow:
             self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag})
             if voice is not None:
@@ -364,6 +366,22 @@ class Brain:
             self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
         return result[:8000]
 
+    def spend(self) -> dict:
+        """Claude's tokens so far, and their price in dollars when one is set for the model
+        (brain.prices); Ollama runs here and costs nothing."""
+        price = self.cfg["brain"].get("prices", {}).get(self.cfg["brain"]["claude_model"])
+        dollars = None
+        if isinstance(price, dict):
+            dollars = round((self.tokens["input_tokens"] * price.get("input", 0)
+                             + self.tokens["output_tokens"] * price.get("output", 0)) / 1e6, 6)
+        return {**self.tokens, "dollars": dollars}
+
+    def _count(self, usage) -> None:
+        if usage is None:
+            return
+        for name in self.tokens:
+            self.tokens[name] += getattr(usage, name, 0) or 0
+        self.on_event("spend", self.spend())
     def local_tools(self) -> dict[str, Tool]:
         return local_tools(self.tools, self.cfg["brain"].get("ollama_tools", "local"))
 
@@ -417,6 +435,7 @@ class Brain:
             usage = getattr(resp, "usage", None)
             if self.budget and usage:
                 self.budget.charge_tokens(self.claude_model(), usage.input_tokens, usage.output_tokens)
+            self._count(getattr(resp, "usage", None))
             voice.end()
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
             calls = [b for b in resp.content if b.type == "tool_use"]
