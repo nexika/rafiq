@@ -1,8 +1,11 @@
+from pathlib import Path
+
 import pytest
 
 from rafiq import assistant as assistant_mod
 from rafiq import config
 from rafiq.assistant import Context, Events
+from rafiq.practice import Practice
 from rafiq.reader import Reader
 from rafiq.tools import media
 
@@ -91,6 +94,7 @@ class FakeSpeaker:
 def bare_assistant(said):
     """An Assistant without a microphone, a speaker or a model: just what respond() uses."""
     a = object.__new__(assistant_mod.Assistant)
+    a.practice = Practice(Path("practice.json"))   # no session running
     a.cfg = config.load()
     a.events = Events()
     a.ctx = Context(a.cfg, scheduler=None)

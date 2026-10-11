@@ -1,10 +1,12 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from rafiq import config, lang, overlay
 from rafiq.assistant import Assistant, Events
 from rafiq.overlay import Card, NotifyBackend, Overlay, card_for
+from rafiq.practice import Practice
 
 
 class FakeBackend:
@@ -176,6 +178,7 @@ class FakeSpeaker:
 
 def bare_assistant(silent):
     assistant = Assistant.__new__(Assistant)
+    assistant.practice = Practice(Path("practice.json"))   # no session running
     assistant.events, assistant.speaker, assistant.silent = Events(), FakeSpeaker(), silent
     return assistant
 

@@ -1,10 +1,12 @@
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
 from rafiq import config, lang, timing
 from rafiq.brain import Brain
+from rafiq.practice import Practice
 from rafiq.reader import Reader
 from rafiq.tools import REGISTRY, Tool, load_all
 from rafiq.tools.web import SEARCHING
@@ -273,6 +275,7 @@ def test_the_assistant_speaks_the_answer_as_it_comes_and_shows_it_once(ollama):
     log = []
     ollama += [{"role": "assistant", "content": "One. Two."}]
     assistant = Assistant.__new__(Assistant)       # no microphone or models
+    assistant.practice = Practice(Path("practice.json"))   # no session running
     assistant.cfg = config.load()
     assistant.cfg["speech"]["follow_up_seconds"] = 0
     assistant.events, assistant.speech, assistant.tag, assistant.silent = Events(), None, "en", False

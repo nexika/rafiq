@@ -21,6 +21,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Language practice | "let's practise French, level A2, about food": a simple conversation with short spoken corrections (the full list in the panel, slower voice for A1 and A2), then "let's stop" lists what to work on; common mistakes are kept in `data/practice.json` |
 | Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
 | Your project | "run the tests", "what's my git status?", "why did CI fail?", "what's on my PR?", through Nexika's barq, tabib and mizan when they are on the PATH; set the project folder in the panel or as `[dev] project` |
 | Interpreter | "interpret between me and her, Egyptian and German", "ترجم بيني وبينه بالمصري والفرنساوي": each turn is said in the other language until someone says "stop" or "كفاية" |

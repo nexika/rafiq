@@ -33,6 +33,7 @@ from .gestures import settings as gesture_settings
 from .models import Models
 from .paper_print import MorningPaper
 from .permissions import Approvals
+from .practice import Practice
 from .reader import Reader
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
@@ -56,7 +57,7 @@ class Context:
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
     that changes something; the hand gestures; and, for a request from a satellite, its room;
-    and the spending so far."""
+    the spending so far; and the language practice session."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -70,6 +71,7 @@ class Context:
     gestures: GestureControl | None = None
     room: str = ""
     budget: Budget | None = None
+    practice: Practice | None = None
     reader: Reader | None = None
 
 
@@ -140,6 +142,7 @@ class Assistant:
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
+        self.practice = Practice(config_mod.data_dir() / "practice.json", on_event=self.events.publish)
         self.reader = Reader(interrupt=self.speaker.stop)
         # Hand gestures: the camera tracker posts to the panel, so `rafiq run` sets the url once it serves.
         self.gestures = GestureControl(SystemDesktop(), self.speaker.stop, self.events.publish,
@@ -154,7 +157,7 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
-                           reader=self.reader)
+                           practice=self.practice, reader=self.reader)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
@@ -335,6 +338,7 @@ class Assistant:
     def say(self, text: str, tag: str, cards: list[dict] | None = None) -> None:
         self.events.publish("said", {"text": text, "tag": tag, **({"cards": cards} if cards else {})})
         if not self.silent:
+            self.speaker.rate = self.practice.rate()     # slower for beginners while practising
             self.speaker.say(text, tag)
 
     def notify(self, text: str, event: str, tag: str | None, now: datetime | None = None) -> None:
@@ -413,6 +417,9 @@ class Assistant:
         if lang.is_sleep(text):
             self.go_to_sleep()
             return
+        practising = self.practice.active
+        if practising:          # a learner's French can sound like English to speech-to-text
+            tag = self.practice.tag
         self.tag = tag
         self.ctx.tag = tag
         scene = scenes_mod.match(text, scenes_mod.scenes_from(self.cfg))
@@ -426,10 +433,24 @@ class Assistant:
             self.say(direct, lang.script_language(direct, tag))
             self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
             return
+        self.speaker.rate = self.practice.rate()             # slower for beginners while practising
         self.speech = None if self.silent else self.speaker.stream()   # silent: on screen only
+
+        def voice(text: str, guess: str) -> str:
+            if self.practice.active:                         # just started, or still going
+                return self.practice.tag
+            if practising:                                   # just ended: the summary is in the learner's language
+                return lang.script_language(text, self.practice.home)
+            return guess
+
+        def speak(text: str, guess: str) -> None:
+            self.speaker.rate = self.practice.rate()
+            self.speech.put(text, voice(text, guess))
+
         try:
-            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put if self.speech else None)
-            self.events.publish("said", {"text": answer, "tag": lang.script_language(answer, tag)})
+            answer = self.brain.think(text, tag, self.ctx, on_speech=speak if self.speech else None)
+            self.events.publish("said", {"text": answer,
+                                         "tag": voice(answer, lang.script_language(answer, tag))})
         finally:
             if self.speech:
                 self.speech.close()

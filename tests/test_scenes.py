@@ -1,9 +1,11 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from rafiq import config
 from rafiq.assistant import Assistant, Context
+from rafiq.practice import Practice
 from rafiq.reader import Reader
 from rafiq.tools import Tool, load_all
 from rafiq.tools import scenes as scenes_mod
@@ -164,6 +166,7 @@ class FakeBrain:
 def bare_assistant(scenes, log, confirm=lambda action, tag: True):
     """An Assistant without a microphone, speaker or models: only what respond() and the jobs use."""
     a = Assistant.__new__(Assistant)
+    a.practice = Practice(Path("practice.json"))   # no session running
     a.cfg = config.load()
     a.cfg["scenes"] = scenes
     a.ctx = Context(a.cfg, scheduler=None, confirm=confirm, tools=fake_tools(log))
