@@ -22,6 +22,9 @@ DEFAULTS: dict = {
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "max_tokens": 600,
+        # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
+        # model rounds, tool calls in all, and seconds from the request to the answer.
+        "limits": {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120},
         "persona": "neutral",            # neutral, concise or butler; changing it by voice or in the panel wins
     },
     "speech": {

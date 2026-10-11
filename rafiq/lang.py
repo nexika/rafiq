@@ -180,6 +180,12 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "limit": {"en": "That was taking too long, so I stopped. Try asking in a simpler way.",
+              "fr": "Ça prenait trop de temps, alors j'ai arrêté. Essaie de demander plus simplement.",
+              "es": "Estaba tardando demasiado, así que paré. Prueba a pedirlo de forma más sencilla.",
+              "de": "Das hat zu lange gedauert, also habe ich aufgehört. Frag es bitte einfacher.",
+              "ar": "استغرق ذلك وقتًا طويلًا فتوقفت. جرّب أن تسأل بطريقة أبسط.",
+              "ar-EG": "ده كان واخد وقت كتير فوقفت. جرّب تسأل بطريقة أبسط."},
 }
 
 
