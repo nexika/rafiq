@@ -1,5 +1,5 @@
-"""rafiq run | ask | say | doctor | mcp | toolcheck | google-setup | instagram-setup | hue-setup | install-service |
-uninstall-service"""
+"""rafiq run | ask | say | agent | agent-token | doctor | mcp | toolcheck | google-setup | instagram-setup |
+hue-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ def cmd_run(args) -> int:
         cfg["brain"]["mode"] = args.brain
     if args.mode:
         modes.switch(cfg, args.mode)
+    if args.server:
+        return run_server(cfg)
     print("Loading the speech models (the first start downloads them)...", flush=True)
     assistant = Assistant(cfg)
     if not args.no_panel:
@@ -33,6 +35,136 @@ def cmd_run(args) -> int:
         assistant.run()
     except KeyboardInterrupt:
         assistant.stop()
+    return 0
+
+
+def run_server(cfg: dict) -> int:
+    """The brain without a microphone or a speaker: requests, the PC's actions, confirmations and
+    alarms all go through `rafiq agent` on the PC."""
+    from . import remote
+    from .assistant import Context
+    from .brain import Brain
+    from .scheduler import Scheduler
+    from .tools import load_all
+
+    hub = remote.Hub()
+    tokens = remote.AgentTokens(config.home() / "agents.json")
+
+    def say_alarm(alarm):
+        text = lang.phrase("timer_done" if alarm.kind == "timer" else "reminder", alarm.tag, label=alarm.label)
+        hub.call("say", {"text": text, "tag": alarm.tag})
+
+    def show(kind, data):
+        if kind == "tool":
+            print(f"  [{data['name']} {data['args']}] -> {str(data['result'])[:200]}", flush=True)
+        elif kind == "error":
+            print(f"  error: {data}", flush=True)
+
+    scheduler = Scheduler(config.data_dir() / "alarms.json", say_alarm)
+    tools = remote.remote_tools(load_all(cfg), hub)
+    confirm = remote.agent_confirm(hub)
+    brain = Brain(cfg, tools, confirm, on_event=show)
+    one_at_a_time = threading.Lock()
+
+    def ask(text: str, tag: str) -> str:
+        with one_at_a_time:
+            print(f"> {text}", flush=True)
+            return brain.think(text, tag, Context(cfg, scheduler, tag, confirm=confirm, tools=tools))
+
+    srv = cfg["server"]
+    try:
+        server = remote.serve(hub, tokens, ask, srv["host"], int(srv["port"]), srv["tls_cert"], srv["tls_key"])
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if not tokens.names():
+        print("No agent can connect yet: create a token with `rafiq agent-token NAME`.", flush=True)
+    scheme = "https" if srv["tls_cert"] else "http"
+    print(f"Brain server: {scheme}://{srv['host']}:{server.server_address[1]}/ (agents: "
+          f"{', '.join(tokens.names()) or 'none'}). Ctrl+C stops.", flush=True)
+    scheduler.start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        scheduler.stop()
+        server.server_close()
+    return 0
+
+
+def cmd_agent(args) -> int:
+    """Lend this PC to a Rafiq server: run the actions it asks for, and type requests to it."""
+    from . import remote
+    from .tools import load_all
+
+    cfg = config.load()
+    agent_cfg = cfg["agent"]
+    server, name, token = args.server or agent_cfg["server"], args.name or agent_cfg["name"], agent_cfg["token"]
+    if not (server and name and token):
+        print("Set [agent] server and name in the config, and the token in RAFIQ_AGENT_TOKEN "
+              "(from `rafiq agent-token NAME` on the server).", file=sys.stderr)
+        return 1
+    tools = load_all(cfg)
+    speaker = None
+    if args.speak:
+        from .tts import Speaker
+
+        speaker = Speaker(cfg)
+
+    def say(text: str, tag: str = "en") -> str:
+        print(text, flush=True)
+        if speaker:
+            speaker.say(text, tag)
+        return "said"
+
+    def confirm(question: str, tag: str = "en") -> str:
+        if speaker:
+            speaker.say(question, tag)
+        return "yes" if lang.yes_or_no(input(question + " ")) is True else "no"
+
+    actions = {action: tools[action].fn for action in remote.ACTIONS}
+    actions.update(say=say, confirm=confirm)
+    try:
+        agent = remote.Agent(server, name, token, actions, log=lambda text: print(f"  {text}", file=sys.stderr))
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    poller = threading.Thread(target=agent.run_forever, name="rafiq-agent", daemon=True)
+    poller.start()
+    print(f"Lending this PC to {server} as {name!r}. Type a request (Ctrl+D or Ctrl+C stops).", flush=True)
+    try:
+        if not sys.stdin.isatty():
+            poller.join()
+            return 0
+        while poller.is_alive():
+            text = input("> ").strip()
+            if text:
+                try:
+                    answer = agent.ask(text)
+                except Exception as exc:
+                    print(f"  error: {type(exc).__name__}", file=sys.stderr)
+                    continue
+                say(answer, lang.script_language(answer, lang.dialect(lang.guess(text), text)))
+    except (EOFError, KeyboardInterrupt):
+        pass
+    agent.stop()
+    return 0
+
+
+def cmd_agent_token(args) -> int:
+    """On the server: create (or remove) the token one PC uses to connect."""
+    from . import remote
+
+    tokens = remote.AgentTokens(config.home() / "agents.json")
+    if args.remove:
+        return 0 if tokens.remove(args.name) else 1
+    try:
+        token = tokens.add(args.name)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"Token for {args.name} (shown once; on that PC: export RAFIQ_AGENT_TOKEN=...):\n{token}")
     return 0
 
 
@@ -327,6 +459,7 @@ def main(argv=None) -> int:
     run.add_argument("--no-panel", action="store_true")
     run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
     run.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
+    run.add_argument("--server", action="store_true", help="the brain only, for `rafiq agent` on another PC")
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
@@ -345,6 +478,15 @@ def main(argv=None) -> int:
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
     enroll.set_defaults(fn=cmd_enroll)
+    agent = sub.add_parser("agent", help="lend this PC (screen, speakers, apps) to a `rafiq run --server`")
+    agent.add_argument("--server", help="the server's address, e.g. http://100.101.12.3:8766")
+    agent.add_argument("--name", help="this agent's name, as given to `rafiq agent-token`")
+    agent.add_argument("--speak", action="store_true", help="say answers and questions out loud")
+    agent.set_defaults(fn=cmd_agent)
+    token = sub.add_parser("agent-token", help="on the server: create the token a PC's agent connects with")
+    token.add_argument("name")
+    token.add_argument("--remove", action="store_true", help="remove that agent's token instead")
+    token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
     mute = sub.add_parser("mute", help="stop or start listening (for a keyboard shortcut)")

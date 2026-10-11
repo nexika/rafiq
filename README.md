@@ -24,8 +24,10 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
-| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
+| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
+| Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
+| OBS Studio | "start recording" (asks first), "go live" (asks first), "switch to the camera scene", "clip that" |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -234,6 +236,30 @@ home_command = ["/home/you/bin/scene", "home"]
 The scenes are commands of your own for now (run as argument lists, never through a shell), so they
 can drive any lights or plugs you already control from the terminal.
 
+## The brain on another machine
+
+The brain (models, keys, confirmations, alarms) can run on an always-on machine, with your PC lending
+it the screen, the speakers and the apps:
+
+```bash
+# on the always-on machine
+rafiq agent-token desk               # prints the token for the PC called "desk", once
+rafiq run --server                   # [server] host and port in the config; default 127.0.0.1:8766
+
+# on the PC
+export RAFIQ_AGENT_TOKEN=...
+rafiq agent --server http://100.101.12.3:8766 --name desk --speak
+```
+
+The agent only connects outward (the PC opens no port), asks the server for the next action and runs
+only the ones on its list: open an app, list apps, volume, system status, lock the screen, power
+(still asked first, on the PC), open a web address, say something, ask yes or no. Each PC has its own
+token, and the server keeps only its hash (`rafiq agent-token desk --remove` cuts that PC off). The
+token travels over TLS (`[server] tls_cert` and `tls_key`) or a private network: without TLS the
+server only listens on a private address and the agent only connects to one, such as Tailscale.
+
+For now you type requests in the agent's terminal; the microphone stays on the PC in a later step.
+
 ## Safety
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
@@ -325,6 +351,41 @@ your network directly; no Hue cloud account is used.
 
 Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
 Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
+## Smart plugs and energy meters
+
+Shelly and Tasmota plugs are reached over their local HTTP API, with no cloud; anything else can go
+through Home Assistant. List each plug under `[[plugs]]` with the name you will say:
+
+```toml
+[[plugs]]
+name = "PC"
+kind = "shelly"                 # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
+host = "192.168.1.40"
+ask_before_off = true           # confirm out loud before turning it off
+
+[[plugs]]
+name = "heater"
+kind = "home-assistant"
+entity = "switch.heater"
+power_entity = "sensor.heater_power"   # optional, W or kW
+energy_entity = "sensor.heater_energy" # optional, kWh
+
+[home_assistant]
+url = "http://homeassistant.local:8123"
+token = ""                      # a long-lived access token, or set HOME_ASSISTANT_TOKEN
+```
+
+Rafiq only picks a plug by its name, never an address. Plugs protected by a password are not
+supported yet.
+
+## OBS Studio
+
+1. OBS 28 or newer: in OBS, **Tools > WebSocket Server Settings**, tick **Enable WebSocket server**
+   and note the password.
+2. `.venv/bin/pip install -e ".[obs]"`
+3. Under `[obs]` in the config set `enabled = true` and the `password` (or set `OBS_WEBSOCKET_PASSWORD`).
+4. For "clip that", turn on the replay buffer in OBS (Settings > Output > Replay Buffer) and start it.
 
 ## Settings
 
