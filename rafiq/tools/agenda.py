@@ -127,7 +127,7 @@ def _line(entry: Entry) -> str:
 
 
 @tool("deadlines", "Upcoming deadlines (and periods away, such as leave) from the user's iCal feeds.",
-      {"days": {"type": "integer", "description": "how many days ahead, 1 to 90"}})
+      {"days": {"type": "integer", "description": "how many days ahead, 1 to 90"}}, level="private")
 def deadlines(days: int = 14, ctx=None, get: Callable = _get_bytes, now: datetime | None = None,
               cache: dict | None = None) -> str:
     cfg = ctx.cfg if ctx else {}
