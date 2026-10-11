@@ -1,7 +1,7 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
 Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN,
-RAFIQ_AGENT_TOKEN), then the file, and are never logged.
+RAFIQ_AGENT_TOKEN, DISCORD_BOT_TOKEN), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -95,6 +95,9 @@ DEFAULTS: dict = {
         "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # The phone bridge (iOS Shortcuts, Android HTTP Shortcuts or Tasker). Off until you turn it on; it
+    # listens on this computer only unless you choose another address (see the README).
+    "phone": {"enabled": False, "host": "127.0.0.1", "port": 8767},
     # `rafiq run --server`: the brain without devices, for `rafiq agent` on the PC. Without a TLS
     # certificate it only listens on a private address (the LAN or Tailscale).
     "server": {"host": "127.0.0.1", "port": 8766, "tls_cert": "", "tls_key": ""},
@@ -104,6 +107,16 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "deadlines": {
+        "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}
+        "cache_minutes": 15,
+        # A title with one of these words is a period away, not a deadline (as is anything longer than a day).
+        "period_words": ["leave", "vacation", "holiday", "day off", "congé", "vacances", "urlaub", "إجازة"],
+    },
+    # The daily brief, said once a day at the first start, in this language tag (en, fr, ..., ar-EG).
+    "brief": {"at_first_start": False, "language": "en"},
+    # A Discord bot token (DISCORD_BOT_TOKEN), never a user token; user_id is your own Discord id.
+    "discord": {"enabled": False, "bot_token": "", "user_id": ""},
     "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
     # accounts: usernames to report on; empty for every account linked to the token.
     "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
@@ -179,12 +192,13 @@ def load(path: Path | None = None) -> dict:
         cfg["home_assistant"]["token"] = os.environ["HOME_ASSISTANT_TOKEN"]
     if os.environ.get("RAFIQ_AGENT_TOKEN"):
         cfg["agent"]["token"] = os.environ["RAFIQ_AGENT_TOKEN"]
+    if os.environ.get("DISCORD_BOT_TOKEN"):
+        cfg["discord"]["bot_token"] = os.environ["DISCORD_BOT_TOKEN"]
     return cfg
 
 
-def panel_token() -> str:
-    """A random token the panel page must send back, so no other web page can drive Rafiq."""
-    path = home() / "panel.token"
+def _token(name: str) -> str:
+    path = home() / name
     if path.is_file():
         token = path.read_text().strip()
         if len(token) >= 32:
@@ -194,3 +208,13 @@ def panel_token() -> str:
     path.write_text(token)
     path.chmod(0o600)
     return token
+
+
+def panel_token() -> str:
+    """A random token the panel page must send back, so no other web page can drive Rafiq."""
+    return _token("panel.token")
+
+
+def phone_token() -> str:
+    """The phone's own token, so it can be changed (by deleting phone.token) without the panel's."""
+    return _token("phone.token")
