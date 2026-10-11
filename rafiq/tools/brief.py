@@ -53,9 +53,10 @@ def gather(tools: dict, ctx) -> str:
 
 @tool("daily_brief", "Brief the user on their day in one go: the time, the weather, today's calendar, "
       "new email and the timers and reminders due today. Use it for 'brief me', 'good morning' or "
-      "'what's my day like'.")
+      "'what's my day like'.", level="private")
 def daily_brief(ctx=None) -> str:
-    return gather({k: t for k, t in REGISTRY.items() if k != "daily_brief"}, ctx)
+    tools = (ctx.tools if ctx is not None and getattr(ctx, "tools", None) else None) or REGISTRY
+    return gather({k: t for k, t in tools.items() if k != "daily_brief"}, ctx)
 
 
 # ---------------------------------------------------------------------- once a day, at the first start
