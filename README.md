@@ -27,6 +27,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
+| Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
 | Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
 | OBS Studio | "start recording" (asks first), "go live" (asks first), "switch to the camera scene", "clip that" |
 
@@ -268,8 +269,8 @@ For now you type requests in the agent's terminal; the microphone stays on the P
   answer cancels.
 - "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
-- Web pages, search results and emails are passed to the model as data, never as instructions.
-  Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- Web pages, search results, emails and Discord messages are passed to the model as data, never as
+  instructions. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
   asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
   in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
@@ -311,6 +312,17 @@ calendar: run `rafiq google-setup` again to give it the others.
 
 Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
 before Rafiq had them, run `rafiq google-setup` again.
+
+## Discord
+
+Rafiq reads Discord through a bot of your own, never your user account (self-bots are against
+Discord's rules, and a user token is refused).
+
+1. Create an application at the [Discord developer portal](https://discord.com/developers/applications),
+   add a bot and turn on its **Message Content** intent.
+2. Invite it to your servers with the **View Channels** and **Read Message History** permissions.
+3. Put its token in `DISCORD_BOT_TOKEN` (or `bot_token` under `[discord]`), your own Discord user id in
+   `user_id` (Developer Mode, then right-click your name, Copy User ID), and set `enabled = true`.
 
 ## Instagram statistics
 
