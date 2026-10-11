@@ -206,3 +206,49 @@ def test_satellite_token_command_prints_a_config_snippet(capsys):
     assert main(["satellite", "token", "--name", "garage", "--room", "garage"]) == 0
     out = capsys.readouterr().out
     assert "[satellites.devices.garage]" in out and 'room = "garage"' in out
+
+
+# ---------------------------------------------------------------------- on a Raspberry Pi (#64)
+
+def test_a_refused_satellite_raises_refused(hub):
+    port = hub[0]()
+    with pytest.raises(satellite.Refused):
+        satellite.Client("127.0.0.1", port, "kitchen", "x" * 32).connect()
+
+
+def test_a_refused_satellite_stops_with_code_2_before_opening_any_device(hub, monkeypatch):
+    import rafiq.audio
+
+    monkeypatch.setattr(rafiq.audio.Microphone, "start", lambda self: pytest.fail("opened the microphone"))
+    cfg = make_cfg()
+    cfg["satellite"].update(hub=f"127.0.0.1:{hub[0]()}", name="kitchen", token="x" * 32)
+    assert satellite.run_device(cfg) == 2
+
+
+def test_the_token_can_come_from_the_environment(monkeypatch):
+    cfg = config.load()
+    cfg["satellite"].update(hub="192.168.1.10", name="kitchen", token="")
+    monkeypatch.setenv("RAFIQ_SATELLITE_TOKEN", TOKEN)
+    assert satellite.settings(cfg) == ("192.168.1.10", 8766, "kitchen", TOKEN)
+    monkeypatch.delenv("RAFIQ_SATELLITE_TOKEN")
+    assert satellite.settings(cfg) is None
+
+
+def test_the_unit_restarts_except_when_refused():
+    unit = satellite.unit("/opt/rafiq/.venv/bin/python")
+    assert "ExecStart=/opt/rafiq/.venv/bin/python -m rafiq satellite run" in unit
+    assert "Restart=always" in unit and "RestartPreventExitStatus=2" in unit
+    assert "WantedBy=default.target" in unit
+
+
+def test_a_score_line_says_whether_it_would_wake():
+    assert satellite.score_line(0.31, 0.4) == "0.310  <= 0.400  wakes"
+    assert satellite.score_line(0.52, 0.4) == "0.520  >  0.400  ignored"
+
+
+def test_scores_need_recordings_of_the_name(monkeypatch, capsys):
+    from rafiq import kws
+
+    monkeypatch.setattr(kws.Spotter, "load", classmethod(lambda cls: None))
+    assert satellite.print_scores(config.load()) == 1
+    assert "rafiq enroll" in capsys.readouterr().out

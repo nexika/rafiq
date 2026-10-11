@@ -597,6 +597,11 @@ def cmd_satellite(args) -> int:
     cfg = config.load()
     if args.action == "run":
         return satellite.run_device(cfg)
+    if args.action == "scores":
+        return satellite.print_scores(cfg)
+    if args.action == "unit":
+        print(satellite.unit(sys.executable), end="")
+        return 0
     if args.action == "token":
         name = args.name or "kitchen"
         print(f"On the main computer, in {config.home() / 'config.toml'}:\n")
@@ -835,8 +840,9 @@ def main(argv=None) -> int:
     score.set_defaults(fn=cmd_stt_score)
     sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
-    sat.add_argument("action", choices=("run", "simulate", "token"),
-                     help="run: be a satellite; simulate: send a WAV to the hub; token: make a new device's token")
+    sat.add_argument("action", choices=("run", "simulate", "token", "scores", "unit"),
+                     help="run: be a satellite; simulate: send a WAV to the hub; token: make a new device's "
+                          "token; scores: print each utterance's wake score; unit: print a systemd user unit")
     sat.add_argument("wav", nargs="?", help="simulate: a 16 kHz mono WAV of a request")
     sat.add_argument("--name", help="the satellite's name (default: [satellite] name)")
     sat.add_argument("--room", help="token: the room it is in (default: its name)")
