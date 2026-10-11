@@ -8,6 +8,7 @@ its result. The rules are checked when the tool is registered, so a tool that br
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -96,8 +97,9 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google, Home Assistant and Hue only when they are set up."""
-    from . import background, everyday, memory, pc, screen, style, web  # noqa: F401  (registers the tools)
+    """Import every skill module; Google, Home Assistant and Hue only when they are set up. The scene
+    tool names the scenes in the config, so the brain knows which exist."""
+    from . import background, everyday, memory, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
     if cfg.get("google", {}).get("enabled"):
@@ -113,7 +115,13 @@ def load_all(cfg: dict) -> dict[str, Tool]:
     else:
         off.add(f"{__name__}.hue")
     # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
-    return {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
+    tools = {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
+    found = scenes.scenes_from(cfg)
+    if found:
+        run = tools["run_scene"]
+        tools["run_scene"] = dataclasses.replace(run, description=f"{run.description} The scenes: "
+                                                 f"{scenes.describe(found)}.")
+    return tools
 
 
 # What a small local model gets by default. Every extra tool is one more wrong choice for a 7B model,

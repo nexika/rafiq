@@ -166,6 +166,8 @@ PHRASES = {
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "scene_done": {"en": "Done.", "fr": "C'est fait.", "es": "Hecho.", "de": "Erledigt.", "ar": "تم.",
+                   "ar-EG": "تمام، خلصت."},
     "task_done": {"en": "Your task is done. {result}", "fr": "Ta tâche est terminée. {result}",
                   "es": "Tu tarea está lista. {result}", "de": "Deine Aufgabe ist fertig. {result}",
                   "ar": "انتهت مهمتك. {result}", "ar-EG": "المهمة خلصت. {result}"},
