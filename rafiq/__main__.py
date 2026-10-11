@@ -1,5 +1,5 @@
-"""rafiq run | ask | say | paper | agent | agent-token | gestures | doctor | phone | mcp | toolcheck | google-setup |
-spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service"""
+"""rafiq run | ask | say | paper | agent | agent-token | satellite | gestures | doctor | phone | mcp | toolcheck |
+google-setup | spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service | wake-pc"""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ def cmd_run(args) -> int:
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
         assistant.gestures.url = f"http://{host}:{server.server_address[1]}/api/gesture"
         print(f"Panel: http://{host}:{port}/", flush=True)
+    _start_hub(cfg, assistant)
     if cfg["phone"].get("enabled"):
         from .phone import PhoneBridge
         from .phone import serve as serve_phone
@@ -47,6 +48,25 @@ def cmd_run(args) -> int:
     except KeyboardInterrupt:
         assistant.stop()
     return 0
+
+
+def _start_hub(cfg: dict, assistant) -> None:
+    """Serve the satellites listed in the settings, if any, with the assistant's models and tools."""
+    from . import satellite
+    from .brain import Brain
+
+    if not satellite.devices(cfg):
+        return
+    hub = satellite.Hub(cfg, transcribe=assistant.transcribe, tools=assistant.tools, scheduler=assistant.scheduler,
+                        make_brain=lambda tools, confirm: Brain(cfg, tools, confirm, on_event=assistant.events.publish,
+                                                              facts=assistant.facts),
+                        on_event=assistant.events.publish)
+    sats = cfg["satellites"]
+    tls = satellite.server_tls(cfg)
+    server = hub.serve(sats["host"], int(sats["port"]), tls)
+    threading.Thread(target=server.serve_forever, name="rafiq-satellites", daemon=True).start()
+    print(f"Satellites: {sats['host']}:{sats['port']} ({'TLS' if tls else 'no TLS: use a private network'}), "
+          f"{', '.join(sorted(hub.devices))}", flush=True)
 
 
 def run_server(cfg: dict) -> int:
@@ -249,6 +269,8 @@ def cmd_paper(args) -> int:
 
     from . import paper
 
+    if args.paper_command:
+        return cmd_paper_print(args)
     cfg = config.load()
     day = date.today()
     if args.demo:
@@ -460,6 +482,85 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_satellite(args) -> int:
+    """This computer as a microphone and speaker in another room, a simulator, or a new device's token."""
+    import secrets
+
+    from . import satellite
+
+    cfg = config.load()
+    if args.action == "run":
+        return satellite.run_device(cfg)
+    if args.action == "token":
+        name = args.name or "kitchen"
+        print(f"On the main computer, in {config.home() / 'config.toml'}:\n")
+        print(f'[satellites.devices.{name}]\ntoken = "{secrets.token_urlsafe(32)}"\nroom = "{args.room or name}"')
+        print('risky = "ask"                   # or "block": no actions that need a yes from this room')
+        print("\nOn the satellite: [satellite] hub, name and the same token.")
+        return 0
+    # simulate: send a 16 kHz mono WAV as if said to a satellite, print the answer and the time taken
+    import wave
+
+    import numpy as np
+
+    sat = cfg["satellite"]
+    with wave.open(args.wav, "rb") as wav:
+        if wav.getframerate() != 16000 or wav.getnchannels() != 1 or wav.getsampwidth() != 2:
+            print("The recording must be 16 kHz mono 16-bit WAV.", file=sys.stderr)
+            return 1
+        audio = satellite.from_pcm(wav.readframes(wav.getnframes()))
+    host, port = satellite.parse_hub(args.hub or sat["hub"] or f"127.0.0.1:{cfg['satellites']['port']}")
+    try:
+        result = satellite.simulate(host, port, args.name or sat["name"], args.token or sat["token"],
+                                    np.asarray(audio), yes=args.yes, tls=satellite.client_tls(cfg))
+    except (OSError, satellite.ProtocolError) as exc:
+        print(f"The hub did not answer: {exc}", file=sys.stderr)
+        return 1
+    print(f"room: {result.room}\nheard: {result.heard}")
+    for text in result.said:
+        print(f"said: {text}")
+    print(f"answered in {result.seconds:.2f} s")
+    return 0
+
+
+def cmd_paper_print(args) -> int:
+    """The morning paper on paper: print it now (asking first), have the running Rafiq offer it, or install
+    the systemd timer that does that every morning."""
+    from . import paper_print as paper
+
+    if args.paper_command == "print":
+        result = paper.MorningPaper(config.load()).print_today(lambda action: _terminal_confirm(action, "en"))
+        print(result)
+        return 0 if result.startswith("printed") else 1
+    if args.paper_command == "offer":
+        return _ask_running("/api/paper", {})
+    try:
+        units = paper.timer_units(args.at, sys.executable)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    folder = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, text in units.items():
+        (folder / name).write_text(text)
+    print(f"Wrote {folder / paper.TIMER}. Turn it on with:\n"
+          f"  systemctl --user daemon-reload && systemctl --user enable --now {paper.TIMER}")
+    return 0
+
+
+def cmd_wake_pc(args) -> int:
+    """Start a computer that is off, with Wake-on-LAN (what a satellite does when the main computer is off)."""
+    from .fallback import wake_pc
+
+    try:
+        wake_pc(args.mac, args.broadcast, args.port)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wake-on-LAN packet sent to {args.mac}.")
+    return 0
+
+
 def cmd_phone(_args) -> int:
     """What to put in an iOS Shortcut or an Android HTTP Shortcut."""
     cfg = config.load()
@@ -566,7 +667,11 @@ def main(argv=None) -> int:
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
     enroll.set_defaults(fn=cmd_enroll)
-    news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF)")
+    news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF), print it, or schedule that")
+    news.add_argument("paper_command", nargs="?", choices=("print", "offer", "timer"),
+                      help="print: print today's paper now (asks first); offer: have the running Rafiq offer to "
+                           "print it (what the timer runs); timer: install a systemd user timer that offers it")
+    news.add_argument("--at", default="07:00", help="with timer: time of day, HH:MM (default 07:00)")
     news.add_argument("--demo", action="store_true", help="made-up data, to see the layout")
     news.add_argument("--html", action="store_true", help="write HTML instead of printing a PDF")
     news.add_argument("--out", help="where to save it (default: the data folder, paper/<date>.pdf)")
@@ -583,6 +688,16 @@ def main(argv=None) -> int:
     token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
+    sat.add_argument("action", choices=("run", "simulate", "token"),
+                     help="run: be a satellite; simulate: send a WAV to the hub; token: make a new device's token")
+    sat.add_argument("wav", nargs="?", help="simulate: a 16 kHz mono WAV of a request")
+    sat.add_argument("--name", help="the satellite's name (default: [satellite] name)")
+    sat.add_argument("--room", help="token: the room it is in (default: its name)")
+    sat.add_argument("--hub", help="simulate: host:port of the hub (default: [satellite] hub)")
+    sat.add_argument("--token", help="simulate: the satellite's token (default: [satellite] token)")
+    sat.add_argument("--yes", action="store_true", help="simulate: answer yes when asked to confirm")
+    sat.set_defaults(fn=cmd_satellite)
     mute = sub.add_parser("mute", help="stop or start listening (for a keyboard shortcut)")
     mute.add_argument("state", nargs="?", choices=("on", "off"), help="on: stop listening; default: toggle")
     mute.set_defaults(fn=cmd_mute)
@@ -598,6 +713,11 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
+    wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
+    wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
+    wake.add_argument("--port", type=int, default=9)
+    wake.set_defaults(fn=cmd_wake_pc)
     sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
     insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")
