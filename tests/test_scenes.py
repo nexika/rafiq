@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from rafiq import config
@@ -153,7 +155,7 @@ class FakeBrain:
     def __init__(self):
         self.asked = []
 
-    def think(self, text, tag, ctx):
+    def think(self, text, tag, ctx, on_speech=None):
         self.asked.append(text)
         return "brain answer"
 
@@ -167,6 +169,7 @@ def bare_assistant(scenes, log, confirm=lambda action, tag: True):
     a.brain, a.said, a.tag, a.follow_up_until = FakeBrain(), [], "en", 0.0
     a.say = lambda text, tag: a.said.append((text, tag))
     a.set_state = lambda state: None
+    a.speaker = SimpleNamespace(stream=lambda: SimpleNamespace(put=lambda text, tag: None, close=lambda: True))
     a.events = type("E", (), {"publish": lambda self, kind, data: None})()
     return a
 

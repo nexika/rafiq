@@ -127,7 +127,7 @@ def describe(scenes: dict[str, Scene]) -> str:
 
 @tool("run_scene", "Run one of the user's scenes (moods), a set of actions saved under a name, such as "
                    "'film mode' or 'turn everything off'.",
-      {"name": {"type": "string", "description": "the scene's name or id"}}, required=("name",))
+      {"name": {"type": "string", "description": "the scene's name or id"}}, required=("name",), level="act")
 def run_scene(name: str, ctx=None) -> str:
     scenes = scenes_from(ctx.cfg)
     scene = scenes.get(name) or match(name, scenes)
