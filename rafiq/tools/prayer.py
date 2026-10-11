@@ -244,7 +244,7 @@ def _upcoming(cfg: dict, place: Place, current: datetime) -> list[tuple[str, dat
 # ---------------------------------------------------------------------- tools
 
 @tool("prayer_times", "Today's Islamic prayer times (or another day's) for the user's place, and the next prayer.",
-      {"date": {"type": "string", "description": "YYYY-MM-DD; empty for today"}})
+      {"date": {"type": "string", "description": "YYYY-MM-DD; empty for today"}}, level="safe")
 def prayer_times_tool(date: str = "", ctx=None, clock: Callable[[], datetime] = _now) -> str:  # noqa: A002
     place = place_from(ctx.cfg)
     if not place:
@@ -268,7 +268,7 @@ def prayer_times_tool(date: str = "", ctx=None, clock: Callable[[], datetime] = 
 
 
 @tool("hijri_date", "The Islamic (Hijri) date, today or for a given day.",
-      {"date": {"type": "string", "description": "Gregorian date YYYY-MM-DD; empty for today"}})
+      {"date": {"type": "string", "description": "Gregorian date YYYY-MM-DD; empty for today"}}, level="safe")
 def hijri_date(date: str = "", ctx=None) -> str:  # noqa: A002
     try:
         day = datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.now().date()
@@ -280,7 +280,7 @@ def hijri_date(date: str = "", ctx=None) -> str:  # noqa: A002
             "calendar; it can be a day off the local moon sighting (prayer.hijri_adjust shifts it)")
 
 
-@tool("ramadan_countdown", "In Ramadan: time left until iftar (maghrib) and until suhoor ends (fajr).")
+@tool("ramadan_countdown", "In Ramadan: time left until iftar (maghrib) and until suhoor ends (fajr).", level="safe")
 def ramadan_countdown(ctx=None, clock: Callable[[], datetime] = _now) -> str:
     place = place_from(ctx.cfg)
     if not place:
@@ -411,7 +411,7 @@ PLAYER = Player()
        "from_verse": {"type": "integer", "description": "first verse; default 1"},
        "to_verse": {"type": "integer", "description": "last verse; default the end of the surah"},
        "reciter": {"type": "string", "description": "one of " + ", ".join(RECITERS) + "; empty for the user's"}},
-      required=("surah",))
+      required=("surah",), level="act")
 def quran_recite(surah: int, from_verse: int = 1, to_verse: int = 0, reciter: str = "", ctx=None,
                  player: Callable[[list[str]], None] = PLAYER) -> str:
     surah, first = int(surah), int(from_verse or 1)
@@ -434,7 +434,7 @@ def quran_recite(surah: int, from_verse: int = 1, to_verse: int = 0, reciter: st
     return f"playing surah {surah} ({SURAHS[surah - 1]}), verses {first} to {last}, recited by {name}"
 
 
-@tool("quran_stop", "Stop the Quran recitation that is playing.")
+@tool("quran_stop", "Stop the Quran recitation that is playing.", level="act")
 def quran_stop() -> str:
     PLAYER.stop()
     return "stopped"
