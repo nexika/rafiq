@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 offline-voice = ["piper-tts>=1.2"]
+gestures = ["mediapipe>=0.10", "opencv-python>=4.8"]
 paper = ["playwright>=1.45"]
 obs = ["obsws-python>=1.6"]
 nvidia = ["nvidia-ml-py>=12"]
@@ -42,7 +43,7 @@ build-backend = "setuptools.build_meta"
 include = ["rafiq*"]
 
 [tool.setuptools.package-data]
-rafiq = ["panel.html", "subscriptions.html"]
+rafiq = ["panel.html", "subscriptions.html", "rafiq.service"]
 
 [tool.ruff]
 line-length = 120

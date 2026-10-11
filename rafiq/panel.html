@@ -236,6 +236,8 @@ function handle(e) {
     case "tool_start": nowEl.textContent = "⚙ Using " + e.name + "…"; break;
     case "spend": showSpend(e); break;
     case "settings": settings = e.settings; fillDrawer(); break;
+    case "gesture": add("note", "✋ " + e.gesture + " → " + e.action); break;
+    case "gestures": add("note", "Hand gestures " + (e.on ? "on" : "off")); break;
     case "muted": add("note", e.muted ? "Muted" : "Listening again");
       muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
     case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;

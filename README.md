@@ -16,6 +16,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Skill | Examples |
 |---|---|
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
+| Hand gestures | open palm pauses, thumbs-up plays, a fist stops Rafiq talking, swipes change tabs or the volume (see below) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "what's the weather?" (where you are), "15% of 240", "5 miles in km" |
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
@@ -166,6 +167,7 @@ rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
 rafiq wake-pc aa:bb:cc:dd:ee:ff           # start a computer that is off (Wake-on-LAN must be on)
 rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
+rafiq show                # show the last answer on screen again
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
@@ -191,6 +193,11 @@ charges tomorrow or its amount changed, and a split by category. They are kept i
 subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and
 proposes what it finds; each one is merged only when you press Merge, and a new price for a known
 subscription updates it and raises the "amount changed" alert.
+
+**On screen**, each answer also appears as a desktop notification, with a line for the weather, a
+timer or music when the answer used one. It never takes the focus, and the next answer replaces it.
+Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
+`[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
 
 ## The wake word
 
@@ -221,6 +228,31 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
+
+## Hand gestures
+
+With a webcam, held hand gestures control the computer:
+
+| Gesture | Does |
+|---|---|
+| Open palm, held | pause what is playing |
+| Thumbs-up, held | play |
+| Fist, held | stop Rafiq talking |
+| One finger, then swipe left or right | previous or next tab (tab mode lasts 5 seconds) |
+| Two fingers, then swipe left or right | volume down or up |
+| Two hands moving apart or together | zoom in or out |
+
+```bash
+.venv/bin/pip install -e ".[gestures]"   # MediaPipe and OpenCV
+rafiq gestures demo        # the camera with the hand landmarks and the gesture it sees
+rafiq gestures calibrate   # the same, with sliders for how long to hold and the pause between gestures; s saves
+rafiq gestures on          # in the running Rafiq (bind to a shortcut); "Rafiq, turn on hand gestures" works too
+```
+
+`enabled = true` under `[gestures]` turns them on when Rafiq starts. The camera runs in its own
+process, which sends Rafiq only the name of each gesture, never an image, with a token made each
+time it starts; only the actions above can happen. Media keys go through `playerctl`; tabs and zoom
+press keys with `ydotool` on Wayland (its `ydotoold` service must run) or `xdotool` on X11.
 
 ## Satellites: another room
 
@@ -334,6 +366,12 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 
+## Always on
+
+Rafiq can run day and night on this PC, a mini-PC, a NAS, a Raspberry Pi or a VPS, as a systemd
+service. [docs/hosting.md](docs/hosting.md) explains where to run it and how to keep its panel
+private. On the server, `rafiq status` says whether it is running and safe, and `rafiq update` pulls
+the new version, reinstalls it and restarts the service.
 ## From your phone
 
 Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").

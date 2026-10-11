@@ -81,6 +81,11 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[overlay]
+display = "auto"                # answers on screen as desktop notifications; "off" for none
+seconds = 8                     # how long an answer stays on screen
+silent = false                  # true: answer on screen only, never out loud
+
 [satellites]                    # devices in other rooms (rafiq satellite token --name kitchen)
 host = "127.0.0.1"              # this computer's address on a private network, to let satellites in
 port = 8766
@@ -228,3 +233,9 @@ tls_key = ""
 [agent]                         # rafiq agent: lend this PC to a server; the token goes in RAFIQ_AGENT_TOKEN
 server = ""                     # e.g. "http://100.101.12.3:8766"
 name = ""                       # as given to `rafiq agent-token NAME` on the server
+
+[gestures]
+enabled = false                 # webcam hand gestures at start (pip install -e ".[gestures]"); see README
+hold_seconds = 0.6              # how long to hold a gesture; `rafiq gestures calibrate` tunes these
+cooldown_seconds = 1.0          # the pause before the next gesture counts
+camera = 0                      # which webcam
