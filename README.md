@@ -57,20 +57,31 @@ to paste into any chatbot, which then walks you through the install one command 
 
 ```bash
 git clone https://github.com/nexika/rafiq.git && cd rafiq
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
-.venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
-.venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
-.venv/bin/rafiq doctor       # checks every integration and suggests models for this machine
-.venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
+./install.sh
 ```
+
+`install.sh` creates `.venv`, installs Rafiq with the offline voices and Google, then starts
+`rafiq setup`, a wizard that:
+
+1. asks your name, the brain (auto, Claude or Ollama), the Claude and Azure keys (both optional, typed
+   hidden) and your city, and writes `~/.config/rafiq/config.toml`, readable only by you;
+2. downloads the offline Piper voices, the Whisper models (about 550 MB) and the Ollama model;
+3. tests the microphone level, then runs `rafiq doctor`;
+4. records the wake word (`rafiq enroll`, about two minutes) and greets you out loud.
+
+A step that fails is reported and the rest goes on; run `rafiq setup` again at any time (Enter keeps
+what you chose before). `./install.sh --no-setup` installs only; `rafiq setup --no-enroll` skips the
+recording. By hand: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"`.
+
+Optional extras: `.venv/bin/pip install --no-deps openwakeword` for a trained wake word later, and
+`.venv/bin/pip install -e ".[nvidia]"` for GPU figures on an NVIDIA card (AMD needs nothing).
 
 `rafiq doctor` lists your microphones; pick one with `[audio] device` in the settings. A microphone
 that refuses 16 kHz is opened at a rate it takes and resampled. At start-up Rafiq listens to the room
 for a second and fits its speech thresholds to the noise, so stay quiet for a moment
 (`[audio] auto_calibration = false` turns this off).
 
-The first start downloads the Whisper models (about 550 MB). Offline voices go in
-`~/.config/rafiq/data/piper/` (see below).
+Offline voices go in `~/.config/rafiq/data/piper/` (see below).
 
 `rafiq backup` saves your settings, keys and recordings to
 `~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
@@ -140,7 +151,7 @@ sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
 tried after it. The Kokoro files are on the
 [kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases) (model-files-v1.0).
 
-Download the Piper voices once:
+`rafiq setup` downloads the Piper voices; by hand:
 
 ```bash
 cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voices \
