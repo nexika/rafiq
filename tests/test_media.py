@@ -96,7 +96,7 @@ def bare_assistant(said):
     a.brain = FakeBrain()
     a.say = lambda text, tag: said.append((text, tag))
     a.speaker = FakeSpeaker()
-    a.speech = None
+    a.speech, a.silent = None, False
     a.set_state = lambda state: None
     return a
 

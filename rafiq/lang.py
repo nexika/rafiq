@@ -119,6 +119,26 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+# "Show it again": bring back the last answer on screen instead of asking the brain.
+SHOW_AGAIN = (
+    "show it again", "show that again", "show me again", "show me that again", "show the answer again",
+    "montre-le encore", "montre le encore", "montre-moi encore", "remontre", "réaffiche",
+    "muéstralo otra vez", "muestralo otra vez", "muéstramelo otra vez", "enséñamelo otra vez",
+    "zeig es nochmal", "zeig das nochmal", "zeig es noch mal", "zeig das noch mal", "nochmal zeigen",
+    "اعرضها مرة أخرى", "اعرضه مرة أخرى", "اعرضها مرة ثانية", "أعد العرض", "وريني تاني", "وريهالي تاني",
+    "اعرضها تاني", "اعرضه تاني",
+)
+SHOW_AGAIN_MAX_WORDS = 7
+
+
+def is_show_again(text: str) -> bool:
+    """True when a short request asks to see the last answer again ("show it again", "وريني تاني")."""
+    said = " ".join(words(text))
+    if len(said.split()) > SHOW_AGAIN_MAX_WORDS:
+        return False
+    return any(" ".join(words(p)) in said for p in SHOW_AGAIN)
+
+
 SLEEP = {"go to sleep", "sleep", "mets toi en veille", "en veille", "va dormir", "dors", "vete a dormir",
          "a dormir", "duérmete", "duermete", "geh schlafen", "schlaf", "نام", "نم", "روح نام", "اذهب للنوم",
          "اذهب إلى النوم"}
@@ -166,6 +186,9 @@ PHRASES = {
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "nothing_to_show": {"en": "There's nothing to show yet.", "fr": "Il n'y a encore rien à montrer.",
+                        "es": "Todavía no hay nada que mostrar.", "de": "Es gibt noch nichts zu zeigen.",
+                        "ar": "لا يوجد شيء لعرضه بعد.", "ar-EG": "لسه مفيش حاجة أوريهالك."},
     "paper_printed": {"en": "Your morning paper is printing.", "fr": "Ton journal du matin est en cours d'impression.",
                       "es": "Tu periódico de la mañana se está imprimiendo.",
                       "de": "Deine Morgenzeitung wird gedruckt.", "ar": "جريدتك الصباحية قيد الطباعة.",

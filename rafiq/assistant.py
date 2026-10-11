@@ -20,7 +20,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, presence, timing, wake
+from . import kws, lang, modes, overlay, presence, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -63,9 +63,11 @@ class Context:
 
 @dataclass
 class Events:
-    """What happened, for the panel: the last 100 events, and a queue per open panel."""
+    """What happened, for the panel: the last 100 events, and a queue per open panel. Watchers are
+    called with each event as it happens (the answer overlay is one)."""
     history: deque = field(default_factory=lambda: deque(maxlen=100))
     listeners: list = field(default_factory=list)
+    watchers: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def publish(self, kind: str, data: dict) -> None:
@@ -77,6 +79,11 @@ class Events:
                     q.put_nowait(event)
                 except queue.Full:
                     pass
+        for watch in list(self.watchers):
+            try:
+                watch(kind, data)
+            except Exception:            # a broken watcher must not stop Rafiq from answering
+                pass
 
     def subscribe(self) -> queue.Queue:
         q: queue.Queue = queue.Queue(maxsize=200)
@@ -95,6 +102,9 @@ class Assistant:
         self.cfg = cfg or config_mod.load()
         speech = self.cfg["speech"]
         self.events = Events()
+        self.overlay = overlay.Overlay(overlay.pick_backend(self.cfg))
+        self.events.watchers.append(self.overlay.feed)
+        self.silent = bool(self.cfg["overlay"].get("silent"))   # answers on screen only
         self.jobs: queue.Queue = queue.Queue()
         self.mic = Microphone.from_config(self.cfg)
         if self.mic.device is None:          # no microphone chosen: the echo-cancelled one, if loaded
@@ -265,9 +275,10 @@ class Assistant:
 
     # ------------------------------------------------------------------ talking
 
-    def say(self, text: str, tag: str) -> None:
-        self.events.publish("said", {"text": text, "tag": tag})
-        self.speaker.say(text, tag)
+    def say(self, text: str, tag: str, cards: list[dict] | None = None) -> None:
+        self.events.publish("said", {"text": text, "tag": tag, **({"cards": cards} if cards else {})})
+        if not self.silent:
+            self.speaker.say(text, tag)
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
@@ -323,6 +334,10 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        if lang.is_show_again(text):
+            if not self.overlay.show_again():
+                self.say(lang.phrase("nothing_to_show", tag), tag)
+            return
         if lang.is_sleep(text):
             self.go_to_sleep()
             return
@@ -339,12 +354,13 @@ class Assistant:
             self.say(direct, lang.script_language(direct, tag))
             self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
             return
-        self.speech = self.speaker.stream()
+        self.speech = None if self.silent else self.speaker.stream()   # silent: on screen only
         try:
-            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)
+            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put if self.speech else None)
             self.events.publish("said", {"text": answer, "tag": lang.script_language(answer, tag)})
         finally:
-            self.speech.close()
+            if self.speech:
+                self.speech.close()
             self.speech = None
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
@@ -383,7 +399,9 @@ class Assistant:
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "say":
-                    self.say(data["text"], data["tag"])
+                    self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "show_again":
+                    self.overlay.show_again()
                 elif kind == "paper":
                     self.offer_paper()
                 elif kind == "brief":
@@ -410,7 +428,8 @@ class Assistant:
 
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
-        self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+        self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag,
+                    cards=[{"kind": "timer", "text": alarm.label}])
 
     def start_of_day(self) -> None:
         """Queue the daily brief, if it is turned on and has not been said yet today."""

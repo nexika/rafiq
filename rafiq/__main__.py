@@ -1,5 +1,6 @@
-"""rafiq run | ask | say | paper | agent | agent-token | satellite | gestures | doctor | phone | mcp | toolcheck |
-google-setup | spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service | wake-pc"""
+"""rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | phone | mcp |
+toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service |
+wake-pc"""
 
 from __future__ import annotations
 
@@ -471,6 +472,11 @@ def cmd_mute(args) -> int:
     return _ask_running("/api/mute", {} if args.state is None else {"muted": args.state == "on"})
 
 
+def cmd_show(_args) -> int:
+    """Show the running Rafiq's last answer on screen again (also: say "show it again")."""
+    return _ask_running("/api/show", {})
+
+
 def cmd_enroll(args) -> int:
     """Record the name (and a few ordinary sentences) so Rafiq knows your voice saying it."""
     from . import enroll
@@ -688,6 +694,7 @@ def main(argv=None) -> int:
     token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
     sat.add_argument("action", choices=("run", "simulate", "token"),
                      help="run: be a satellite; simulate: send a WAV to the hub; token: make a new device's token")

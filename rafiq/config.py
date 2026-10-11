@@ -95,6 +95,11 @@ DEFAULTS: dict = {
         "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    "overlay": {
+        "display": "auto",               # auto or notify: answers as desktop notifications; off: none
+        "seconds": 8,                    # how long an answer stays on screen
+        "silent": False,                 # true: answer on screen only, never out loud
+    },
     # Hand gestures through the webcam (pip install rafiq[gestures]); on at start, or by voice or shortcut.
     "gestures": {"enabled": False, "hold_seconds": 0.6, "cooldown_seconds": 1.0, "camera": 0},
     # Devices in other rooms that hear "Rafiq" and send the request here (rafiq satellite on the device).

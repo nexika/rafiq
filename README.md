@@ -167,6 +167,7 @@ rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
 rafiq wake-pc aa:bb:cc:dd:ee:ff           # start a computer that is off (Wake-on-LAN must be on)
 rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
+rafiq show                # show the last answer on screen again
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
@@ -192,6 +193,11 @@ charges tomorrow or its amount changed, and a split by category. They are kept i
 subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and
 proposes what it finds; each one is merged only when you press Merge, and a new price for a known
 subscription updates it and raises the "amount changed" alert.
+
+**On screen**, each answer also appears as a desktop notification, with a line for the weather, a
+timer or music when the answer used one. It never takes the focus, and the next answer replaces it.
+Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
+`[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
 
 ## The wake word
 
