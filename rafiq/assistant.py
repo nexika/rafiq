@@ -22,7 +22,8 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import dictation, interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
+from . import dictation, interpret, kws, lang, modes, notify, nudges, overlay, presence, privacy, timing, voiceid, wake
+from . import history as history_mod
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -31,6 +32,7 @@ from .facts import Facts
 from .gestures import GestureControl, SystemDesktop
 from .gestures import settings as gesture_settings
 from .models import Models
+from .nudges import Nudge, Nudger, OpenRouteService
 from .paper_print import MorningPaper
 from .permissions import Approvals
 from .practice import Practice
@@ -116,8 +118,27 @@ class Events:
             if q in self.listeners:
                 self.listeners.remove(q)
 
+    def drop(self, texts: set[str]) -> None:
+        """Forget what was heard, typed or said with these texts, here and in the open panels. What was
+        heard counts with the name before it too ("Rafiq, what time is it?")."""
+        def gone(e: dict) -> bool:
+            text = e.get("text")
+            return e["kind"] in ("heard", "typed", "said") and isinstance(text, str) and (
+                text in texts or (e["kind"] == "heard" and wake.find(text)[1] in texts))
+
+        with self.lock:
+            dropped = [e["text"] for e in self.history if gone(e)]
+            kept = [e for e in self.history if not gone(e)]
+            self.history.clear()
+            self.history.extend(kept)
+        # Open panels remove these from the page; not kept, so the texts are not replayed later.
+        self.publish("forgotten", {"texts": sorted(texts | set(dropped))}, keep=False)
+
 
 class Assistant:
+    history: history_mod.History | None = None   # what was heard and answered, set in __init__
+    nudger: Nudger | None = None             # calendar nudges, when turned on
+
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or config_mod.load()
         speech = self.cfg["speech"]
@@ -158,6 +179,7 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
                            practice=self.practice, reader=self.reader)
+        self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
@@ -165,6 +187,8 @@ class Assistant:
         self.models = Models(self.cfg, on_event=self.events.publish, on_whisper=self._use_whisper)
         self.keyboard = dictation.Keyboard()
         self.dictating = False
+        self.history = history_mod.History(config_mod.data_dir() / "history.json",
+                                           self.cfg["history"]["retention_days"])
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -180,6 +204,9 @@ class Assistant:
         self.mel = kws.Mel() if self.spotter else None
         if self.spotter:   # (rafiq enroll --sensitivity refits the threshold)
             self.name_seconds = max(len(t) for t in self.spotter.templates) * 0.02
+        # Your voice print (`rafiq voiceid`), if any: then only your spoken yes confirms an action.
+        self.voice_print = voiceid.VoicePrint.load()
+        self.embedder = voiceid.Embedder() if self.voice_print else None
 
     def _use_whisper(self, size: str) -> None:
         """A new Whisper size from the panel: the next request is heard with it (it loads then)."""
@@ -356,7 +383,8 @@ class Assistant:
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
         panel's yes and no buttons answer too, and its Always button ("always": yes, and don't ask
-        again for this tool)."""
+        again for this tool). With a voice print, a spoken yes must be in your voice; when Rafiq is not
+        sure it is, only the panel's Yes button goes ahead."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         if self.speech:                      # finish what was being said before asking
@@ -392,6 +420,9 @@ class Assistant:
                     self.go_to_sleep()
                     return False
                 answer = lang.yes_or_no(text)
+                if answer and not self._your_voice(audio):
+                    self.say(lang.phrase("voice_unsure", tag), tag)
+                    return self._panel_answer(tag)
                 if answer is not None:
                     self.events.publish("confirmed", {"yes": answer})
                     if not answer:
@@ -402,11 +433,43 @@ class Assistant:
         self.say(lang.phrase("cancelled", tag), tag)
         return False
 
-    def respond(self, text: str, tag: str) -> None:
+    def _your_voice(self, audio: np.ndarray) -> bool:
+        """Whether a spoken yes is in the enrolled voice (always, without a voice print)."""
+        if self.voice_print is None:
+            return True
+        score = self.voice_print.score(self.embedder(audio))
+        match = self.voice_print.matches(score)
+        self.events.publish("voice", {"score": round(score, 3), "threshold": round(self.voice_print.threshold, 3),
+                                      "match": match})
+        return match
+
+    def _panel_answer(self, tag: str) -> bool:
+        """Wait for the panel's Yes or No; nothing said out loud counts now."""
+        self.set_state("listening")
+        deadline = time.monotonic() + CONFIRM_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                answer = self.pending_answer.get_nowait()
+                self.events.publish("confirmed", {"yes": bool(answer)})
+                return answer
+            except queue.Empty:
+                pass
+            self.next_utterance(timeout=0.5)
+        self.events.publish("confirmed", {"yes": False})
+        self.say(lang.phrase("cancelled", tag), tag)
+        return False
+
+    def respond(self, text: str, tag: str, source: str = "voice") -> None:
         """Think about one request and say the answer, starting with its first sentence while the
-        rest is still being written."""
+        rest is still being written, and keep both in the history."""
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
+            return
+        if lang.is_forget(text) and self.history is not None:
+            last = self.history.forget_last()
+            if last:
+                self.forget([last])
+            self.say(lang.phrase("forgotten" if last else "nothing_to_forget", tag), tag)
             return
         pair = interpret.parse_request(text)
         if pair:
@@ -424,6 +487,8 @@ class Assistant:
             tag = self.practice.tag
         self.tag = tag
         self.ctx.tag = tag
+        if self.nudger:                      # a nudge with no language of its own is said in yours
+            self.nudger.user_tag = tag
         if dictation.wants_dictation(text):
             self.dictate(tag)
             return
@@ -454,6 +519,8 @@ class Assistant:
 
         try:
             answer = self.brain.think(text, tag, self.ctx, on_speech=speak if self.speech else None)
+            if self.history is not None:
+                self.history.add(text, answer, tag, source)
             self.events.publish("said", {"text": answer,
                                          "tag": voice(answer, lang.script_language(answer, tag))})
         finally:
@@ -464,6 +531,20 @@ class Assistant:
         if self.reader.active:            # read_aloud or "resume reading" loaded something
             self.read()
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    # ------------------------------------------------------------------ what was heard, and where it goes
+
+    def forget(self, entries: list[history_mod.Entry]) -> None:
+        """After entries leave the history: take them out of the panel's events and the conversation
+        the model is given next time, too."""
+        if not entries:
+            return
+        for entry in entries:
+            self.brain.memory.forget(entry.heard, entry.said)
+        self.events.drop({e.heard for e in entries} | {e.said for e in entries})
+
+    def privacy(self) -> dict:
+        return history_mod.privacy(self.brain.backends(), self.speaker.engines())
 
     # ------------------------------------------------------------------ dictation
 
@@ -557,7 +638,7 @@ class Assistant:
                 if kind == "text":
                     text = data["text"]
                     self.events.publish("typed", {"text": text})
-                    self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag))
+                    self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag), source="typed")
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "notify":
@@ -659,6 +740,22 @@ class Assistant:
         except Exception as exc:                 # no network for the city, a wrong setting: say so in the panel
             self.events.publish("error", {"error": f"prayer reminders: {type(exc).__name__}: {exc}"})
 
+    def _nudger(self) -> Nudger | None:
+        """Calendar nudges, when turned on and everything they need is set up."""
+        if not nudges.settings(self.cfg)["enabled"]:
+            return None
+        why = nudges.missing(self.cfg)
+        if why:
+            self.events.publish("error", {"error": f"calendar nudges are off: {why}"})
+            return None
+        from .tools import google
+
+        opts = nudges.settings(self.cfg)
+        return Nudger(opts, google.upcoming, OpenRouteService(opts["routing_key"]), user_tag=self.tag)
+
+    def _nudge_due(self, nudge: Nudge) -> None:
+        self.submit("say", text=nudge.text, tag=nudge.tag)
+
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
             self.say(lang.phrase("listening", self.tag), self.tag)
@@ -713,11 +810,14 @@ class Assistant:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
         self._plan_prayers()
+        if self.nudger:
+            self.nudger.start(self._nudge_due)
         if self.presence:
             self.presence.start(every=float(self.cfg["presence"]["check_seconds"]))
         self.start_the_day()
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
+        self.events.publish("privacy", self.privacy())
         if self.cfg["audio"]["auto_calibration"]:
             self.set_state("calibrating")
             self.calibrate()
@@ -741,6 +841,8 @@ class Assistant:
             self.gestures.stop()
             self.mic.stop()
             self.scheduler.stop()
+            if self.nudger:
+                self.nudger.stop()
             if self.presence:
                 self.presence.stop()
 

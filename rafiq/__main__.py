@@ -1,6 +1,7 @@
-"""rafiq run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite | gestures |
-doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
-install-service | uninstall-service | wake-pc | backup | stt-score"""
+"""rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
+gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup |
+hue-setup | install-service | uninstall-service | wake-pc | backup | stt-score |
+enroll | voiceid | listen"""
 
 from __future__ import annotations
 
@@ -374,6 +375,11 @@ def cmd_doctor(_args) -> int:
     hue = config.home() / "hue.json"
     _check("Philips Hue", hue.is_file() and cfg["hue"].get("enabled", False),
            "paired" if hue.is_file() else "run: rafiq hue-setup")
+    from . import nudges
+
+    if nudges.settings(cfg)["enabled"]:
+        why = nudges.missing(cfg)
+        _check("calendar nudges", why is None, why or f"from {nudges.settings(cfg)['origin']}")
     print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
@@ -524,6 +530,36 @@ def cmd_enroll(args) -> int:
         print(f"Rafiq now wakes below {report['threshold']:.2f} (sensitivity {args.sensitivity}).")
         return 0
     return enroll.run(forms=args.forms or None, takes=args.takes)
+
+
+def cmd_voiceid(args) -> int:
+    """Build the voice print from the enroll recordings, so only your spoken yes confirms an action."""
+    from . import voiceid
+
+    if args.off:
+        for name in ("voiceprint.npy", "voiceprint.json"):
+            (voiceid.folder() / name).unlink(missing_ok=True)
+        print("Voice ID is off: any spoken yes confirms again.")
+        return 0
+    try:
+        report = voiceid.from_recordings(Path(args.others) if args.others else None)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"Voice print saved from {report['recordings']} recordings; a yes needs a similarity of "
+          f"{report['threshold']:.2f}.")
+    print(f"  your own recordings refused: {report['false_rejects']} of {report['mine']}")
+    if report["others"]:
+        print(f"  other recordings accepted: {report['false_accepts']} of {report['others']}")
+    else:
+        print("  add --others DIR (.wav files of other people) to count false accepts too")
+    return 0
+
+
+def cmd_setup(args) -> int:
+    from . import setup
+
+    return setup.run(enroll=not args.no_enroll)
 
 
 def cmd_stt_score(args) -> int:
@@ -727,6 +763,9 @@ def cmd_uninstall_service(_args) -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
+    wizard = sub.add_parser("setup", help="first-run wizard: keys, voices, models, microphone, wake word")
+    wizard.add_argument("--no-enroll", action="store_true", help="skip recording the wake word")
+    wizard.set_defaults(fn=cmd_setup)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
     run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
@@ -762,6 +801,10 @@ def main(argv=None) -> int:
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
     enroll.set_defaults(fn=cmd_enroll)
+    voice = sub.add_parser("voiceid", help="only your voice can confirm actions (uses the enroll recordings)")
+    voice.add_argument("--others", metavar="DIR", help="16 kHz .wav files of other voices, to count false accepts")
+    voice.add_argument("--off", action="store_true", help="delete the voice print")
+    voice.set_defaults(fn=cmd_voiceid)
     news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF), print it, or schedule that")
     news.add_argument("paper_command", nargs="?", choices=("print", "offer", "timer"),
                       help="print: print today's paper now (asks first); offer: have the running Rafiq offer to "

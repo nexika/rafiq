@@ -117,6 +117,8 @@ DEFAULTS: dict = {
         "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # What Rafiq heard and answered, kept on this computer only; 0 keeps nothing.
+    "history": {"retention_days": 7},
     "overlay": {
         "display": "auto",               # auto or notify: answers as desktop notifications; off: none
         "seconds": 8,                    # how long an answer stays on screen

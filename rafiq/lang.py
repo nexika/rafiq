@@ -243,6 +243,30 @@ _SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
 _SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
 _STOP = _norm(STOP)
 
+# "Forget what I just said": handled by Rafiq itself, so it works offline and never reaches a model.
+FORGET = [
+    "forget what i just said", "forget what i said", "forget that", "delete that", "delete what i just said",
+    "oublie ce que je viens de dire", "oublie ce que j'ai dit", "oublie ça", "oublie ca", "efface ça",
+    "olvida lo que acabo de decir", "olvida lo que dije", "olvida eso", "borra eso",
+    "vergiss was ich gerade gesagt habe", "vergiss was ich gesagt habe", "vergiss das", "lösch das",
+    "انس ما قلته", "انسى ما قلته", "انسى اللي قلته", "انسى اللي لسه قلته", "انسى ده", "انسى دا",
+    "امسح اللي قلته", "امسح ده", "احذف ما قلته",
+]
+# Words around the request that don't change it: the name and please.
+_POLITE = {"rafiq", "رفيق", "يا", "please", "s'il", "te", "plaît", "plait", "por", "favor", "bitte", "من",
+           "فضلك", "لو", "سمحت"}
+
+
+def is_forget(text: str) -> bool:
+    """True when the whole request is "forget what I just said" in one of Rafiq's languages, so that
+    "forget that meeting on Friday" still goes to the brain."""
+    said = [w for w in words(text) if w not in _POLITE_N]
+    return bool(said) and said in _FORGET
+
+
+_FORGET = [words(p) for p in FORGET]
+_POLITE_N = _norm(_POLITE)
+
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},
     "not_heard": {"en": "Sorry, I didn't catch that.", "fr": "Désolé, je n'ai pas compris.",
@@ -253,11 +277,23 @@ PHRASES = {
                 "ar": "هل أقوم بـ{action}؟ قل نعم أو لا.", "ar-EG": "أعمل {action}؟ قول آه أو لأ."},
     "cancelled": {"en": "Okay, I won't.", "fr": "D'accord, je ne le fais pas.", "es": "Vale, no lo hago.",
                   "de": "Okay, ich lasse es.", "ar": "حسنًا، لن أفعل.", "ar-EG": "ماشي، مش هعمل كده."},
+    "voice_unsure": {"en": "I'm not sure that was your voice. Press Yes in the panel to go ahead.",
+                     "fr": "Je ne suis pas sûr que c'était ta voix. Appuie sur Oui dans le panneau pour continuer.",
+                     "es": "No estoy seguro de que fuera tu voz. Pulsa Sí en el panel para seguir.",
+                     "de": "Ich bin nicht sicher, dass das deine Stimme war. Drück im Panel auf Ja, um fortzufahren.",
+                     "ar": "لست متأكدًا أن هذا صوتك. اضغط نعم في اللوحة للمتابعة.",
+                     "ar-EG": "مش متأكد إن ده صوتك. دوس نعم في اللوحة عشان أكمل."},
     "timer_done": {"en": "Your timer is done: {label}", "fr": "Ton minuteur est terminé : {label}",
                    "es": "Tu temporizador ha terminado: {label}", "de": "Dein Timer ist abgelaufen: {label}",
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "leave_now": {"en": "Time to leave for {title} at {time}: the trip takes about {minutes} minutes.",
+                  "fr": "Il est temps de partir pour {title} à {time} : le trajet prend environ {minutes} minutes.",
+                  "es": "Es hora de salir para {title} a las {time}: el trayecto dura unos {minutes} minutos.",
+                  "de": "Zeit zu gehen für {title} um {time}: der Weg dauert etwa {minutes} Minuten.",
+                  "ar": "حان وقت الخروج إلى {title} الساعة {time}: الطريق يستغرق نحو {minutes} دقيقة.",
+                  "ar-EG": "يلا اتحرك عشان {title} الساعة {time}: الطريق حوالي {minutes} دقيقة."},
     "voice_test": {"en": "Hello, this is how I sound.", "fr": "Bonjour, voici ma voix.",
                    "es": "Hola, así suena mi voz.", "de": "Hallo, so klinge ich.", "ar": "مرحبًا، هكذا يبدو صوتي.",
                    "ar-EG": "أهلاً، ده صوتي."},
@@ -301,6 +337,11 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "forgotten": {"en": "Done, I've forgotten it.", "fr": "C'est fait, je l'ai oublié.", "es": "Hecho, lo he olvidado.",
+                  "de": "Erledigt, ich habe es vergessen.", "ar": "تم، لقد نسيته.", "ar-EG": "خلاص، نسيته."},
+    "nothing_to_forget": {"en": "There's nothing to forget.", "fr": "Il n'y a rien à oublier.",
+                          "es": "No hay nada que olvidar.", "de": "Da gibt es nichts zu vergessen.",
+                          "ar": "لا يوجد ما أنساه.", "ar-EG": "مفيش حاجة أنساها."},
     "dictating": {"en": "Dictating. Say “stop dictating” to finish.",
                   "fr": "Je tape ce que tu dis. Dis « arrête la dictée » pour finir.",
                   "es": "Escribo lo que dices. Di «deja de dictar» para terminar.",

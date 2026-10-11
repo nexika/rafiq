@@ -21,6 +21,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Clipboard | "translate what I copied into Arabic", "summarise my clipboard", "explain this error", "copy that" (needs `wl-clipboard` on Wayland, `xclip` on X11) |
 | Language practice | "let's practise French, level A2, about food": a simple conversation with short spoken corrections (the full list in the panel, slower voice for A1 and A2), then "let's stop" lists what to work on; common mistakes are kept in `data/practice.json` |
 | Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
 | Your project | "run the tests", "what's my git status?", "why did CI fail?", "what's on my PR?", through Nexika's barq, tabib and mizan when they are on the PATH; set the project folder in the panel or as `[dev] project` |
@@ -57,20 +58,31 @@ to paste into any chatbot, which then walks you through the install one command 
 
 ```bash
 git clone https://github.com/nexika/rafiq.git && cd rafiq
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
-.venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
-.venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
-.venv/bin/rafiq doctor       # checks every integration and suggests models for this machine
-.venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
+./install.sh
 ```
+
+`install.sh` creates `.venv`, installs Rafiq with the offline voices and Google, then starts
+`rafiq setup`, a wizard that:
+
+1. asks your name, the brain (auto, Claude or Ollama), the Claude and Azure keys (both optional, typed
+   hidden) and your city, and writes `~/.config/rafiq/config.toml`, readable only by you;
+2. downloads the offline Piper voices, the Whisper models (about 550 MB) and the Ollama model;
+3. tests the microphone level, then runs `rafiq doctor`;
+4. records the wake word (`rafiq enroll`, about two minutes) and greets you out loud.
+
+A step that fails is reported and the rest goes on; run `rafiq setup` again at any time (Enter keeps
+what you chose before). `./install.sh --no-setup` installs only; `rafiq setup --no-enroll` skips the
+recording. By hand: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"`.
+
+Optional extras: `.venv/bin/pip install --no-deps openwakeword` for a trained wake word later, and
+`.venv/bin/pip install -e ".[nvidia]"` for GPU figures on an NVIDIA card (AMD needs nothing).
 
 `rafiq doctor` lists your microphones; pick one with `[audio] device` in the settings. A microphone
 that refuses 16 kHz is opened at a rate it takes and resampled. At start-up Rafiq listens to the room
 for a second and fits its speech thresholds to the noise, so stay quiet for a moment
 (`[audio] auto_calibration = false` turns this off).
 
-The first start downloads the Whisper models (about 550 MB). Offline voices go in
-`~/.config/rafiq/data/piper/` (see below).
+Offline voices go in `~/.config/rafiq/data/piper/` (see below).
 
 `rafiq backup` saves your settings, keys and recordings to
 `~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
@@ -140,7 +152,7 @@ sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
 tried after it. The Kokoro files are on the
 [kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases) (model-files-v1.0).
 
-Download the Piper voices once:
+`rafiq setup` downloads the Piper voices; by hand:
 
 ```bash
 cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voices \
@@ -245,6 +257,15 @@ rafiq hooks shell                     # `announce <command>` and `watch-ci` (Git
 ```
 
 Set `notify.quiet_hours = "22:00-07:00"` in the config to keep them silent at night.
+
+**What did you hear?** Rafiq keeps what you asked and what it answered in
+`~/.config/rafiq/data/history.json` (readable only by you, on this computer only), for 7 days by
+default (`history.retention_days`; 0 keeps nothing). Only requests are kept: what followed the name, a
+follow-up, or what you typed; the listening for the name is never written down. The panel's
+**History** page searches it and deletes one entry or all of them. Say "forget what I just said"
+("oublie ça", "vergiss das", "انسى اللي قلته"...) to delete the last one by voice; Rafiq handles that
+itself, so it never reaches a model. A badge at the top of the panel says whether requests leave this
+computer right now: Claude, Azure or Edge voices, or fully offline with Ollama and Piper.
 
 ## The wake word
 
@@ -411,11 +432,11 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels. The panel's Always button stops the asking for that one tool until you revoke it
-  on the Permissions page.
+  on the Permissions page. With a voice print (`rafiq voiceid`), a spoken yes must also be in your voice.
 - "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
-- Web pages, search results, emails and Discord messages are passed to the model as data, never as
-  instructions. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- Web pages, search results, emails, Discord messages and the clipboard are passed to the model as data,
+  never as instructions. The clipboard is read only when you ask about what you copied. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
 - A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
   asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
   in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
@@ -478,6 +499,26 @@ claude mcp add rafiq -- /path/to/rafiq/.venv/bin/rafiq mcp
 
 For Claude Desktop, add to `claude_desktop_config.json`:
 `"mcpServers": {"rafiq": {"command": "/path/to/rafiq/.venv/bin/rafiq", "args": ["mcp"]}}`.
+
+## Voice ID: only your voice confirms
+
+After `rafiq enroll`, run `rafiq voiceid` once. It turns your recordings into a voice print (speaker
+embeddings from WeSpeaker's ResNet34 model, about 26 MB, downloaded on first use and checked against
+its checksum). From then on, a spoken yes to an action (power off, send an email, add an event) is
+compared with your voice print. When Rafiq is not sure it was you, it says so and only the panel's
+Yes button goes ahead. A no is taken from anyone.
+
+`rafiq voiceid` reports how many of your own recordings it would refuse; add `--others DIR` with
+16 kHz `.wav` files of other people (or of a video) to count false accepts too. `rafiq voiceid --off`
+deletes the voice print. The panel shows each check's similarity next to the threshold.
+
+Tested with five synthetic voices (Piper, one per language), each enrolled with ten recordings and
+checked against the others' answers: no other voice was accepted (0 of 60). A single word ("yes",
+"oui", "نعم") is too short to recognise and was never accepted (0 of 10); "yes, go ahead" was accepted
+4 times in 5. Say a few words, or use the panel.
+
+Voice ID can be fooled by a recording or a cloned voice: it is an extra check on top of the spoken
+yes, never the only one.
 
 ## Google calendar and Gmail
 

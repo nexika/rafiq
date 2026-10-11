@@ -104,6 +104,8 @@ language = "en"                 # the language reminders are said in: en, ar, ar
 
 [prayer.adjust]                 # minutes to add to a calculated time, e.g. fajr = 2
 [prayer.reminders]              # minutes before a prayer, e.g. fajr = 10; none until you set them
+[history]
+retention_days = 7              # what you asked and Rafiq answered, kept on this computer; 0 keeps nothing
 [dev]
 project = ""                    # the folder for "run the tests", "what's my git status?" (or set it in the panel)
 
@@ -154,6 +156,14 @@ ask_first = true                # ask before each screenshot that goes to Claude
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
+[nudges]                        # "time to leave for your 3 pm appointment", from the travel time
+enabled = false                 # needs Google and OPENROUTESERVICE_API_KEY (free at openrouteservice.org)
+origin = ""                     # the address you leave from
+mode = "driving"                # driving, cycling or walking
+calendars = ["primary"]         # the Google calendar ids to watch
+buffer_minutes = 5              # leave this much earlier than the trip itself
+quiet_hours = ["22:00", "07:00"]
+language = ""                   # empty: the event's language, else the one you last spoke
 [privacy]
 log_days = 30                   # the log (data/logs/rafiq.log) is redacted and deleted after this many days
 
