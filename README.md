@@ -235,6 +235,30 @@ home_command = ["/home/you/bin/scene", "home"]
 The scenes are commands of your own for now (run as argument lists, never through a shell), so they
 can drive any lights or plugs you already control from the terminal.
 
+## The brain on another machine
+
+The brain (models, keys, confirmations, alarms) can run on an always-on machine, with your PC lending
+it the screen, the speakers and the apps:
+
+```bash
+# on the always-on machine
+rafiq agent-token desk               # prints the token for the PC called "desk", once
+rafiq run --server                   # [server] host and port in the config; default 127.0.0.1:8766
+
+# on the PC
+export RAFIQ_AGENT_TOKEN=...
+rafiq agent --server http://100.101.12.3:8766 --name desk --speak
+```
+
+The agent only connects outward (the PC opens no port), asks the server for the next action and runs
+only the ones on its list: open an app, list apps, volume, system status, lock the screen, power
+(still asked first, on the PC), open a web address, say something, ask yes or no. Each PC has its own
+token, and the server keeps only its hash (`rafiq agent-token desk --remove` cuts that PC off). The
+token travels over TLS (`[server] tls_cert` and `tls_key`) or a private network: without TLS the
+server only listens on a private address and the agent only connects to one, such as Tailscale.
+
+For now you type requests in the agent's terminal; the microphone stays on the PC in a later step.
+
 ## Safety
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said

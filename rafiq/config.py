@@ -1,7 +1,7 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN), then the file,
-and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN,
+RAFIQ_AGENT_TOKEN), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -95,6 +95,12 @@ DEFAULTS: dict = {
         "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # `rafiq run --server`: the brain without devices, for `rafiq agent` on the PC. Without a TLS
+    # certificate it only listens on a private address (the LAN or Tailscale).
+    "server": {"host": "127.0.0.1", "port": 8766, "tls_cert": "", "tls_key": ""},
+    # `rafiq agent`: the server to lend this PC to. The token (from `rafiq agent-token NAME` on the
+    # server) can also come from RAFIQ_AGENT_TOKEN.
+    "agent": {"server": "", "name": "", "token": ""},
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
@@ -168,6 +174,8 @@ def load(path: Path | None = None) -> dict:
             cfg[key] = os.environ[key.upper()]
     if os.environ.get("HOME_ASSISTANT_TOKEN"):
         cfg["home_assistant"]["token"] = os.environ["HOME_ASSISTANT_TOKEN"]
+    if os.environ.get("RAFIQ_AGENT_TOKEN"):
+        cfg["agent"]["token"] = os.environ["RAFIQ_AGENT_TOKEN"]
     return cfg
 
 

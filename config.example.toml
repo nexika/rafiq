@@ -155,3 +155,13 @@ enabled = false                 # true to say "start recording", "switch to the 
 host = "localhost"
 port = 4455
 password = ""                   # or set OBS_WEBSOCKET_PASSWORD
+
+[server]                        # rafiq run --server: the brain only, for `rafiq agent` on a PC
+host = "127.0.0.1"              # a LAN or Tailscale address; any other needs tls_cert and tls_key
+port = 8766
+tls_cert = ""
+tls_key = ""
+
+[agent]                         # rafiq agent: lend this PC to a server; the token goes in RAFIQ_AGENT_TOKEN
+server = ""                     # e.g. "http://100.101.12.3:8766"
+name = ""                       # as given to `rafiq agent-token NAME` on the server
