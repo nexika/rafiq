@@ -6,7 +6,7 @@ from . import tool
 
 
 @tool("get_spending", "What Rafiq has spent on paid services (the Claude model, Azure voices) today and this "
-      "month, per service, and how much of the spending caps is used.")
+      "month, per service, and how much of the spending caps is used.", level="private")
 def get_spending(ctx=None) -> str:
     budget = getattr(ctx, "budget", None)
     if budget is None:

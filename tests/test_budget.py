@@ -113,6 +113,24 @@ class FakeClaude:
         self.calls += 1
         return claude_response("Hello.", (2_000, 400))
 
+    def stream(self, **kwargs):
+        return FakeStream(self.create(**kwargs))
+
+
+class FakeStream:
+    def __init__(self, reply):
+        self.reply = reply
+        self.text_stream = [b.text for b in reply.content if b.type == "text"]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return self.reply
+
 
 def test_each_claude_response_is_charged():
     budget = make_budget()
