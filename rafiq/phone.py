@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 
 from . import lang
 from .brain import Brain
-from .tools import Tool, notes
+from .tools import Tool, lists
 
 MAX_BODY = 10_000
 MAX_TEXT = 2000
@@ -67,11 +67,11 @@ class PhoneBridge:
         text = data["text"].strip()[:MAX_TEXT]
         self.on_event("phone", {"kind": kind, "text": text})
         if kind in ("note", "share"):
-            name = data.get("list") if data.get("list") in notes.LISTS else "ideas"
+            name = data.get("list") if data.get("list") in lists.LISTS else "ideas"
             url = data.get("url")
             if isinstance(url, str) and urlparse(url).scheme in ("http", "https"):
                 text = f"{text} {url.strip()}"
-            result = notes.add_note(name, text, source="phone")
+            result = lists.add_note(name, text, source="phone")
             if result.startswith("error"):
                 return 400, {"error": result}
             return 200, {"ok": True, "list": name, "answer": result}

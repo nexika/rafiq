@@ -9,7 +9,7 @@ import pytest
 from rafiq import config
 from rafiq.phone import PHONE_TOOLS, PhoneBridge, remote_tools, serve
 from rafiq.scheduler import Scheduler
-from rafiq.tools import REGISTRY, Tool, load_all, notes
+from rafiq.tools import REGISTRY, Tool, lists, load_all
 
 TOKEN = "p" * 43
 
@@ -90,18 +90,18 @@ def test_an_unsafe_tool_answers_do_that_at_home_and_does_not_run():
 # ---------------------------------------------------------------------- notes
 
 def test_notes_are_filed_listed_and_removed():
-    assert notes.add_note("shopping", "milk").startswith("added")
-    notes.add_note("shopping", "eggs")
-    notes.add_note("tasks", "call the bank")
-    assert "milk" in notes.list_notes("shopping") and "eggs" in notes.list_notes("shopping")
-    assert "bank" not in notes.list_notes("shopping")
-    assert notes.remove_note("shopping", "MILK").startswith("removed 1")
-    assert "milk" not in notes.list_notes("shopping")
-    assert notes.list_notes("ideas") == "the ideas list is empty"
+    assert lists.add_note("shopping", "milk").startswith("added")
+    lists.add_note("shopping", "eggs")
+    lists.add_note("tasks", "call the bank")
+    assert "milk" in lists.list_notes("shopping") and "eggs" in lists.list_notes("shopping")
+    assert "bank" not in lists.list_notes("shopping")
+    assert lists.remove_note("shopping", "MILK").startswith("removed 1")
+    assert "milk" not in lists.list_notes("shopping")
+    assert lists.list_notes("ideas") == "the ideas list is empty"
 
 
 def test_an_unknown_list_is_an_error():
-    assert notes.add_note("secrets", "x").startswith("error")
+    assert lists.add_note("secrets", "x").startswith("error")
 
 
 # ---------------------------------------------------------------------- the inbox
@@ -110,18 +110,18 @@ def test_a_dictated_note_is_filed_in_its_list():
     events = []
     status, body = make_bridge(events=events).inbox({"kind": "note", "list": "shopping", "text": "oat milk"})
     assert status == 200 and body["ok"] and body["list"] == "shopping"
-    assert "oat milk" in notes.list_notes("shopping")
+    assert "oat milk" in lists.list_notes("shopping")
     assert events[0][0] == "phone"
 
 
 def test_a_note_without_a_list_goes_to_ideas():
     make_bridge().inbox({"kind": "note", "text": "a lamp that follows the sun"})
-    assert "follows the sun" in notes.list_notes("ideas")
+    assert "follows the sun" in lists.list_notes("ideas")
 
 
 def test_a_shared_link_is_kept_with_its_text():
     make_bridge().inbox({"kind": "share", "text": "Read later", "url": "https://example.com/a"})
-    assert "Read later https://example.com/a" in notes.list_notes("ideas")
+    assert "Read later https://example.com/a" in lists.list_notes("ideas")
 
 
 def test_a_command_is_answered_with_only_safe_tools(ollama):
@@ -180,7 +180,7 @@ def test_a_request_without_the_right_token_is_refused(phone):
     _, port = phone
     assert post(port, {"kind": "note", "text": "x"})[0] == 403
     assert post(port, {"kind": "note", "text": "x"}, {"Authorization": "Bearer " + "q" * 43})[0] == 403
-    assert notes.list_notes("ideas") == "the ideas list is empty"
+    assert lists.list_notes("ideas") == "the ideas list is empty"
 
 
 def test_bad_json_and_huge_bodies_are_refused(phone):
