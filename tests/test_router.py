@@ -44,6 +44,11 @@ def test_replying_to_or_trashing_an_email_keeps_those_tools():
     assert {"email_reply", "email_trash"} <= set(router.route("reply to Sara's email", tools).tools)
 
 
+def test_waking_a_computer_keeps_the_wake_tool():
+    tools = {**TOOLS, "wake_computer": Tool("wake_computer", "wake_computer", lambda: "ok")}
+    assert "wake_computer" in router.route("wake the gaming pc", tools).tools
+
+
 def test_calendar_and_email_are_their_own_domains():
     assert offered("what's on my calendar tomorrow") == {"calendar_events"}
     assert offered("send an email to Sara") == {"email_send"}

@@ -29,8 +29,9 @@ class Tool:
     fn: Callable
     params: dict = field(default_factory=dict)
     required: tuple = ()
-    # None: runs without asking. A string or a function of the arguments: the action to confirm out
-    # loud first, in words the user hears ("shut down the computer").
+    # None: runs without asking. A string or a function of the arguments (and of the context, if it
+    # takes `ctx`): the action to confirm out loud first, in words the user hears ("shut down the
+    # computer"); a function may return None to run without asking.
     confirm: str | Callable | None = None
     level: str = "safe"
     slow: bool = False
@@ -42,10 +43,12 @@ class Tool:
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
 
-    def action(self, args: dict) -> str | None:
-        if self.confirm is None:
-            return None
-        return self.confirm(args) if callable(self.confirm) else self.confirm
+    def action(self, args: dict, ctx=None) -> str | None:
+        if self.confirm is None or not callable(self.confirm):
+            return self.confirm
+        if "ctx" in inspect.signature(self.confirm).parameters:
+            return self.confirm(args, ctx=ctx)
+        return self.confirm(args)
 
     def waiting(self, tag: str) -> str | None:
         if not self.slow:
@@ -93,12 +96,24 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google only when it is set up."""
-    from . import background, everyday, memory, pc, style, web  # noqa: F401  (registers the tools)
+    """Import every skill module; Google, Home Assistant and Hue only when they are set up."""
+    from . import background, everyday, memory, pc, screen, style, web  # noqa: F401  (registers the tools)
 
+    off = set()
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
-    return dict(REGISTRY)
+    else:
+        off.add(f"{__name__}.google")
+    if cfg.get("home_assistant", {}).get("url") and cfg.get("home_assistant", {}).get("token"):
+        from . import home  # noqa: F401
+    else:
+        off.add(f"{__name__}.home")
+    if cfg.get("hue", {}).get("enabled"):
+        from . import hue  # noqa: F401
+    else:
+        off.add(f"{__name__}.hue")
+    # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
+    return {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
 
 
 # What a small local model gets by default. Every extra tool is one more wrong choice for a 7B model,
@@ -126,3 +141,7 @@ def claude_schemas(tools: dict[str, Tool]) -> list[dict]:
 def ollama_schemas(tools: dict[str, Tool]) -> list[dict]:
     return [{"type": "function", "function": {"name": t.name, "description": t.description,
                                               "parameters": t.schema()}} for t in tools.values()]
+
+
+# OpenAI's chat completions take tools in the same shape as Ollama.
+openai_schemas = ollama_schemas

@@ -17,11 +17,14 @@ dependencies = [
     "psutil>=5.9",
     "trafilatura>=1.8",
     "ddgs>=9.0",
+    "jeepney>=0.8",
+    "pillow>=10.1",
 ]
 
 [project.optional-dependencies]
 google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 offline-voice = ["piper-tts>=1.2"]
+nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
 dev = ["pytest>=8", "ruff>=0.5"]
 

@@ -1,6 +1,7 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY), then the file, and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN), then the file,
+and are never logged.
 """
 
 from __future__ import annotations
@@ -13,12 +14,15 @@ from pathlib import Path
 
 DEFAULTS: dict = {
     "brain": {
-        # "auto": Claude when an API key is set and the network answers, else Ollama.
+        # "auto": Claude, then OpenAI, for each that has an API key and answers; else Ollama.
         "mode": "auto",
         # everyday: claude_model, fast and cheap; quality: quality_model; offline: Ollama and Piper only.
         "profile": "everyday",
         "claude_model": "claude-haiku-5-5",
         "quality_model": "claude-opus-5-5",
+        "openai_model": "gpt-5-mini",
+        # Any server that speaks OpenAI's chat completions works here (DeepSeek, Gemini, a local one).
+        "openai_url": "https://api.openai.com/v1",
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names
@@ -94,7 +98,21 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    # Home Assistant, for Nest, Hue, plugs and the rest: its address and a long-lived access token.
+    "home_assistant": {"url": "", "token": ""},
+    # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
+    "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
+    # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
+    "hue": {"enabled": False, "rooms": {}},
+    "screen": {
+        # Questions about the screen go to Claude (in the cloud), and never while offline unless a
+        # local vision model is set: an Ollama model that reads images, e.g. "qwen2.5vl:7b".
+        "ollama_model": "",
+        "ask_first": True,               # ask before each screenshot that goes to the cloud
+        "max_side": 1568,                # shrink the screenshot to this many pixels on its long side
+    },
     "anthropic_api_key": "",
+    "openai_api_key": "",
 }
 
 
@@ -123,8 +141,11 @@ def load(path: Path | None = None) -> dict:
     cfg = copy.deepcopy(DEFAULTS)
     if path.is_file():
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        cfg["anthropic_api_key"] = os.environ["ANTHROPIC_API_KEY"]
+    for key in ("anthropic_api_key", "openai_api_key"):
+        if os.environ.get(key.upper()):
+            cfg[key] = os.environ[key.upper()]
+    if os.environ.get("HOME_ASSISTANT_TOKEN"):
+        cfg["home_assistant"]["token"] = os.environ["HOME_ASSISTANT_TOKEN"]
     return cfg
 
 
