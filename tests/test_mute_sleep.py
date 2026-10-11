@@ -44,7 +44,7 @@ class FakeEndpointer:
 
 
 class FakeSpeaker:
-    def __init__(self, cfg, on_start=None, on_end=None):
+    def __init__(self, cfg, on_start=None, on_end=None, budget=None):
         self.said = []
 
     def say(self, text, tag):
@@ -59,7 +59,7 @@ class FakeSpeaker:
 
 
 class FakeBrain:
-    def __init__(self, cfg, tools, confirm, on_event=None, facts=None):
+    def __init__(self, cfg, tools, confirm, on_event=None, facts=None, budget=None, approvals=None):
         self.asked = []
 
     def backends(self):

@@ -21,13 +21,16 @@ import numpy as np
 
 from . import config as config_mod
 from . import kws, lang, modes, overlay, presence, timing, wake
-from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
+from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
+from .budget import Budget
 from .facts import Facts
 from .gestures import GestureControl, SystemDesktop
 from .gestures import settings as gesture_settings
+from .models import Models
 from .paper_print import MorningPaper
+from .permissions import Approvals
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
@@ -38,6 +41,7 @@ from .tts import Speaker, SpeechStream
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
+LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
 
 
 @dataclass
@@ -46,7 +50,8 @@ class Context:
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
-    that changes something; the hand gestures; and, for a request from a satellite, its room."""
+    that changes something; the hand gestures; and, for a request from a satellite, its room;
+    and the spending so far."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -59,6 +64,7 @@ class Context:
     tools: dict[str, Tool] | None = None
     gestures: GestureControl | None = None
     room: str = ""
+    budget: Budget | None = None
 
 
 @dataclass
@@ -70,10 +76,13 @@ class Events:
     watchers: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def publish(self, kind: str, data: dict) -> None:
+    def publish(self, kind: str, data: dict, keep: bool = True) -> None:
+        """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
+        are not replayed to a panel opened later."""
         event = {"kind": kind, "time": time.time(), **data}
         with self.lock:
-            self.history.append(event)
+            if keep:
+                self.history.append(event)
             for q in list(self.listeners):
                 try:
                     q.put_nowait(event)
@@ -116,7 +125,8 @@ class Assistant:
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
         self.stt_lock = threading.Lock()     # satellites' requests use the same model from other threads
-        self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
+        self.budget = Budget(self.cfg)
+        self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute, budget=self.budget)
         barge = self.cfg["interruption"]
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
@@ -127,14 +137,18 @@ class Assistant:
         self.presence = self._make_presence()
         self.facts = Facts(config_mod.data_dir() / "memory.json")
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.approvals = Approvals()
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, budget=self.budget,
+                           approvals=self.approvals)
         self.paper = MorningPaper(self.cfg)
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
-                           confirm=self.confirm, tools=self.tools, gestures=self.gestures)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
+                           confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
+                           budget=self.budget, approvals=self.approvals)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
             self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
+        self.models = Models(self.cfg, on_event=self.events.publish, on_whisper=self._use_whisper)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -142,6 +156,7 @@ class Assistant:
         self.muted = False                   # `rafiq mute`: the name and follow-ups are not listened for
         self.interrupted = threading.Event()                # "stop" said over Rafiq's last sentence
         self.state = "starting"
+        self._level_at = 0.0
         self.speech: SpeechStream | None = None       # the answer being spoken while it is written
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
@@ -149,6 +164,10 @@ class Assistant:
         self.mel = kws.Mel() if self.spotter else None
         if self.spotter:   # (rafiq enroll --sensitivity refits the threshold)
             self.name_seconds = max(len(t) for t in self.spotter.templates) * 0.02
+
+    def _use_whisper(self, size: str) -> None:
+        """A new Whisper size from the panel: the next request is heard with it (it loads then)."""
+        self.stt = SpeechToText.from_config(self.cfg)   # activate_whisper set speech.whisper_model
 
     # ------------------------------------------------------------------ state shown in the panel
 
@@ -158,6 +177,23 @@ class Assistant:
         self.state = state
         self.events.publish("state", {"state": state})
 
+    def status(self) -> dict:
+        """What the panel's drawer shows: the settings it may change (never a key), the spend so far
+        and the timers and reminders waiting."""
+        return {"settings": config_mod.settable(self.cfg), "choices": config_mod.CHOICES,
+                "spend": self.brain.spend(),
+                "tasks": [{"kind": a.kind, "label": a.label, "due": a.due} for a in self.scheduler.pending()]}
+
+    def change_settings(self, changes: dict) -> None:
+        """Save settings changed in the panel; the brain and the voice read them on their next use."""
+        config_mod.save_settings(changes, self.cfg)
+        self.events.publish("settings", {"settings": config_mod.settable(self.cfg)})
+
+    def _publish_level(self, frame: np.ndarray) -> None:
+        now = time.monotonic()
+        if now - self._level_at >= LEVEL_SECONDS:
+            self._level_at = now
+            self.events.publish("level", {"level": level(frame)}, keep=False)
     @property
     def mode(self) -> str:
         return modes.current(self.cfg)
@@ -254,6 +290,7 @@ class Assistant:
                 continue
             if frame is None:
                 continue
+            self._publish_level(frame)
             utterance = self.endpointer.push(frame, self.vad(frame))
             if utterance is not None and len(utterance) / RATE >= MIN_UTTERANCE_SECONDS:
                 return utterance
@@ -282,7 +319,8 @@ class Assistant:
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
-        panel's yes and no buttons answer too."""
+        panel's yes and no buttons answer too, and its Always button ("always": yes, and don't ask
+        again for this tool)."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         if self.speech:                      # finish what was being said before asking
@@ -305,7 +343,7 @@ class Assistant:
             while time.monotonic() < deadline:
                 try:
                     answer = self.pending_answer.get_nowait()
-                    self.events.publish("confirmed", {"yes": answer})
+                    self.events.publish("confirmed", {"yes": bool(answer)})
                     return answer
                 except queue.Empty:
                     pass
@@ -362,7 +400,15 @@ class Assistant:
             if self.speech:
                 self.speech.close()
             self.speech = None
+        self.publish_spending(tag)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def publish_spending(self, tag: str) -> None:
+        """Show the spending in the panel; say so once a day when a cap is near or reached."""
+        self.events.publish("spending", self.budget.summary())
+        alert = self.budget.alert()
+        if alert:
+            self.say(lang.phrase(alert, tag), tag)
 
     def play_scene(self, scene: scenes_mod.Scene, tag: str) -> None:
         """Run a scene's steps and say what the steps marked to be read aloud returned, or that it's done."""

@@ -63,8 +63,7 @@ for a second and fits its speech thresholds to the noise, so stay quiet for a mo
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 
-`rafiq update` pulls the latest version with git and installs its dependencies again (keeping the extras
-you installed). `rafiq backup` saves your settings, keys and recordings to
+`rafiq backup` saves your settings, keys and recordings to
 `~/.config/rafiq/backups/rafiq-backup-<date>.tar.gz` (or `--to <folder>`), readable only by you. It never
 uploads anything: the archive holds your keys, so keep it out of public places.
 
@@ -189,7 +188,15 @@ factor`). With PipeWire, `pactl load-module module-echo-cancel` removes most of 
 listens through it on its own. `enabled = false` mutes the microphone while Rafiq speaks, as before.
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
-Yes/No buttons when it asks before an action, and the choice of style.
+Yes/No buttons when it asks before an action, and the choice of style. Its other pages:
+
+- **Models**: the Ollama models with what fits this computer's memory; install, benchmark, activate
+  and delete them, and pick the Whisper model that hears you. Choices are kept in
+  `~/.config/rafiq/choices.json` and win over `config.toml`.
+- **Status**: whether each part is up: Ollama, Claude, Whisper, the voice, Google, satellites.
+- **Permissions**: whether each tool runs freely or asks first, and the approvals you remembered
+  with "Always", each with a Revoke button.
+
 
 Its **Subscriptions** page (http://127.0.0.1:8765/subscriptions) lists what you pay for again and
 again: monthly and yearly totals per currency, the charges of the next 30 days, alerts when one
@@ -351,7 +358,8 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
-  answer cancels.
+  answer cancels. The panel's Always button stops the asking for that one tool until you revoke it
+  on the Permissions page.
 - "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results, emails and Discord messages are passed to the model as data, never as
@@ -371,6 +379,12 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 
+## Always on
+
+Rafiq can run day and night on this PC, a mini-PC, a NAS, a Raspberry Pi or a VPS, as a systemd
+service. [docs/hosting.md](docs/hosting.md) explains where to run it and how to keep its panel
+private. On the server, `rafiq status` says whether it is running and safe, and `rafiq update` pulls
+the new version, reinstalls it and restarts the service.
 ## From your phone
 
 Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").

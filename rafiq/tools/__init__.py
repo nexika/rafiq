@@ -119,6 +119,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         pc,
         scenes,
         screen,
+        spending,
         style,
         web,
     )

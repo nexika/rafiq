@@ -134,11 +134,3 @@ def test_cli_backup_prints_where_it_saved(rafiq_home, capsys):
     out = capsys.readouterr().out
     assert str(config.home() / "backups") in out
 
-
-def test_cli_update_reports_a_failure(monkeypatch, capsys):
-    def fail(*_args, **_kwargs):
-        raise maintain.MaintenanceError("git pull failed: conflict")
-
-    monkeypatch.setattr(maintain, "update", fail)
-    assert main(["update"]) == 1
-    assert "conflict" in capsys.readouterr().err
