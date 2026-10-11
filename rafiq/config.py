@@ -100,6 +100,15 @@ DEFAULTS: dict = {
         "seconds": 8,                    # how long an answer stays on screen
         "silent": False,                 # true: answer on screen only, never out loud
     },
+    # Hand gestures through the webcam (pip install rafiq[gestures]); on at start, or by voice or shortcut.
+    "gestures": {"enabled": False, "hold_seconds": 0.6, "cooldown_seconds": 1.0, "camera": 0},
+    # Devices in other rooms that hear "Rafiq" and send the request here (rafiq satellite on the device).
+    # devices: name -> {token, room, blocked_tools = [...], risky = "ask" or "block"}. The hub starts
+    # only when a device is listed; set host to this computer's address on a private network, or set
+    # tls_cert and tls_key.
+    "satellites": {"host": "127.0.0.1", "port": 8766, "tls_cert": "", "tls_key": "", "devices": {}},
+    # This computer as a satellite of another Rafiq: hub = "host:port", and the name and token listed there.
+    "satellite": {"hub": "", "name": "", "token": "", "tls": False, "tls_ca": ""},
     # The phone bridge (iOS Shortcuts, Android HTTP Shortcuts or Tasker). Off until you turn it on; it
     # listens on this computer only unless you choose another address (see the README).
     "phone": {"enabled": False, "host": "127.0.0.1", "port": 8767},
@@ -124,6 +133,11 @@ DEFAULTS: dict = {
         "max_articles": 6,               # per section
         "priorities": [],
         "deadlines": [],                 # [{title = "Tax return", date = "2026-10-15"}]
+        # Printing with CUPS: the printer (empty: the default one), the PDF to print ("{date}" becomes
+        # YYYY-MM-DD; empty: data/paper/<date>.pdf), and whether to offer it after the brief.
+        "printer": "",
+        "file": "",
+        "after_brief": False,
     },
     "deadlines": {
         "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}

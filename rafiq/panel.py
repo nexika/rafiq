@@ -3,7 +3,8 @@ a text box, yes/no buttons for confirmations, the mode switch, the choice of sty
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
-web site that rebinds its name to 127.0.0.1 is refused).
+web site that rebinds its name to 127.0.0.1 is refused). The hand-gesture tracker posts labels to
+/api/gesture with a token of its own, made each time it starts, which opens nothing else.
 """
 
 from __future__ import annotations
@@ -92,7 +93,14 @@ def make_handler(assistant, token: str, port: int):
                 assistant.events.unsubscribe(q)
 
         def do_POST(self):
-            if not self._host_ok() or not self._token_ok(self.headers.get("X-Rafiq-Token")):
+            path = urlparse(self.path).path
+            gestures = getattr(assistant, "gestures", None)
+            # The gesture tracker has its own token, good for /api/gesture and nothing else.
+            if path == "/api/gesture":
+                allowed = gestures is not None and gestures.token_ok(self.headers.get("X-Rafiq-Gesture-Token"))
+            else:
+                allowed = self._token_ok(self.headers.get("X-Rafiq-Token"))
+            if not self._host_ok() or not allowed:
                 return self._send(403, b'{"error":"forbidden"}')
             length = int(self.headers.get("Content-Length") or 0)
             if length > MAX_BODY:
@@ -101,8 +109,16 @@ def make_handler(assistant, token: str, port: int):
                 data = json.loads(self.rfile.read(length) or b"{}")
             except ValueError:
                 return self._send(400, b'{"error":"bad json"}')
-            path = urlparse(self.path).path
-            if path == "/api/text" and isinstance(data.get("text"), str) and data["text"].strip():
+            if not isinstance(data, dict):
+                return self._send(400, b'{"error":"bad json"}')
+            if path == "/api/gesture":
+                gestures.handle(data.get("gesture"))
+            elif path == "/api/gestures" and gestures is not None and isinstance(data.get("on"), bool):
+                if data["on"]:
+                    gestures.start()
+                else:
+                    gestures.stop()
+            elif path == "/api/text" and isinstance(data.get("text"), str) and data["text"].strip():
                 assistant.submit("text", text=data["text"][:2000])
             elif path == "/api/listen":
                 assistant.submit("listen")
@@ -112,6 +128,8 @@ def make_handler(assistant, token: str, port: int):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/show":
                 assistant.submit("show_again")
+            elif path == "/api/paper":
+                assistant.submit("paper")
             elif path == "/api/mode" and data.get("mode") in modes.MODES:
                 assistant.submit("mode", mode=data["mode"])
             elif path == "/api/persona" and data.get("name") in persona.PERSONAS:

@@ -186,6 +186,8 @@ function handle(e) {
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "gesture": add("note", "✋ " + e.gesture + " → " + e.action); break;
+    case "gestures": add("note", "Hand gestures " + (e.on ? "on" : "off")); break;
     case "muted": add("note", e.muted ? "Muted" : "Listening again");
       muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
     case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;
