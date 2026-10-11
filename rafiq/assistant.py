@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, overlay, presence, privacy, timing, wake
+from . import interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -311,18 +311,19 @@ class Assistant:
                 return utterance
         return None
 
-    def hear(self, audio: np.ndarray):
+    def hear(self, audio: np.ndarray, languages: list[str] | None = None):
         self.set_state("thinking")
         with timing.Timer("stt", model=getattr(self.stt.local, "size", "")):
-            heard = self.transcribe(audio, hint=self.tag)
+            heard = self.transcribe(audio, hint=self.tag, languages=languages)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
 
-    def transcribe(self, audio: np.ndarray, hint: str | None = None):
+    def transcribe(self, audio: np.ndarray, hint: str | None = None, languages: list[str] | None = None):
         with self.stt_lock:
-            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
-                return self.stt.local.transcribe(audio)
+            # Offline mode: nothing leaves the computer. Interpreting: Whisper, narrowed to the two languages.
+            if modes.offline(self.cfg) or languages:
+                return self.stt.local.transcribe(audio, languages=languages)
             return self.stt.transcribe(audio, hint=hint)
 
     # ------------------------------------------------------------------ talking
@@ -331,6 +332,16 @@ class Assistant:
         self.events.publish("said", {"text": text, "tag": tag, **({"cards": cards} if cards else {})})
         if not self.silent:
             self.speaker.say(text, tag)
+
+    def notify(self, text: str, event: str, tag: str | None, now: datetime | None = None) -> None:
+        """A long job ended (`rafiq notify`): say so in the conversation's language, unless muted or
+        in quiet hours, when the panel shows it only."""
+        tag = tag or self.tag
+        sentence = notify.message(text, event, tag)
+        spoken = notify.should_speak(self.cfg, self.muted, now)
+        self.events.publish("notify", {"text": sentence, "event": event, "spoken": spoken})
+        if spoken:
+            self.speaker.say(sentence, lang.script_language(sentence, tag))
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
@@ -387,6 +398,10 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        pair = interpret.parse_request(text)
+        if pair:
+            self.interpret(pair)
+            return
         if lang.is_show_again(text):
             if not self.overlay.show_again():
                 self.say(lang.phrase("nothing_to_show", tag), tag)
@@ -417,6 +432,15 @@ class Assistant:
             self.speech = None
         self.publish_spending(tag)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def interpret(self, pair: interpret.Pair) -> None:
+        """Interpreter mode: say what each person says in the other's language until one says stop."""
+        def listen(timeout: float):
+            self.set_state("listening")
+            return self.next_utterance(timeout=timeout)
+
+        interpret.Session(pair, listen, self.hear, self.brain.translate, self.say, self.events.publish).run()
+        self.follow_up_until = 0.0
 
     def publish_spending(self, tag: str) -> None:
         """Show the spending in the panel; say so once a day when a cap is near or reached."""
@@ -463,6 +487,8 @@ class Assistant:
                     self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag))
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
+                elif kind == "notify":
+                    self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
                 elif kind == "result":

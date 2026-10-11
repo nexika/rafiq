@@ -280,6 +280,8 @@ function handle(e) {
     case "heard": add("msg you", e.text || "…", "You · " + (LANG[e.tag] || e.tag)); break;
     case "typed": add("msg you", e.text, "You (typed)"); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
+    case "interpret": add("note", (e.on ? "Interpreting: " : "Stopped interpreting: ")
+      + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
     case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
     case "project": document.getElementById("project-path").value = e.path;
@@ -308,6 +310,7 @@ function handle(e) {
     case "muted": add("note", e.muted ? "Muted" : "Listening again");
       muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
     case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;
+    case "notify": add("note", "🔔 " + e.text + (e.spoken ? "" : " (not spoken: muted or quiet hours)")); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
     case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
       if (page === "models") show("models"); break;
