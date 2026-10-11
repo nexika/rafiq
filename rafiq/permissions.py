@@ -1,57 +1,54 @@
-"""Permission levels, and the approvals remembered when the user says "yes, always".
+"""The permissions page: how freely each tool runs, and the approvals the user asked Rafiq to remember.
 
-1  safe: runs at once, and may run when the request comes from elsewhere (remote access, MCP).
-2  reversible: Rafiq asks first; "yes, always" remembers the approval until it is revoked in the panel.
-3  sensitive (email, bookings, deleting, shutting down): asked every time, never remembered, never
-   run remotely.
-
-Approvals are kept per tool in a file on this computer, readable only by the user.
+A tool that changes something asks first. Answering "Always" in the panel remembers the approval for
+that tool, kept in approvals.json; from then on it runs without asking, until it is revoked.
 """
 
 from __future__ import annotations
 
 import json
 import threading
-import time
 from pathlib import Path
 
-SAFE, REVERSIBLE, SENSITIVE = 1, 2, 3
-ALWAYS = "always"        # the answer "yes, always", next to True (yes) and False (no)
+from . import config as config_mod
+from .tools import Tool
 
 
 class Approvals:
-    def __init__(self, path: Path):
-        self.path = path
+    def __init__(self, path: Path | None = None):
+        self.path = path or config_mod.home() / "approvals.json"
         self.lock = threading.Lock()
-        self.approved: dict[str, float] = {}
-        try:
-            data = json.loads(path.read_text())
-            if isinstance(data, dict):
-                self.approved = {str(k): float(v) for k, v in data.items()}
-        except (OSError, ValueError, TypeError):
-            pass
-
-    def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.approved))
-        tmp.chmod(0o600)
-        tmp.replace(self.path)
-
-    def has(self, name: str) -> bool:
-        return name in self.approved
 
     def names(self) -> list[str]:
-        return sorted(self.approved)
+        """The remembered tools; a missing or damaged file means none."""
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return sorted(n for n in data if isinstance(n, str)) if isinstance(data, list) else []
+
+    def allowed(self, name: str) -> bool:
+        return name in self.names()
+
+    def _save(self, names: set[str]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(sorted(names)), encoding="utf-8")
+        self.path.chmod(0o600)
 
     def remember(self, name: str) -> None:
         with self.lock:
-            self.approved[name] = time.time()
-            self._save()
+            self._save(set(self.names()) | {name})
 
-    def revoke(self, name: str) -> bool:
+    def revoke(self, name: str) -> None:
         with self.lock:
-            if self.approved.pop(name, None) is None:
-                return False
-            self._save()
-            return True
+            self._save(set(self.names()) - {name})
+
+
+def levels(tools: dict[str, Tool], approvals: Approvals) -> list[dict]:
+    """Each tool with its level: free (runs without asking), asks, or remembered (asked once, always)."""
+    remembered = set(approvals.names())
+    rows = []
+    for t in sorted(tools.values(), key=lambda t: t.name):
+        level = "free" if t.confirm is None else "remembered" if t.name in remembered else "asks"
+        rows.append({"name": t.name, "description": t.description, "level": level})
+    return rows

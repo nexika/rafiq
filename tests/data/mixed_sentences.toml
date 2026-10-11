@@ -1,0 +1,44 @@
+# Egyptian Arabic with English words, as people say it. For each sentence: the text Rafiq should end up
+# with, and ways Whisper writes it when it puts the English words in Arabic script.
+# Recordings of these sentences (same text in a .txt next to each .wav) can be scored with
+# `rafiq stt-score <folder>`.
+
+[[sentence]]
+said = "افتحلي الـ settings"
+heard = ["افتحلي السيتنجز", "افتحلي الـسيتينجز", "افتحلي ال settings"]
+
+[[sentence]]
+said = "شغّل الـ playlist بتاعتي"
+heard = ["شغّل البلاي ليست بتاعتي", "شغّل البلايليست بتاعتي"]
+
+[[sentence]]
+said = "ابعت email لسارة"
+heard = ["ابعت ايميل لسارة", "ابعت إيميل لسارة"]
+
+[[sentence]]
+said = "شغّل Spotify وعلّي الـ volume شوية"
+heard = ["شغّل سبوتيفاي وعلّي الفوليوم شوية"]
+
+[[sentence]]
+said = "اقفل الـ Wi-Fi والـ Bluetooth"
+heard = ["اقفل الواي فاي والبلوتوث", "اقفل الوايفاي والبلوتوث"]
+
+[[sentence]]
+said = "افتحلي YouTube على Chrome"
+heard = ["افتحلي يوتيوب على كروم"]
+
+[[sentence]]
+said = "ابعتلي رسالة على WhatsApp"
+heard = ["ابعتلي رسالة على واتساب", "ابعتلي رسالة على واتس اب"]
+
+[[sentence]]
+said = "خد screenshot وحطها في الـ folder ده"
+heard = ["خد سكرين شوت وحطها في الفولدر ده"]
+
+[[sentence]]
+said = "افتحلي الـ terminal"
+heard = ["افتحلي الترمينال", "افتحلي التيرمينال"]
+
+[[sentence]]
+said = "عايز الـ dark mode"
+heard = ["عايز الدارك مود"]
