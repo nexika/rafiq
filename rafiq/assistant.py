@@ -380,23 +380,24 @@ class Assistant:
         if spoken:
             self.speaker.say(sentence, lang.script_language(sentence, tag))
 
-    def confirm(self, action: str, tag: str) -> bool:
+    def confirm(self, action: str, tag: str, can_remember: bool = True) -> bool | str:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
-        panel's yes and no buttons answer too, and its Always button ("always": yes, and don't ask
-        again for this tool). With a voice print, a spoken yes must be in your voice; when Rafiq is not
-        sure it is, only the panel's Yes button goes ahead."""
+        panel's yes and no buttons answer too. When the tool may be remembered, the panel's Always
+        button or a spoken "yes, always" answers "always": yes, and don't ask again for this tool.
+        With a voice print, a spoken yes must be in your voice; when Rafiq is not sure it is, only the
+        panel's Yes button goes ahead."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         if self.speech:                      # finish what was being said before asking
             self.speech.wait()
-        self.events.publish("confirm", {"action": action, "tag": tag})
+        self.events.publish("confirm", {"action": action, "tag": tag, "always": can_remember})
         self.confirming = True
         try:
-            return self._ask_yes_or_no(action, tag)
+            return self._ask_yes_or_no(action, tag, can_remember)
         finally:
             self.confirming = False
 
-    def _ask_yes_or_no(self, action: str, tag: str) -> bool:
+    def _ask_yes_or_no(self, action: str, tag: str, can_remember: bool = True) -> bool | str:
         for _attempt in range(2):
             self.interrupted.clear()
             self.say(lang.phrase("confirm", tag, action=action), tag)
@@ -420,6 +421,8 @@ class Assistant:
                     self.go_to_sleep()
                     return False
                 answer = lang.yes_or_no(text)
+                if answer is None and lang.is_always(text):   # a bare "always" is a yes too
+                    answer = True
                 if answer and not self._your_voice(audio):
                     self.say(lang.phrase("voice_unsure", tag), tag)
                     return self._panel_answer(tag)
@@ -427,7 +430,7 @@ class Assistant:
                     self.events.publish("confirmed", {"yes": answer})
                     if not answer:
                         self.say(lang.phrase("cancelled", tag), tag)
-                    return answer
+                    return "always" if answer and can_remember and lang.is_always(text) else answer
                 break
         self.events.publish("confirmed", {"yes": False})
         self.say(lang.phrase("cancelled", tag), tag)

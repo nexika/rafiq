@@ -11,6 +11,7 @@ and a slow tool is announced before it runs, so the user hears something as earl
 
 from __future__ import annotations
 
+import inspect
 import json
 import time
 from collections.abc import Callable
@@ -383,6 +384,12 @@ class Brain:
 
     # ------------------------------------------------------------------ tools
 
+    def _ask(self, action: str, tag: str, can_remember: bool):
+        """The confirm callback; it is told whether "yes, always" may be remembered, if it takes that."""
+        if "can_remember" in inspect.signature(self.confirm).parameters:
+            return self.confirm(action, tag, can_remember=can_remember)
+        return self.confirm(action, tag)
+
     def _run_tool(self, name: str, args: dict, tag: str, ctx, tools: dict[str, Tool],
                   voice: Voice | None = None) -> str:
         """Run a tool the model asked for; only the ones it was offered for this request."""
@@ -390,12 +397,13 @@ class Brain:
         if tool is None:
             return f"error: there is no tool named {name}"
         action = tool.action(args, ctx)
-        if action and not (self.approvals and self.approvals.allowed(name)):
-            answer = self.confirm(action, tag)
+        can_remember = self.approvals is not None and not tool.always_asks
+        if action and not (can_remember and self.approvals.allowed(name)):
+            answer = self._ask(action, tag, can_remember)
             if not answer:
                 self.on_event("tool", {"name": name, "args": args, "result": "declined"})
                 return "The user said no; it was not done. Tell them briefly that you didn't do it."
-            if answer == "always" and self.approvals:
+            if answer == "always" and can_remember:
                 self.approvals.remember(name)
         self.on_event("tool_start", {"name": name})
         if tool.slow:

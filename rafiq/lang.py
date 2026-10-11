@@ -190,6 +190,22 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+# "Yes, always": yes, and don't ask again for this tool (only tools that may be remembered).
+ALWAYS = {"always", "toujours", "siempre", "immer", "دائما", "دايما", "دايمًا", "دائمًا", "علطول"}
+ALWAYS_PHRASES = ("على طول",)
+# A negation turns "always" around ("not always", "toujours pas"), so it is not a yes, always.
+_NOT = {"not", "never", "pas", "jamais", "nunca", "nicht", "nie", "مش", "ليس", "مو", "ابدا"}
+
+
+def is_always(text: str) -> bool:
+    """True for "yes, always" (or a bare "always") in any of Rafiq's languages, with no no in it."""
+    found = words(text)
+    said = " ".join(found)
+    if yes_or_no(text) is False or set(found) & _NOT_N:
+        return False
+    return bool(set(found) & _ALWAYS) or any(" ".join(words(p)) in said for p in ALWAYS_PHRASES)
+
+
 # "Show it again": bring back the last answer on screen instead of asking the brain.
 SHOW_AGAIN = (
     "show it again", "show that again", "show me again", "show me that again", "show the answer again",
@@ -242,6 +258,7 @@ _LOANWORDS = {normalize_arabic(spelling): english for english, spellings in LOAN
 _SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
 _SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
 _STOP = _norm(STOP)
+_ALWAYS, _NOT_N = _norm(ALWAYS), _norm(_NOT)
 
 # "Forget what I just said": handled by Rafiq itself, so it works offline and never reaches a model.
 FORGET = [

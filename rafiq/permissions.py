@@ -1,7 +1,8 @@
 """The permissions page: how freely each tool runs, and the approvals the user asked Rafiq to remember.
 
-A tool that changes something asks first. Answering "Always" in the panel remembers the approval for
-that tool, kept in approvals.json; from then on it runs without asking, until it is revoked.
+A tool that changes something asks first. Answering "Always" in the panel, or "yes, always", remembers the
+approval for that tool, kept in approvals.json; from then on it runs without asking, until it is revoked.
+A few tools (shutting down, sending or deleting mail, deleting an event) ask every time.
 """
 
 from __future__ import annotations
@@ -45,10 +46,16 @@ class Approvals:
 
 
 def levels(tools: dict[str, Tool], approvals: Approvals) -> list[dict]:
-    """Each tool with its level: free (runs without asking), asks, or remembered (asked once, always)."""
+    """Each tool with its level: free (runs without asking), asks, remembered (asked once, always), or
+    always_asks (asks every time; an approval saved for it is ignored)."""
     remembered = set(approvals.names())
     rows = []
     for t in sorted(tools.values(), key=lambda t: t.name):
-        level = "free" if t.confirm is None else "remembered" if t.name in remembered else "asks"
+        if t.confirm is None:
+            level = "free"
+        elif t.always_asks:
+            level = "always_asks"
+        else:
+            level = "remembered" if t.name in remembered else "asks"
         rows.append({"name": t.name, "description": t.description, "level": level})
     return rows
