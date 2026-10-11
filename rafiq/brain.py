@@ -336,7 +336,7 @@ class Brain:
         tool = tools.get(name)
         if tool is None:
             return f"error: there is no tool named {name}"
-        action = tool.action(args)
+        action = tool.action(args, ctx)
         if action and not self.confirm(action, tag):
             self.on_event("tool", {"name": name, "args": args, "result": "declined"})
             return "The user said no; it was not done. Tell them briefly that you didn't do it."
