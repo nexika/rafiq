@@ -30,6 +30,10 @@ from .tools import Tool, notes
 MAX_BODY = 10_000
 MAX_TEXT = 2000
 KINDS = ("command", "note", "share")
+# The safe (level 1) tools: they only read, or change nothing but Rafiq's own timers and notes.
+PHONE_TOOLS = frozenset({"get_time", "set_timer", "set_reminder", "list_timers", "cancel_timer", "weather",
+                         "calculate", "convert_units", "list_apps", "system_status", "web_search", "read_page",
+                         "add_note", "list_notes", "remove_note"})
 
 
 def remote_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
@@ -39,7 +43,7 @@ def remote_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
         return ("refused: not allowed on a request sent from the phone; nothing was done. Tell the user: "
                 + lang.phrase("at_home", getattr(ctx, "tag", "en")))
 
-    return {name: tool if tool.safe and tool.confirm is None else
+    return {name: tool if name in PHONE_TOOLS and tool.confirm is None else
             Tool(name, tool.description + " (Not available from the phone.)", refuse, tool.params, tool.required)
             for name, tool in tools.items()}
 

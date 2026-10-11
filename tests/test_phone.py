@@ -7,7 +7,7 @@ import urllib.request
 import pytest
 
 from rafiq import config
-from rafiq.phone import PhoneBridge, remote_tools, serve
+from rafiq.phone import PHONE_TOOLS, PhoneBridge, remote_tools, serve
 from rafiq.scheduler import Scheduler
 from rafiq.tools import REGISTRY, Tool, load_all, notes
 
@@ -51,7 +51,7 @@ def tools_with(log):
 
     return {"power": Tool("power", "power off", shutdown, confirm="shut down the computer"),
             "lock_screen": Tool("lock_screen", "lock", lock),
-            "get_time": Tool("get_time", "time", lambda: "15:40", safe=True)}
+            "get_time": Tool("get_time", "time", lambda: "15:40")}
 
 
 def make_bridge(tools=None, events=None):
@@ -67,12 +67,12 @@ def make_bridge(tools=None, events=None):
 def test_only_safe_tools_without_a_confirmation_are_allowed_from_the_phone():
     load_all({"google": {"enabled": True}})
     for name in ("get_time", "weather", "calculate", "set_timer", "add_note", "list_notes"):
-        assert REGISTRY[name].safe, name
+        assert name in PHONE_TOOLS, name
     for name in ("power", "email_send", "calendar_add", "open_app", "volume", "lock_screen",
                  "open_in_browser", "email_read"):
-        assert not REGISTRY[name].safe, name
-    for tool in REGISTRY.values():
-        assert not (tool.safe and tool.confirm is not None), tool.name
+        assert name in REGISTRY and name not in PHONE_TOOLS, name
+    for name in PHONE_TOOLS:
+        assert REGISTRY[name].confirm is None and REGISTRY[name].level != "critical", name
 
 
 def test_an_unsafe_tool_answers_do_that_at_home_and_does_not_run():

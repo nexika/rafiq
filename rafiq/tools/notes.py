@@ -35,7 +35,7 @@ _LIST_PARAM = {"type": "string", "enum": list(LISTS)}
 
 @tool("add_note", "Add a note to the user's ideas, shopping or tasks list.",
       {"list": _LIST_PARAM, "text": {"type": "string", "description": "the note, in the user's words"}},
-      required=("list", "text"), safe=True)
+      required=("list", "text"), level="act")
 def add_note(list: str, text: str, source: str = "voice") -> str:  # noqa: A002 (the model's word)
     if list not in LISTS:
         return f"error: the lists are {', '.join(LISTS)}"
@@ -50,7 +50,7 @@ def add_note(list: str, text: str, source: str = "voice") -> str:  # noqa: A002 
 
 
 @tool("list_notes", "What is on the user's ideas, shopping or tasks list.",
-      {"list": _LIST_PARAM}, required=("list",), safe=True)
+      {"list": _LIST_PARAM}, required=("list",), level="private")
 def list_notes(list: str) -> str:  # noqa: A002
     if list not in LISTS:
         return f"error: the lists are {', '.join(LISTS)}"
@@ -60,7 +60,7 @@ def list_notes(list: str) -> str:  # noqa: A002
 
 
 @tool("remove_note", "Remove notes from a list by words in them, e.g. when something has been bought.",
-      {"list": _LIST_PARAM, "words": {"type": "string"}}, required=("list", "words"), safe=True)
+      {"list": _LIST_PARAM, "words": {"type": "string"}}, required=("list", "words"), level="act")
 def remove_note(list: str, words: str) -> str:  # noqa: A002
     if list not in LISTS or not words.strip():
         return f"error: give one of {', '.join(LISTS)} and words to match"
