@@ -333,23 +333,24 @@ def _api(ctx) -> Api:
       "resume.",
       {"query": {"type": "string", "description": "what to play, e.g. 'so what miles davis' or 'jazz'"},
        "kind": {"type": "string", "enum": list(KINDS), "description": "default track; playlist for a genre"},
-       "device": {"type": "string", "description": "name of the device to play on (see spotify_devices)"}})
+       "device": {"type": "string", "description": "name of the device to play on (see spotify_devices)"}},
+      level="act")
 def spotify_play(query: str = "", kind: str = "track", device: str = "", ctx=None) -> str:
     return play(_api(ctx), query, kind, device)
 
 
 @tool("spotify_control", "Pause, resume, skip to the next song or go back to the previous one on Spotify.",
-      {"action": {"type": "string", "enum": list(CONTROLS)}}, required=("action",))
+      {"action": {"type": "string", "enum": list(CONTROLS)}}, required=("action",), level="act")
 def spotify_control(action: str, ctx=None) -> str:
     return control(_api(ctx), action)
 
 
-@tool("spotify_now_playing", "The song playing on Spotify now.")
+@tool("spotify_now_playing", "The song playing on Spotify now.", level="private")
 def spotify_now_playing(ctx=None) -> str:
     return now_playing(_api(ctx))
 
 
-@tool("spotify_devices", "The devices with Spotify open (computers, phones, speakers in other rooms).")
+@tool("spotify_devices", "The devices with Spotify open (computers, phones, speakers in other rooms).", level="private")
 def spotify_devices(ctx=None) -> str:
     return devices(_api(ctx))
 
@@ -357,6 +358,7 @@ def spotify_devices(ctx=None) -> str:
 @tool("spotify_add_to_playlist", f"Add the song playing on Spotify now to one of the user's playlists; "
       f"default '{FINDS}'. Rafiq asks the user first.",
       {"playlist": {"type": "string", "description": f"playlist name; empty for '{FINDS}'"}},
-      confirm=lambda a: f"add the song playing now to your playlist '{a.get('playlist') or FINDS}'")
+      confirm=lambda a: f"add the song playing now to your playlist '{a.get('playlist') or FINDS}'",
+      level="critical")
 def spotify_add_to_playlist(playlist: str = "", ctx=None) -> str:
     return add_current(_api(ctx), playlist)
