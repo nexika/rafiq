@@ -195,7 +195,8 @@ def report(name: str, today: dict, before: dict | None, since: str | None) -> st
 
 @tool("instagram_stats", "Instagram statistics for the user's accounts: followers gained or lost, new posts and "
       "views on recent videos, compared with the last snapshot (usually yesterday).",
-      {"account": {"type": "string", "description": "one account's username; empty for all of them"}})
+      {"account": {"type": "string", "description": "one account's username; empty for all of them"}},
+      level="private")
 def instagram_stats(account: str = "", ctx=None, get=_get_json, now: datetime | None = None) -> str:
     now = now or _now()
     cfg = ctx.cfg if ctx else {}
