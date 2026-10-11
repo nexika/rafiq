@@ -19,6 +19,9 @@ max_rounds = 6                  # model requests per answer
 max_tool_calls = 12             # tool calls per answer
 max_seconds = 120               # from the request to the answer
 
+[brain.prices]                  # dollars per million tokens, to show Claude's spend in the panel
+# claude-haiku-5-5 = { input = 1.0, output = 5.0 }
+
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name

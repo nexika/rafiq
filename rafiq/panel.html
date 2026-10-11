@@ -72,6 +72,24 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
 #mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
+header .grow { flex: 1; min-width: 0; }
+#meter { width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 6px; }
+#meter div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+#now { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+#drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100%); background: var(--panel);
+  border-left: 1px solid var(--line); padding: 20px 16px; overflow-y: auto; transform: translateX(100%);
+  transition: transform .2s; z-index: 10; }
+#drawer.on { transform: none; }
+@media (prefers-reduced-motion: reduce) { #drawer { transition: none; } }
+#drawer h2 { font-size: 18px; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
+#drawer h3 { font-size: 14px; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
+#drawer label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+#drawer select, #drawer input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+#drawer .row { display: flex; gap: 8px; align-items: center; }
+#drawer .row select { flex: 1; }
+#drawer ul { margin: 0; padding-left: 18px; font-size: 14px; }
+#saved { font-size: 13px; color: var(--muted); min-height: 1.5em; margin-top: 8px; }
 #picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -8px 0 20px; font-size: 14px; }
 #picker select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--panel); color: var(--ink); max-width: 100%; }
@@ -84,10 +102,13 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <main>
   <header>
     <div class="orb" id="orb" data-state="offline" aria-hidden="true"></div>
-    <div>
+    <div class="grow">
       <h1>Rafiq <span>رفيق</span></h1>
       <div id="state" role="status">connecting…</div>
+      <div id="meter" title="Microphone level" aria-hidden="true"><div></div></div>
+      <div id="now"></div>
     </div>
+    <button type="button" id="open-settings" title="Settings" aria-controls="drawer" aria-expanded="false">⚙</button>
     <select id="mode" aria-label="Mode" title="Everyday: fast. Quality: the strongest model. Offline: nothing leaves this computer.">
       <option value="everyday">Everyday</option>
       <option value="quality">Quality</option>
@@ -121,6 +142,31 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   <button class="primary" id="yes">Yes</button>
   <button id="no">No</button>
 </div>
+<aside id="drawer" aria-label="Settings" hidden>
+  <h2>Settings <button type="button" id="close-settings" title="Close">✕</button></h2>
+  <label for="s-mode">Brain</label>
+  <select id="s-mode" data-name="brain.mode"></select>
+  <label for="s-claude">Claude model</label>
+  <input id="s-claude" data-name="brain.claude_model" autocomplete="off">
+  <label for="s-ollama">Ollama model</label>
+  <input id="s-ollama" data-name="brain.ollama_model" autocomplete="off">
+  <label for="s-engine">Voice engine</label>
+  <select id="s-engine" data-name="voice.engine"></select>
+  <label for="s-rate">Speed (for example +10% or -10%)</label>
+  <input id="s-rate" data-name="voice.rate" autocomplete="off">
+  <label for="s-tag">Voice for</label>
+  <div class="row">
+    <select id="s-tag"></select>
+    <button type="button" id="test-voice" title="Say a line in this voice">▶ Test</button>
+  </div>
+  <input id="s-voice" aria-label="Voice name" autocomplete="off">
+  <button type="button" class="primary" id="save" style="margin-top:14px">Save</button>
+  <div id="saved" role="status"></div>
+  <h3>Spend since Rafiq started</h3>
+  <div id="spend">–</div>
+  <h3>Timers and reminders</h3>
+  <ul id="tasks"></ul>
+</aside>
 <footer>
   <form id="form">
     <button type="button" class="primary" id="talk" title="Speak without saying the name">🎙 Talk</button>
@@ -170,7 +216,7 @@ function handle(e) {
     case "heard": add("msg you", e.text || "…", "You · " + (LANG[e.tag] || e.tag)); break;
     case "typed": add("msg you", e.text, "You (typed)"); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
-    case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
+    case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
     case "brain": stateEl.dataset.backend = e.backend; break;
     case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
@@ -186,6 +232,10 @@ function handle(e) {
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "level": meter.style.width = Math.round(e.level * 100) + "%"; break;
+    case "tool_start": nowEl.textContent = "⚙ Using " + e.name + "…"; break;
+    case "spend": showSpend(e); break;
+    case "settings": settings = e.settings; fillDrawer(); break;
     case "gesture": add("note", "✋ " + e.gesture + " → " + e.action); break;
     case "gestures": add("note", "Hand gestures " + (e.on ? "on" : "off")); break;
     case "muted": add("note", e.muted ? "Muted" : "Listening again");
@@ -212,6 +262,71 @@ muteBtn.onclick = () => post("/api/mute", { muted: muteBtn.getAttribute("aria-pr
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
 document.getElementById("no").onclick = () => post("/api/confirm", { yes: false });
 
+// ---------------------------------------------------------------- the settings drawer
+const drawer = document.getElementById("drawer"), meter = document.querySelector("#meter div");
+const nowEl = document.getElementById("now"), savedEl = document.getElementById("saved");
+const voiceTag = document.getElementById("s-tag"), voiceName = document.getElementById("s-voice");
+let settings = {}, voiceEdits = {};
+for (const [tag, name] of Object.entries(LANG)) voiceTag.append(new Option(name, tag));
+
+function showSpend(s) {
+  const tokens = s.input_tokens.toLocaleString() + " in · " + s.output_tokens.toLocaleString() + " out (Claude tokens)";
+  document.getElementById("spend").textContent = s.dollars === null ? tokens + "; set brain.prices for dollars"
+    : "$" + s.dollars.toFixed(4) + " · " + tokens;
+}
+function fillDrawer() {
+  for (const el of drawer.querySelectorAll("[data-name]")) el.value = settings[el.dataset.name] ?? "";
+  voiceEdits = {};
+  voiceName.value = settings["voice.voices." + voiceTag.value] ?? "";
+}
+async function openDrawer() {
+  const r = await fetch("/api/status", { headers: { "X-Rafiq-Token": TOKEN } });
+  if (!r.ok) return add("note err", "The panel could not reach Rafiq (" + r.status + ").");
+  const s = await r.json();
+  settings = s.settings;
+  for (const [name, options] of Object.entries(s.choices)) {
+    const el = drawer.querySelector('[data-name="' + name + '"]');
+    el.replaceChildren(...options.map((o) => new Option(o, o)));
+  }
+  fillDrawer();
+  showSpend(s.spend);
+  document.getElementById("tasks").replaceChildren(...(s.tasks.length ? s.tasks : [null]).map((t) => {
+    const li = document.createElement("li");
+    li.textContent = t ? t.label + " · " + new Date(t.due * 1000).toLocaleString() : "None waiting";
+    return li;
+  }));
+  savedEl.textContent = "";
+  drawer.hidden = false;
+  requestAnimationFrame(() => drawer.classList.add("on"));
+  document.getElementById("open-settings").setAttribute("aria-expanded", "true");
+  document.getElementById("s-mode").focus();
+}
+function closeDrawer() {
+  drawer.classList.remove("on");
+  setTimeout(() => { drawer.hidden = true; }, 200);
+  document.getElementById("open-settings").setAttribute("aria-expanded", "false");
+  document.getElementById("open-settings").focus();
+}
+voiceTag.onchange = () => { voiceName.value = voiceEdits[voiceTag.value] ?? settings["voice.voices." + voiceTag.value] ?? ""; };
+voiceName.oninput = () => { voiceEdits[voiceTag.value] = voiceName.value.trim(); };
+document.getElementById("open-settings").onclick = () => drawer.hidden ? openDrawer() : closeDrawer();
+document.getElementById("close-settings").onclick = closeDrawer;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !drawer.hidden) closeDrawer(); });
+document.getElementById("test-voice").onclick = () => post("/api/voice-test", { tag: voiceTag.value });
+document.getElementById("save").onclick = async () => {
+  const changes = {};
+  for (const el of drawer.querySelectorAll("[data-name]")) {
+    const v = el.value.trim();
+    if (v !== String(settings[el.dataset.name] ?? "")) changes[el.dataset.name] = v;
+  }
+  for (const [tag, v] of Object.entries(voiceEdits))
+    if (v !== (settings["voice.voices." + tag] ?? "")) changes["voice.voices." + tag] = v;
+  if (!Object.keys(changes).length) { savedEl.textContent = "Nothing changed."; return; }
+  const r = await fetch("/api/settings", { method: "POST", body: JSON.stringify({ changes }),
+    headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN } });
+  const body = await r.json().catch(() => ({}));
+  savedEl.textContent = r.ok ? "Saved to config.toml." : "Not saved: " + (body.error || r.status);
+};
 // The model picker: the list comes from the provider itself, and Rafiq asks it again before switching.
 const backendEl = document.getElementById("backend"), modelEl = document.getElementById("model");
 const useEl = document.getElementById("use"), pickerNote = document.getElementById("picker-note");
