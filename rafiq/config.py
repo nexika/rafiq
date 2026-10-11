@@ -104,7 +104,9 @@ DEFAULTS: dict = {
     # `rafiq agent`: the server to lend this PC to. The token (from `rafiq agent-token NAME` on the
     # server) can also come from RAFIQ_AGENT_TOKEN.
     "agent": {"server": "", "name": "", "token": ""},
-    "place": {"city": "", "units": "metric"},
+    "place": {"city": "", "units": "metric",
+              # With no city: GNOME's location service, then (only if true) an IP lookup at ipapi.co.
+              "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
     "deadlines": {

@@ -67,7 +67,8 @@ factor = 1.8                    # how much louder than Rafiq's own voice you mus
 echo_cancel = true              # after `pactl load-module module-echo-cancel`, listen through it
 
 [place]
-city = ""                       # for "what's the weather?" without a city
+city = ""                       # for "what's the weather?" without a city; empty: GNOME's location service
+ip_lookup = false               # true: if GNOME has no location, find it from your IP (sends it to ipapi.co)
 
 [notes]
 folder = ""                     # empty: ~/.config/rafiq/data/notes; or a folder you choose, such as an Obsidian vault
