@@ -1,6 +1,6 @@
-"""rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
-phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
-uninstall-service | wake-pc | backup"""
+"""rafiq run | ask | say | notify | hooks | show | paper | agent | agent-token | satellite | gestures | doctor |
+status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
+install-service | uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
 
@@ -394,6 +394,19 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
+def cmd_notify(args) -> int:
+    """Tell the running Rafiq that a long job ended; it says so unless muted or in quiet hours."""
+    return _ask_running("/api/notify", {"text": " ".join(args.text), "event": args.event or "",
+                                        "lang": args.lang})
+
+
+def cmd_hooks(args) -> int:
+    from .notify import HOOKS
+
+    print(HOOKS[args.kind], end="")
+    return 0
+
+
 def cmd_status(_args) -> int:
     """Is Rafiq up, and is it safe? Works over SSH on a server without a screen."""
     from . import hosting
@@ -501,6 +514,32 @@ def cmd_enroll(args) -> int:
         print(f"Rafiq now wakes below {report['threshold']:.2f} (sensitivity {args.sensitivity}).")
         return 0
     return enroll.run(forms=args.forms or None, takes=args.takes)
+
+
+def cmd_stt_score(args) -> int:
+    """Score speech-to-text on your own recordings (name.wav with name.txt), for each Whisper model, with
+    and without the handling of English words inside Arabic."""
+    from pathlib import Path
+
+    from .stt import Transcriber, score
+
+    folder = Path(args.folder)
+    if not any(folder.glob("*.wav")):
+        print(f"No .wav recordings in {folder}", file=sys.stderr)
+        return 1
+    languages = config.load()["speech"]["languages"]
+    for model in args.models:
+        for mixed in (False, True):
+            results = score(folder, Transcriber(model, languages, mixed=mixed))
+            if not results:
+                print(f"No recording in {folder} has its text next to it (name.wav and name.txt)", file=sys.stderr)
+                return 1
+            mean = sum(r.error for r in results) / len(results)
+            print(f"{model}, mixed {'on' if mixed else 'off'}: {mean:.0%} word errors over {len(results)} recordings")
+            if args.verbose:
+                for r in results:
+                    print(f"  {r.error:4.0%} {r.name}: {r.heard}")
+    return 0
 
 
 def cmd_satellite(args) -> int:
@@ -695,6 +734,18 @@ def main(argv=None) -> int:
     say.add_argument("text", nargs="+")
     say.add_argument("--lang", choices=lang.TAGS, default="en")
     say.set_defaults(fn=cmd_say)
+    notify = sub.add_parser("notify", help="have the running Rafiq say that a long job ended")
+    notify.add_argument("text", nargs="+")
+    event = notify.add_mutually_exclusive_group()
+    event.add_argument("--done", dest="event", action="store_const", const="done",
+                       help='say "Finished: TEXT" in your language')
+    event.add_argument("--failed", dest="event", action="store_const", const="failed",
+                       help='say "Failed: TEXT" in your language')
+    notify.add_argument("--lang", choices=lang.TAGS, help="default: the language you last spoke")
+    notify.set_defaults(fn=cmd_notify)
+    hooks = sub.add_parser("hooks", help="print a ready-made hook that calls rafiq notify")
+    hooks.add_argument("kind", choices=("claude-code", "shell"))
+    hooks.set_defaults(fn=cmd_hooks)
     enroll = sub.add_parser("enroll", help="record yourself saying the name, for a reliable wake word")
     enroll.add_argument("--forms", nargs="+", help='the ways you call it (default: "Rafiq" "يا رفيق")')
     enroll.add_argument("--takes", type=int, default=3, help="recordings of each form (default 3)")
@@ -722,6 +773,11 @@ def main(argv=None) -> int:
     token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    score = sub.add_parser("stt-score", help="score speech-to-text on your recordings (name.wav + name.txt)")
+    score.add_argument("folder")
+    score.add_argument("--models", nargs="+", default=["small", "medium"], help="default: small medium")
+    score.add_argument("-v", "--verbose", action="store_true", help="show what was heard in each recording")
+    score.set_defaults(fn=cmd_stt_score)
     sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
     sat.add_argument("action", choices=("run", "simulate", "token"),

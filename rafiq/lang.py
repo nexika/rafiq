@@ -24,6 +24,7 @@ EGYPTIAN = {
     "زي", "عشان", "علشان", "ازيك", "إزيك", "إزيكم", "مفيش", "فيه", "معلش", "لسه", "هو", "قوي", "يلا", "ياريت",
     "اهو", "أهو", "برضه", "برضو", "تعالى", "هات", "بص", "شغل", "شغّل", "اقفل", "افتح", "استنى", "عاملين",
     "احسبلي", "قولي", "قوللي", "اعملي", "اعملّي", "شوفلي", "دورلي", "فكرني", "فكّرني", "كام", "بكام", "ازاى",
+    "افتحلي", "بتاعتي", "بتاعتك", "ابعت", "ابعتلي", "شغّلي", "شغلي",
 }
 # Words shared with standard Arabic or other dialects: they count only next to a distinctive one.
 _WEAK = {"يعني", "هو", "فيه", "شغل", "افتح", "يلا", "طب", "حاجة", "حاجه", "اللي", "ليه"}
@@ -62,6 +63,76 @@ def dialect(lang: str, text: str, previous: str | None = None) -> str:
     if score == 0 and previous == "ar-EG" and len(words(text)) <= 4:
         return "ar-EG"
     return "ar"
+
+
+# English words that Egyptians say inside Arabic sentences, as Whisper writes them in Arabic script
+# (spelled as normalize_arabic leaves them). Tools and the model want the English name.
+LOANWORDS = {
+    "settings": ["سيتنجز", "ستنجز", "سيتينجز", "سيتنج", "سيتينج"],
+    "playlist": ["بلاي ليست", "بلايليست", "بلاليست"],
+    "email": ["ايميل", "اميل"],
+    "Wi-Fi": ["واي فاي", "وايفاي"],
+    "Bluetooth": ["بلوتوث", "بلوتوز", "بلو توث"],
+    "volume": ["فوليوم"],
+    "Spotify": ["سبوتيفاي", "سبوتفاي"],
+    "YouTube": ["يوتيوب"],
+    "Google Chrome": ["جوجل كروم"],
+    "Chrome": ["كروم"],
+    "Firefox": ["فايرفوكس", "فيرفوكس"],
+    "Google": ["جوجل"],
+    "WhatsApp": ["واتساب", "واتس اب"],
+    "Telegram": ["تيليجرام", "تليجرام", "تلجرام"],
+    "screenshot": ["سكرين شوت", "سكرينشوت"],
+    "folder": ["فولدر"],
+    "terminal": ["ترمينال", "تيرمينال"],
+    "dark mode": ["دارك مود"],
+    "mute": ["ميوت"],
+    "brightness": ["برايتنس"],
+    "notifications": ["نوتيفيكيشنز", "نوتيفيكيشن"],
+}
+# Prefixes glued to a loanword ("السيتنجز", "والبلوتوث"), longest first, and how they are written
+# before the Latin word: "الـ settings", as Egyptians write it.
+_PREFIXES = ("وبال", "وال", "بال", "لل", "ال", "و", "ب")
+_PREFIX_OUT = {"و": "و ", "ب": "بـ "}
+_ARABIC_WORD = re.compile(r"[؀-ۿ]+")
+
+
+def _loanword(first: str, second: str | None) -> tuple[str, str, bool] | None:
+    """The prefix and English word for one or two Arabic-script words, and whether both were used."""
+    for prefix in ("",) + _PREFIXES:
+        if prefix and not first.startswith(prefix):
+            continue
+        stem = first[len(prefix):]
+        for key, used_both in (((f"{stem} {second}", True),) if second else ()) + ((stem, False),):
+            if key in _LOANWORDS:
+                return prefix, _LOANWORDS[key], used_both
+    return None
+
+
+def latinize(text: str) -> str:
+    """English words that speech-to-text wrote in Arabic script, back in Latin letters:
+    "افتحلي السيتنجز" becomes "افتحلي الـ settings". Everything else is left as it was."""
+    found = list(_ARABIC_WORD.finditer(text))
+    out, end, i = [], 0, 0
+    while i < len(found):
+        match = found[i]
+        first = normalize_arabic(match.group())
+        nxt = found[i + 1] if i + 1 < len(found) else None
+        second = (normalize_arabic(nxt.group())
+                  if nxt and text[match.end():nxt.start()].isspace() else None)
+        hit = _loanword(first, second)
+        if first == "ال" and hit is None:
+            # "ال settings": the article split from an English word
+            out += [text[end:match.start()], "الـ"]
+            end = match.end()
+        elif hit:
+            prefix, english, used_both = hit
+            last = nxt if used_both else match
+            out += [text[end:match.start()], _PREFIX_OUT.get(prefix, f"{prefix}ـ " if prefix else ""), english]
+            end = last.end()
+            i += used_both
+        i += 1
+    return "".join(out) + text[end:]
 
 
 STOPWORDS = {
@@ -167,6 +238,7 @@ def is_stop(text: str) -> bool:
 
 
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_LOANWORDS = {normalize_arabic(spelling): english for english, spellings in LOANWORDS.items() for spelling in spellings}
 _SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
 _SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
 _STOP = _norm(STOP)
@@ -222,9 +294,22 @@ PHRASES = {
                         "fr": "Je n'ai pas pu éteindre l'ordinateur.", "es": "No he podido apagar el ordenador.",
                         "de": "Ich konnte den Computer nicht herunterfahren.",
                         "ar": "لم أستطع إطفاء الجهاز.", "ar-EG": "معرفتش أقفل الجهاز."},
+    "job_done": {"en": "Finished: {label}", "fr": "Terminé : {label}", "es": "Terminado: {label}",
+                 "de": "Fertig: {label}", "ar": "انتهى: {label}", "ar-EG": "خلص: {label}"},
+    "job_failed": {"en": "Failed: {label}", "fr": "Échec : {label}", "es": "Falló: {label}",
+                   "de": "Fehlgeschlagen: {label}", "ar": "فشل: {label}", "ar-EG": "فشل: {label}"},
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "interpret_start": {"en": "I'll interpret. Speak in turns; say stop to finish.",
+                        "fr": "Je fais l'interprète. Parlez chacun votre tour ; dites stop pour finir.",
+                        "es": "Voy a interpretar. Hablad por turnos; decid basta para terminar.",
+                        "de": "Ich dolmetsche. Sprecht abwechselnd; sagt Stopp zum Beenden.",
+                        "ar": "سأترجم بينكما. تحدثا بالتناوب، وقولا توقف للإنهاء.",
+                        "ar-EG": "هترجم بينكم. اتكلموا واحد واحد، وقولوا كفاية لما تخلصوا."},
+    "interpret_end": {"en": "Interpreting finished.", "fr": "Fin de l'interprétation.",
+                      "es": "Fin de la interpretación.", "de": "Dolmetschen beendet.", "ar": "انتهت الترجمة.",
+                      "ar-EG": "خلصنا الترجمة."},
     "budget_warning": {"en": "Heads up: you have used eighty percent of your spending cap.",
                        "fr": "Attention : tu as utilisé quatre-vingts pour cent de ton plafond de dépenses.",
                        "es": "Aviso: has usado el ochenta por ciento de tu límite de gasto.",

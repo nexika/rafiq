@@ -22,6 +22,8 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
+| Your project | "run the tests", "what's my git status?", "why did CI fail?", "what's on my PR?", through Nexika's barq, tabib and mizan when they are on the PATH; set the project folder in the panel or as `[dev] project` |
+| Interpreter | "interpret between me and her, Egyptian and German", "ترجم بيني وبينه بالمصري والفرنساوي": each turn is said in the other language until someone says "stop" or "كفاية" |
 | Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
@@ -39,6 +41,10 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
+English words inside Arabic work too: "افتحلي الـ settings", "شغّل الـ playlist بتاعتي" or
+"ابعت email لسارة" reach the brain with the English words in Latin letters. To see how well Whisper
+hears your own mixed speech, record sentences as `name.wav` with their text in `name.txt` and run
+`rafiq stt-score <folder>` (it compares the small and medium models, with and without this handling).
 
 ## Install
 
@@ -215,6 +221,18 @@ timer or music when the answer used one. It never takes the focus, and the next 
 Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
 `[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
 
+**Spoken notifications** tell you when a long job ends, so you can stop watching terminals:
+
+```bash
+rafiq notify --done "the benchmark"   # "Finished: the benchmark", in the language you last spoke
+make test; rafiq notify --failed tests
+rafiq mute                            # muted: shown in the panel, not spoken
+rafiq hooks claude-code               # a Claude Code Stop hook ("Finished: Claude Code")
+rafiq hooks shell                     # `announce <command>` and `watch-ci` (GitHub Actions) for your shell
+```
+
+Set `notify.quiet_hours = "22:00-07:00"` in the config to keep them silent at night.
+
 ## The wake word
 
 **Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"
@@ -377,6 +395,7 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - "What's the weather?" with no city set asks GNOME's location service, at city accuracy. Your IP
   is sent to a lookup service (ipapi.co) only if you set `ip_lookup = true` under `[place]`.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
+  The project tools only read (tests, git status, CI, PR); the model picks the question, never the command.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
 - The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
