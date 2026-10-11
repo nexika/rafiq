@@ -34,7 +34,9 @@ def tools_with(log):
         return "Saturday 10 October 2026, 15:40"
 
     return {"power": Tool("power", "power off", shutdown, confirm="shut down the computer"),
-            "get_time": Tool("get_time", "time", clock)}
+            "get_time": Tool("get_time", "time", clock, card="facts"),
+            "web_search": Tool("web_search", "search", lambda: "results", slow=True,
+                               waiting_phrase={"en": "Let me look.", "fr": "Je cherche."})}
 
 
 @pytest.fixture
@@ -75,6 +77,21 @@ def test_a_declined_confirmation_does_not_run_the_action(ollama):
     brain = make_brain(confirm=lambda action, tag: asked.append((action, tag)) or False, log=log)
     brain.think("shut down", "ar-EG")
     assert asked == [("shut down the computer", "ar-EG")] and log == []
+
+
+def test_a_slow_tool_announces_a_waiting_phrase_and_each_result_carries_its_card(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "web_search", "arguments": {}}},
+                                                    {"function": {"name": "get_time", "arguments": {}}}]},
+               {"role": "assistant", "content": "Done."}]
+    brain = make_brain()
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("cherche", "fr")
+    waits = [d for k, d in events if k == "waiting"]
+    assert waits == [{"name": "web_search", "text": "Je cherche.", "tag": "fr"}]
+    cards = {d["name"]: d["card"] for k, d in events if k == "tool"}
+    assert cards == {"web_search": "text", "get_time": "facts"}
 
 
 def test_an_unknown_tool_is_reported_to_the_model_not_run(ollama):
@@ -128,7 +145,7 @@ def test_system_prompt_has_no_time_or_language():
 
 class FakeAssistant:
     def __init__(self):
-        self.events, self.jobs, self.state = Events(), [], "idle"
+        self.events, self.jobs, self.state, self.mode = Events(), [], "idle", "everyday"
         import queue
 
         self.pending_answer = queue.Queue()
@@ -193,3 +210,16 @@ def test_another_host_name_is_refused(panel):
 def test_the_panel_will_not_listen_beyond_this_computer():
     with pytest.raises(ValueError):
         serve(FakeAssistant(), "0.0.0.0", 0, "t" * 40)
+
+
+def test_a_mode_chosen_in_the_panel_is_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/mode", {"mode": "offline"})[0] == 200
+    assert assistant.jobs == [("mode", {"mode": "offline"})]
+
+
+@pytest.mark.parametrize("body", [{"mode": "turbo"}, {"mode": 3}, {}])
+def test_an_unknown_mode_from_the_panel_is_refused(panel, body):
+    assistant, port = panel
+    assert request(port, "/api/mode", body)[0] == 400
+    assert assistant.jobs == []

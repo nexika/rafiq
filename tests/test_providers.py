@@ -82,7 +82,7 @@ def test_openai_answers_and_its_tool_calls_run(openai):
     assert first["headers"]["Authorization"] == "Bearer sk-test"
     assert first["body"]["model"] == brain.cfg["brain"]["openai_model"]
     assert first["body"]["messages"][0]["role"] == "system"
-    assert {t["function"]["name"] for t in first["body"]["tools"]} == {"power", "get_time"}
+    assert {t["function"]["name"] for t in first["body"]["tools"]} == set(brain.tools)   # power, get_time, ...
     assert second["body"]["messages"][-1] == {"role": "tool", "tool_call_id": "call_1",
                                               "content": "Saturday 10 October 2026, 15:40"}
 

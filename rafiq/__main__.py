@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | google-setup"""
+"""rafiq run | ask | say | doctor | google-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import shutil
 import sys
 import threading
 
-from . import config, lang
+from . import config, lang, modes
 
 
 def cmd_run(args) -> int:
@@ -18,6 +18,8 @@ def cmd_run(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    if args.mode:
+        modes.switch(cfg, args.mode)
     print("Loading the speech models (the first start downloads them)...", flush=True)
     assistant = Assistant(cfg)
     if not args.no_panel:
@@ -50,6 +52,8 @@ def cmd_ask(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    if args.mode:
+        modes.switch(cfg, args.mode)
     text = " ".join(args.text)
     tag = args.lang or lang.dialect(lang.guess(text), text)
 
@@ -117,12 +121,29 @@ def cmd_doctor(_args) -> int:
     speaker = Speaker(cfg)
     _check("Azure voices (Egyptian Arabic)", bool(speaker.key and speaker.region),
            "set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION" if not speaker.key else speaker.region)
+    _check("ElevenLabs voices", bool(speaker.eleven_key),
+           speaker.cfg.get("elevenlabs_model", "") if speaker.eleven_key else "set ELEVENLABS_API_KEY")
+    kokoro = speaker.kokoro_paths()
+    _check("Kokoro offline voices (en, fr, es)", kokoro is not None,
+           "found" if kokoro else "missing (see README)")
     for tag in ("en", "fr", "es", "de", "ar"):
         path = speaker.piper_path(tag)
         _check(f"offline voice {tag}", path is not None, path.name if path else "missing")
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    print(f"  mode: {modes.current(cfg)}")
+    from .stt import cloud_engines
+
+    cloud = cloud_engines(cfg)
+    speech = cfg["speech"]
+    offline = speech.get("offline", False) or modes.offline(cfg)
+    _check("cloud speech to text", bool(cloud) or offline,
+           "off (offline)" if offline else ", ".join(cloud) or
+           "set AZURE_SPEECH_KEY or OPENAI_API_KEY for languages Whisper hears badly")
+    if speech.get("stt_by_language"):
+        print("  speech to text by language: "
+              + ", ".join(f"{k} {v}" for k, v in speech["stt_by_language"].items()))
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
     from .brain import Brain
 
@@ -164,17 +185,46 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_install_service(_args) -> int:
+    """Start Rafiq at every login, as a systemd user service."""
+    from . import service
+
+    try:
+        path = service.install()
+    except service.ServiceError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"Rafiq now starts at login ({path}) and is running.")
+    print("Logs: journalctl --user -u rafiq -f")
+    print(f"Exported keys are not seen by the service: put ANTHROPIC_API_KEY=... lines in {service.env_file()}")
+    return 0
+
+
+def cmd_uninstall_service(_args) -> int:
+    from . import service
+
+    try:
+        removed = service.uninstall()
+    except service.ServiceError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print("Rafiq no longer starts at login." if removed else "Rafiq was not set to start at login.")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
     run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
+    run.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
     ask.add_argument("--lang", choices=lang.TAGS)
     ask.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
+    ask.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
     say = sub.add_parser("say", help="say a sentence, to try a voice")
@@ -191,6 +241,9 @@ def main(argv=None) -> int:
         fn=cmd_listen)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    sub.add_parser("install-service", help="start Rafiq at every login (systemd user service)").set_defaults(
+        fn=cmd_install_service)
+    sub.add_parser("uninstall-service", help="stop starting Rafiq at login").set_defaults(fn=cmd_uninstall_service)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     return args.fn(args)
