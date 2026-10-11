@@ -82,6 +82,10 @@ ask_first = true                # ask before each screenshot that goes to Claude
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
+[instagram]
+enabled = false                 # true after `rafiq instagram-setup <token>`
+accounts = []                   # usernames to report on; empty for all linked accounts
+# app_id and app_secret of your Meta app, or set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET
 [home_assistant]                # Nest, Hue, smart plugs...: profile > long-lived access token in Home Assistant
 url = ""                        # e.g. http://homeassistant.local:8123
 token = ""                      # or set HOME_ASSISTANT_TOKEN

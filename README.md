@@ -25,6 +25,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
+| Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
 | OBS Studio | "start recording" (asks first), "go live" (asks first), "switch to the camera scene", "clip that" |
 
@@ -309,6 +310,21 @@ calendar: run `rafiq google-setup` again to give it the others.
 
 Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
 before Rafiq had them, run `rafiq google-setup` again.
+
+## Instagram statistics
+
+Followers gained or lost, new posts and views on recent videos, compared with yesterday, for every
+Instagram Business or Creator account linked to your Facebook Pages (official Instagram Graph API).
+
+1. Create an app at [Meta for Developers](https://developers.facebook.com/) and set
+   `INSTAGRAM_APP_ID` and `INSTAGRAM_APP_SECRET` (or `app_id` and `app_secret` under `[instagram]`).
+2. In the Graph API Explorer, get a user token with `instagram_basic`, `instagram_manage_insights` and
+   `pages_show_list`.
+3. Run `rafiq instagram-setup <token>`: Rafiq swaps it for a long-lived token, refreshed by itself.
+4. Set `enabled = true` under `[instagram]` in the config.
+
+Each answer saves a snapshot of the day in `~/.config/rafiq/data/instagram.json` (kept 90 days); the
+next day's answer compares with it.
 
 ## Home devices (Nest, Hue, plugs)
 
