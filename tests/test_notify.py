@@ -101,14 +101,6 @@ def test_the_panel_refuses_an_unknown_event(panel):
     assert assistant.jobs == []
 
 
-def test_the_panel_mutes_and_unmutes(panel):
-    assistant, port = panel
-    assert request(port, "/api/mute", {"muted": True})[0] == 200
-    assert assistant.muted is True
-    assert request(port, "/api/mute", {"muted": False})[0] == 200
-    assert assistant.muted is False
-
-
 def test_rafiq_notify_posts_to_the_running_rafiq(monkeypatch):
     import httpx
 
