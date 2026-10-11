@@ -210,6 +210,7 @@ def cmd_ask(args) -> int:
     --speak). Useful without a microphone and for testing."""
     from .assistant import Context
     from .brain import Brain
+    from .budget import Budget
     from .facts import Facts
     from .scheduler import Scheduler
     from .tools import load_all
@@ -243,11 +244,12 @@ def cmd_ask(args) -> int:
         watcher = Presence(config.data_dir() / "presence.json", lambda: False, lambda: None, lambda: None)
     facts = Facts(config.data_dir() / "memory.json")
     tools = load_all(cfg)
-    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts)
-    stream = Speaker(cfg).stream() if args.speak else None
+    budget = Budget(cfg)
+    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts, budget=budget)
+    stream = Speaker(cfg, budget=budget).stream() if args.speak else None
     try:
         answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts=facts, presence=watcher,
-                                                confirm=_terminal_confirm, tools=tools),
+                                                confirm=_terminal_confirm, tools=tools, budget=budget),
                              on_speech=stream.put if stream else None)
         print(answer)
     finally:

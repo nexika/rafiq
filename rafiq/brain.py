@@ -201,9 +201,11 @@ def check_arguments(tool: Tool | None, raw) -> tuple[dict, str | None]:
 
 class Brain:
     def __init__(self, cfg: dict, tools: dict[str, Tool], confirm: Callable[[str, str], bool],
-                 on_event: Callable[[str, dict], None] | None = None, clock=time.time, facts: Facts | None = None):
+                 on_event: Callable[[str, dict], None] | None = None, clock=time.time, facts: Facts | None = None,
+                 budget=None):
         self.cfg, self.tools, self.confirm = cfg, tools, confirm
         self.facts = facts
+        self.budget = budget                 # charged for each Claude response; at its cap, offline only
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
@@ -213,6 +215,8 @@ class Brain:
     # ------------------------------------------------------------------ choosing a backend
 
     def backends(self) -> list[str]:
+        if self.budget and not self.budget.allows_paid():
+            return ["ollama"]
         if modes.offline(self.cfg):
             return ["ollama"]
         mode = self.cfg["brain"].get("mode", "auto")
@@ -428,6 +432,9 @@ class Brain:
                     resp = stream.get_final_message()
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
+            usage = getattr(resp, "usage", None)
+            if self.budget and usage:
+                self.budget.charge_tokens(self.claude_model(), usage.input_tokens, usage.output_tokens)
             self._count(getattr(resp, "usage", None))
             voice.end()
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})

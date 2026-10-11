@@ -39,6 +39,9 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 h1 { font-size: 22px; margin: 0; letter-spacing: .01em; }
 h1 span { color: var(--muted); font-weight: 400; }
 #state { color: var(--muted); font-size: 14px; }
+.spending { color: var(--muted); font-size: 12px; }
+.spending[data-status="warning"] { color: var(--warn); }
+.spending[data-status="capped"] { color: var(--err); }
 header label { margin-left: auto; font-size: 14px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
   border-radius: 10px; padding: 6px 8px; }
@@ -105,6 +108,7 @@ header .grow { flex: 1; min-width: 0; }
     <div class="grow">
       <h1>Rafiq <span>رفيق</span></h1>
       <div id="state" role="status">connecting…</div>
+      <div id="spending" class="spending"></div>
       <div id="meter" title="Microphone level" aria-hidden="true"><div></div></div>
       <div id="now"></div>
     </div>
@@ -195,6 +199,13 @@ function add(cls, text, meta) {
   log.append(el);
   el.scrollIntoView({ block: "end", behavior: "smooth" });
 }
+function showSpending(e) {
+  const el = document.getElementById("spending"), money = (n) => n.toFixed(2) + " " + e.currency;
+  el.textContent = "Spent today " + money(e.today) + (e.daily_cap ? " of " + money(e.daily_cap) : "")
+    + " · this month " + money(e.month) + (e.monthly_cap ? " of " + money(e.monthly_cap) : "")
+    + (e.status === "capped" ? " · offline until the cap resets" : "");
+  el.dataset.status = e.status;
+}
 const muteBtn = document.getElementById("mute");
 function setState(s) {
   orb.dataset.state = s; stateEl.textContent = STATES[s] || s;
@@ -219,6 +230,7 @@ function handle(e) {
     case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
     case "brain": stateEl.dataset.backend = e.backend; break;
+    case "spending": showSpending(e); break;
     case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
     case "task": add(e.state === "failed" ? "note err" : "note", "Background task “" + e.goal + "”: " + e.state
       + (e.state === "running" ? "" : " (" + (e.cost == null ? "cost unknown" : "$" + e.cost.toFixed(4)) + ")\n"

@@ -24,6 +24,7 @@ from . import kws, lang, modes, overlay, presence, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
+from .budget import Budget
 from .facts import Facts
 from .gestures import GestureControl, SystemDesktop
 from .gestures import settings as gesture_settings
@@ -47,7 +48,8 @@ class Context:
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
-    that changes something; the hand gestures; and, for a request from a satellite, its room."""
+    that changes something; the hand gestures; and, for a request from a satellite, its room;
+    and the spending so far."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -60,6 +62,7 @@ class Context:
     tools: dict[str, Tool] | None = None
     gestures: GestureControl | None = None
     room: str = ""
+    budget: Budget | None = None
 
 
 @dataclass
@@ -120,7 +123,8 @@ class Assistant:
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
         self.stt_lock = threading.Lock()     # satellites' requests use the same model from other threads
-        self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
+        self.budget = Budget(self.cfg)
+        self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute, budget=self.budget)
         barge = self.cfg["interruption"]
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
@@ -131,12 +135,13 @@ class Assistant:
         self.presence = self._make_presence()
         self.facts = Facts(config_mod.data_dir() / "memory.json")
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, budget=self.budget)
         self.paper = MorningPaper(self.cfg)
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
-                           confirm=self.confirm, tools=self.tools, gestures=self.gestures)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
+                           confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
+                           budget=self.budget)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
             self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
@@ -385,7 +390,15 @@ class Assistant:
             if self.speech:
                 self.speech.close()
             self.speech = None
+        self.publish_spending(tag)
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def publish_spending(self, tag: str) -> None:
+        """Show the spending in the panel; say so once a day when a cap is near or reached."""
+        self.events.publish("spending", self.budget.summary())
+        alert = self.budget.alert()
+        if alert:
+            self.say(lang.phrase(alert, tag), tag)
 
     def play_scene(self, scene: scenes_mod.Scene, tag: str) -> None:
         """Run a scene's steps and say what the steps marked to be read aloud returned, or that it's done."""
