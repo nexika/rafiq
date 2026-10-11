@@ -20,6 +20,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
@@ -182,6 +183,14 @@ listens through it on its own. `enabled = false` mutes the microphone while Rafi
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 Yes/No buttons when it asks before an action, and the choice of style.
 
+Its **Subscriptions** page (http://127.0.0.1:8765/subscriptions) lists what you pay for again and
+again: monthly and yearly totals per currency, the charges of the next 30 days, alerts when one
+charges tomorrow or its amount changed, and a split by category. They are kept in
+`~/.config/rafiq/data/subscriptions.json` and reach the model only when you ask ("how much do my
+subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and
+proposes what it finds; each one is merged only when you press Merge, and a new price for a known
+subscription updates it and raises the "amount changed" alert.
+
 ## The wake word
 
 **Record your voice once** (about two minutes): `rafiq enroll` asks you to say "Rafiq" and "يا رفيق"
@@ -341,6 +350,21 @@ calendar: run `rafiq google-setup` again to give it the others.
 
 Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
 before Rafiq had them, run `rafiq google-setup` again.
+
+## Spotify
+
+"Play some jazz on Spotify", "next", "play it on the kitchen speaker", "add this song to my Road Trip
+playlist". Playback control needs Spotify Premium.
+
+1. Create an app in the [Spotify developer dashboard](https://developer.spotify.com/dashboard) with the
+   redirect URI `http://127.0.0.1:8888/callback`.
+2. Put its client ID under `[spotify] client_id` in the config (or in `SPOTIFY_CLIENT_ID`).
+3. Run `rafiq spotify-setup` and approve in the browser. No client secret is needed; the token is
+   stored readable only by you.
+4. Set `enabled = true` under `[spotify]` in the config.
+
+Adding a song to a playlist is asked first. With no playlist named, songs go to "Rafiq finds", which
+Rafiq creates the first time.
 
 ## Discord
 
