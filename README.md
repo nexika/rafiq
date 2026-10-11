@@ -222,6 +222,41 @@ test that counts: the panel shows each wake-up's score next to the threshold.
 **Without recordings**, a small Whisper model listens for the name: it caught 6 of 8 phrases and woke
 once by mistake ("Rafael"). The Talk button and the keyboard shortcut always work.
 
+## Satellites: another room
+
+A small computer with a microphone and a speaker (a Raspberry Pi in the kitchen) can run Rafiq as a
+**satellite**: it hears "Rafiq" itself (with `rafiq enroll` recordings made on that device, or a small
+Whisper model), sends the request to the main computer, and speaks the answer. The main computer knows
+the room, so "turn on the light" said in the kitchen means the kitchen's.
+
+1. On the main computer, `rafiq satellite token --name kitchen` prints a block for its config:
+   ```toml
+   [satellites]
+   host = "192.168.1.10"           # this computer's address on your home network (default 127.0.0.1)
+
+   [satellites.devices.kitchen]
+   token = "..."
+   room = "kitchen"
+   risky = "ask"                   # "block": no actions that need a yes from this room
+   blocked_tools = ["send_email"]  # tools this room may not use at all
+   ```
+   `rafiq run` then also listens for satellites on port 8766.
+2. On the satellite, install Rafiq and set:
+   ```toml
+   [satellite]
+   hub = "192.168.1.10:8766"
+   name = "kitchen"
+   token = "..."                   # the same token
+   ```
+   and run `rafiq satellite run`.
+3. Without any hardware, `rafiq satellite simulate request.wav` sends a 16 kHz mono recording as if it
+   were said to a satellite, and prints what was heard, the answer and how long it took.
+
+Each satellite has its own token, compared in constant time. Requests travel as plain TCP unless you
+set `tls_cert` and `tls_key` under `[satellites]` (and `tls = true`, with `tls_ca` for a self-signed
+certificate, under `[satellite]`): keep satellites on a private network otherwise. Actions that need a
+yes are asked on the satellite and answered there.
+
 ## Presence: when your phone leaves or comes home
 
 When your phone has been off the home Wi-Fi for 10 minutes, Rafiq plays the away scene; when it is

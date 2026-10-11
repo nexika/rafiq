@@ -44,7 +44,7 @@ class Context:
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
-    that changes something."""
+    that changes something; and, for a request from a satellite, its room."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -55,6 +55,7 @@ class Context:
     presence: presence.Presence | None = None
     confirm: Callable[[str, str], bool] | None = None
     tools: dict[str, Tool] | None = None
+    room: str = ""
 
 
 @dataclass
@@ -101,6 +102,7 @@ class Assistant:
                                      max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
+        self.stt_lock = threading.Lock()     # satellites' requests use the same model from other threads
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         barge = self.cfg["interruption"]
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
@@ -244,13 +246,16 @@ class Assistant:
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
         with timing.Timer("stt", model=getattr(self.stt.local, "size", "")):
-            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
-                heard = self.stt.local.transcribe(audio)
-            else:
-                heard = self.stt.transcribe(audio, hint=self.tag)
+            heard = self.transcribe(audio, hint=self.tag)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
+
+    def transcribe(self, audio: np.ndarray, hint: str | None = None):
+        with self.stt_lock:
+            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
+                return self.stt.local.transcribe(audio)
+            return self.stt.transcribe(audio, hint=hint)
 
     # ------------------------------------------------------------------ talking
 
