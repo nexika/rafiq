@@ -112,6 +112,10 @@ def load_all(cfg: dict) -> dict[str, Tool]:
             importlib.import_module(f"{__name__}.{name}")
         else:
             off.add(f"{__name__}.{name}")
+    if cfg.get("google", {}).get("enabled"):
+        from . import parcels  # noqa: F401
+    else:
+        off.add(f"{__name__}.parcels")
     if cfg.get("home_assistant", {}).get("url") and cfg.get("home_assistant", {}).get("token"):
         from . import home  # noqa: F401
     else:
