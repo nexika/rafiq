@@ -29,8 +29,9 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .orb[data-state="listening"]::after { opacity: 1; animation: pulse 1.2s ease-in-out infinite; }
 .orb[data-state="thinking"]::after { opacity: .9; animation: spin 1s linear infinite; border-radius: 30%; }
 .orb[data-state="speaking"]::after { opacity: 1; animation: talk .5s ease-in-out infinite alternate; }
-.orb[data-state="offline"] { background: var(--line); }
-.orb[data-state="offline"]::after { background: var(--muted); }
+.orb[data-state="offline"], .orb[data-state="muted"] { background: var(--line); }
+.orb[data-state="offline"]::after, .orb[data-state="muted"]::after { background: var(--muted); }
+#mute[aria-pressed="true"] { background: var(--warn-soft); border-color: var(--warn); }
 @keyframes pulse { 50% { transform: scale(1.35); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes talk { to { transform: scaleY(1.4); } }
@@ -38,6 +39,10 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 h1 { font-size: 22px; margin: 0; letter-spacing: .01em; }
 h1 span { color: var(--muted); font-weight: 400; }
 #state { color: var(--muted); font-size: 14px; }
+header label { margin-left: auto; font-size: 14px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 8px; }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #log { display: flex; flex-direction: column; gap: 10px; }
 .msg { padding: 10px 14px; border-radius: 14px; max-width: 85%; border: 1px solid var(--line);
   white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -62,6 +67,9 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
   color: var(--ink); padding: 10px 14px; cursor: pointer; white-space: nowrap; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#mode { margin-left: auto; font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+#mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
 </style>
 </head>
@@ -73,6 +81,18 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <h1>Rafiq <span>رفيق</span></h1>
       <div id="state" role="status">connecting…</div>
     </div>
+    <select id="mode" aria-label="Mode" title="Everyday: fast. Quality: the strongest model. Offline: nothing leaves this computer.">
+      <option value="everyday">Everyday</option>
+      <option value="quality">Quality</option>
+      <option value="offline">Offline</option>
+    </select>
+    <label>Style
+      <select id="persona">
+        <option value="neutral">Neutral</option>
+        <option value="concise">Concise</option>
+        <option value="butler">Witty butler</option>
+      </select>
+    </label>
   </header>
   <div id="log" aria-live="polite">
     <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
@@ -89,14 +109,16 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     <input type="text" id="text" placeholder="Type to Rafiq…" autocomplete="off" dir="auto" aria-label="Message">
     <button type="submit">Send</button>
     <button type="button" id="stop" title="Stop speaking">■</button>
+    <button type="button" id="mute" aria-pressed="false" title="Stop listening (rafiq mute)">Mute</button>
   </form>
 </footer>
 <script>
 const TOKEN = "__TOKEN__";
 const STATES = { idle: "Waiting for “Rafiq”", listening: "Listening…", thinking: "Thinking…",
-  speaking: "Speaking", starting: "Starting…", offline: "Not connected: is Rafiq running?" };
+  speaking: "Speaking", muted: "Muted: not listening for “Rafiq”", starting: "Starting…", offline: "Not connected: is Rafiq running?" };
 const log = document.getElementById("log"), orb = document.getElementById("orb");
 const stateEl = document.getElementById("state"), confirmBox = document.getElementById("confirm");
+const modeEl = document.getElementById("mode");
 
 function add(cls, text, meta) {
   document.getElementById("empty")?.remove();
@@ -108,7 +130,14 @@ function add(cls, text, meta) {
   log.append(el);
   el.scrollIntoView({ block: "end", behavior: "smooth" });
 }
-function setState(s) { orb.dataset.state = s; stateEl.textContent = STATES[s] || s; }
+const muteBtn = document.getElementById("mute");
+function setState(s) {
+  orb.dataset.state = s; stateEl.textContent = STATES[s] || s;
+  if (s === "muted" || s === "idle") {
+    muteBtn.setAttribute("aria-pressed", String(s === "muted"));
+    muteBtn.textContent = s === "muted" ? "Unmute" : "Mute";
+  }
+}
 async function post(path, body) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
     body: JSON.stringify(body || {}) });
@@ -123,12 +152,18 @@ function handle(e) {
     case "typed": add("msg you", e.text, "You (typed)"); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
     case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
+    case "persona": document.getElementById("persona").value = e.persona; break;
     case "brain": stateEl.dataset.backend = e.backend; break;
+    case "mode": modeEl.value = e.mode; break;
     case "wake": if (e.score !== undefined) add("note", "Heard the name (match " + e.score + ", wakes below "
       + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
+    case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "muted": add("note", e.muted ? "Muted" : "Listening again");
+      muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
+    case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
   }
 }
@@ -143,7 +178,10 @@ document.getElementById("form").onsubmit = (ev) => {
   if (text) { post("/api/text", { text }); input.value = ""; }
 };
 document.getElementById("talk").onclick = () => post("/api/listen");
+modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });
+document.getElementById("persona").onchange = (ev) => post("/api/persona", { name: ev.target.value });
 document.getElementById("stop").onclick = () => post("/api/stop");
+muteBtn.onclick = () => post("/api/mute", { muted: muteBtn.getAttribute("aria-pressed") !== "true" });
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
 document.getElementById("no").onclick = () => post("/api/confirm", { yes: false });
 connect();
