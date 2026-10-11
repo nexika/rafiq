@@ -341,6 +341,21 @@ calendar: run `rafiq google-setup` again to give it the others.
 Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
 before Rafiq had them, run `rafiq google-setup` again.
 
+## Spotify
+
+"Play some jazz on Spotify", "next", "play it on the kitchen speaker", "add this song to my Road Trip
+playlist". Playback control needs Spotify Premium.
+
+1. Create an app in the [Spotify developer dashboard](https://developer.spotify.com/dashboard) with the
+   redirect URI `http://127.0.0.1:8888/callback`.
+2. Put its client ID under `[spotify] client_id` in the config (or in `SPOTIFY_CLIENT_ID`).
+3. Run `rafiq spotify-setup` and approve in the browser. No client secret is needed; the token is
+   stored readable only by you.
+4. Set `enabled = true` under `[spotify]` in the config.
+
+Adding a song to a playlist is asked first. With no playlist named, songs go to "Rafiq finds", which
+Rafiq creates the first time.
+
 ## Discord
 
 Rafiq reads Discord through a bot of your own, never your user account (self-bots are against

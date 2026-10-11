@@ -98,6 +98,11 @@ ask_first = true                # ask before each screenshot that goes to Claude
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
+[spotify]
+enabled = false                 # true after `rafiq spotify-setup`
+client_id = ""                  # your Spotify developer app (or SPOTIFY_CLIENT_ID)
+port = 8888                     # the app's redirect URI must be http://127.0.0.1:8888/callback
+
 [deadlines]                     # deadlines from iCal feeds (the .ics or webcal:// address a calendar publishes)
 feeds = []                      # e.g. [{ name = "Loopstr", url = "https://..." }] or ["https://..."]
 cache_minutes = 15

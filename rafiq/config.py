@@ -109,6 +109,8 @@ DEFAULTS: dict = {
               "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
+    "spotify": {"enabled": False, "client_id": "", "port": 8888},
     "paper": {
         "title": "Rafiq",
         "languages": [],                 # e.g. ["en", "ar"] for a bilingual paper; empty: the first speech language

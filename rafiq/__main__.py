@@ -1,5 +1,5 @@
 """rafiq run | ask | say | paper | agent | agent-token | doctor | phone | mcp | toolcheck | google-setup |
-instagram-setup | hue-setup | install-service | uninstall-service"""
+spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -335,6 +335,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    spotify = config.home() / "spotify" / "token.json"
+    _check("Spotify", spotify.is_file() and cfg["spotify"].get("enabled", False),
+           "connected" if spotify.is_file() else "run: rafiq spotify-setup")
     instagram = config.home() / "instagram" / "token.json"
     _check("Instagram statistics", instagram.is_file() and cfg["instagram"].get("enabled", False),
            "connected" if instagram.is_file() else "run: rafiq instagram-setup <token>")
@@ -459,6 +462,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_spotify_setup(_args) -> int:
+    from .tools.spotify import setup
+
+    print(setup(config.load()))
+    print("Then set [spotify] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def cmd_instagram_setup(args) -> int:
     from .tools.instagram import setup
 
@@ -556,6 +567,7 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
     insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")
     insta.set_defaults(fn=cmd_instagram_setup)
