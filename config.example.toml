@@ -78,12 +78,25 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[phone]                         # notes and commands from an iOS or Android shortcut: `rafiq phone`
+enabled = false
+host = "127.0.0.1"              # this computer only; "0.0.0.0" to reach it on your home Wi-Fi
+port = 8767
+
 [screen]
 ollama_model = ""               # a local vision model (e.g. "qwen2.5vl:7b") to read the screen offline
 ask_first = true                # ask before each screenshot that goes to Claude, in the cloud
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[deadlines]                     # deadlines from iCal feeds (the .ics or webcal:// address a calendar publishes)
+feeds = []                      # e.g. [{ name = "Loopstr", url = "https://..." }] or ["https://..."]
+cache_minutes = 15
+
+[brief]
+at_first_start = false          # true: say the daily brief at the first start of each day
+language = "en"                 # en, fr, es, de, ar or ar-EG
 
 [discord]
 enabled = false                 # true once your bot is invited; its token goes in DISCORD_BOT_TOKEN
