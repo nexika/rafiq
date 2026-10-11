@@ -20,6 +20,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
@@ -27,6 +28,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Daily brief | "brief me", "good morning": the time, weather, today's calendar, new email and what is due today in one answer; `brief.at_first_start = true` says it at the first start of each day |
+| Morning paper | "print my paper" (asks first, never twice a day) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
@@ -162,6 +164,7 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq wake-pc aa:bb:cc:dd:ee:ff           # start a computer that is off (Wake-on-LAN must be on)
 rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
 ```
 
@@ -180,6 +183,14 @@ listens through it on its own. `enabled = false` mutes the microphone while Rafi
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
 Yes/No buttons when it asks before an action, and the choice of style.
+
+Its **Subscriptions** page (http://127.0.0.1:8765/subscriptions) lists what you pay for again and
+again: monthly and yearly totals per currency, the charges of the next 30 days, alerts when one
+charges tomorrow or its amount changed, and a split by category. They are kept in
+`~/.config/rafiq/data/subscriptions.json` and reach the model only when you ask ("how much do my
+subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and
+proposes what it finds; each one is merged only when you press Merge, and a new price for a known
+subscription updates it and raises the "amount changed" alert.
 
 ## The wake word
 
@@ -477,6 +488,19 @@ supported yet.
 2. `.venv/bin/pip install -e ".[obs]"`
 3. Under `[obs]` in the config set `enabled = true` and the `password` (or set `OBS_WEBSOCKET_PASSWORD`).
 4. For "clip that", turn on the replay buffer in OBS (Settings > Output > Replay Buffer) and start it.
+
+## The morning paper on paper
+
+Rafiq prints the day's paper with CUPS (`lp`), once a day at most and only after you say yes. It
+prints `~/.config/rafiq/data/paper/YYYY-MM-DD.pdf` (or `file` under `[paper]`, with `{date}` in it).
+
+- Every morning at a fixed time: `rafiq paper timer --at 07:00` writes a systemd user timer; turn it on
+  with `systemctl --user daemon-reload && systemctl --user enable --now rafiq-paper.timer`. At that
+  time the running Rafiq asks out loud (or in the panel) whether to print.
+- After the first brief of the day: `after_brief = true` under `[paper]`.
+- Now, from a terminal: `rafiq paper print` (asks first).
+
+A lock file (`data/paper.lock`) holds the date of the last print, so it never comes out twice.
 
 ## Settings
 

@@ -1,5 +1,5 @@
 """rafiq run | ask | say | paper | agent | agent-token | satellite | doctor | phone | mcp | toolcheck | google-setup |
-spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service"""
+spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service | wake-pc"""
 
 from __future__ import annotations
 
@@ -268,6 +268,8 @@ def cmd_paper(args) -> int:
 
     from . import paper
 
+    if args.paper_command:
+        return cmd_paper_print(args)
     cfg = config.load()
     day = date.today()
     if args.demo:
@@ -494,6 +496,44 @@ def cmd_satellite(args) -> int:
     return 0
 
 
+def cmd_paper_print(args) -> int:
+    """The morning paper on paper: print it now (asking first), have the running Rafiq offer it, or install
+    the systemd timer that does that every morning."""
+    from . import paper_print as paper
+
+    if args.paper_command == "print":
+        result = paper.MorningPaper(config.load()).print_today(lambda action: _terminal_confirm(action, "en"))
+        print(result)
+        return 0 if result.startswith("printed") else 1
+    if args.paper_command == "offer":
+        return _ask_running("/api/paper", {})
+    try:
+        units = paper.timer_units(args.at, sys.executable)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    folder = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, text in units.items():
+        (folder / name).write_text(text)
+    print(f"Wrote {folder / paper.TIMER}. Turn it on with:\n"
+          f"  systemctl --user daemon-reload && systemctl --user enable --now {paper.TIMER}")
+    return 0
+
+
+def cmd_wake_pc(args) -> int:
+    """Start a computer that is off, with Wake-on-LAN (what a satellite does when the main computer is off)."""
+    from .fallback import wake_pc
+
+    try:
+        wake_pc(args.mac, args.broadcast, args.port)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wake-on-LAN packet sent to {args.mac}.")
+    return 0
+
+
 def cmd_phone(_args) -> int:
     """What to put in an iOS Shortcut or an Android HTTP Shortcut."""
     cfg = config.load()
@@ -600,7 +640,11 @@ def main(argv=None) -> int:
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
     enroll.set_defaults(fn=cmd_enroll)
-    news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF)")
+    news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF), print it, or schedule that")
+    news.add_argument("paper_command", nargs="?", choices=("print", "offer", "timer"),
+                      help="print: print today's paper now (asks first); offer: have the running Rafiq offer to "
+                           "print it (what the timer runs); timer: install a systemd user timer that offers it")
+    news.add_argument("--at", default="07:00", help="with timer: time of day, HH:MM (default 07:00)")
     news.add_argument("--demo", action="store_true", help="made-up data, to see the layout")
     news.add_argument("--html", action="store_true", help="write HTML instead of printing a PDF")
     news.add_argument("--out", help="where to save it (default: the data folder, paper/<date>.pdf)")
@@ -638,6 +682,11 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
+    wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
+    wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
+    wake.add_argument("--port", type=int, default=9)
+    wake.set_defaults(fn=cmd_wake_pc)
     sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
     insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")

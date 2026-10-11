@@ -46,7 +46,8 @@ def test_only_critical_tools_ask_first_and_every_critical_tool_does():
                                                                         "calendar_delete", "add_app", "wake_computer",
                                                                         "home_switch", "look_at_screen", "email_reply",
                                                                         "email_trash", "obs_stream", "obs_record",
-                                                                        "plug_switch", "spotify_add_to_playlist"}
+                                                                        "plug_switch", "spotify_add_to_playlist",
+                                                                        "print_paper"}
 
 
 def test_only_safe_tools_are_exposed_over_mcp():

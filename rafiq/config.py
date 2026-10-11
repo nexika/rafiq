@@ -126,6 +126,11 @@ DEFAULTS: dict = {
         "max_articles": 6,               # per section
         "priorities": [],
         "deadlines": [],                 # [{title = "Tax return", date = "2026-10-15"}]
+        # Printing with CUPS: the printer (empty: the default one), the PDF to print ("{date}" becomes
+        # YYYY-MM-DD; empty: data/paper/<date>.pdf), and whether to offer it after the brief.
+        "printer": "",
+        "file": "",
+        "after_brief": False,
     },
     "deadlines": {
         "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}
