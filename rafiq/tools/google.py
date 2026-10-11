@@ -25,6 +25,10 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.events",
 # Said while Gmail is asked for the list.
 CHECKING_MAIL = {"en": "Let me check your email.", "fr": "Je regarde tes mails.", "es": "Miro tu correo.",
                  "de": "Ich schaue in deine E-Mails.", "ar": "دعني أتحقق من بريدك.", "ar-EG": "ثانية أشوف الإيميل."}
+# Said while the calendars are read.
+CHECKING_CALENDAR = {"en": "Let me check your calendar.", "fr": "Je regarde ton agenda.", "es": "Miro tu calendario.",
+                     "de": "Ich schaue in deinen Kalender.", "ar": "دعني أتحقق من تقويمك.",
+                     "ar-EG": "ثواني أشوفلك المواعيد."}
 
 
 def folder():
@@ -94,7 +98,8 @@ def _calendars(api) -> tuple[list[dict], str]:
 @tool("calendar_events", "Events in all of the user's Google calendars (subscribed ones too) for the "
       "coming days. Events in the primary calendar show their id, for calendar_delete.",
       {"days": {"type": "integer", "description": "how many days ahead, 1 to 31 (1 = today)"},
-       "query": {"type": "string", "description": "only events containing these words"}}, level="private", card="list")
+       "query": {"type": "string", "description": "only events containing these words"}},
+      level="private", slow=True, waiting_phrase=CHECKING_CALENDAR, card="list")
 def calendar_events(days: int = 1, query: str = "") -> str:
     start = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=max(1, min(int(days or 1), 31)))
@@ -196,7 +201,7 @@ def email_list(query: str = "is:unread in:inbox", max_results: int = 5) -> str:
 
 
 @tool("email_read", "Read one email by its id (from email_list).", {"id": {"type": "string"}}, required=("id",),
-      level="private")
+      level="private", slow=True, waiting_phrase=CHECKING_MAIL)
 def email_read(id: str) -> str:  # noqa: A002
     msg = service("gmail", "v1").users().messages().get(userId="me", id=id, format="full").execute()
     text = _body(msg.get("payload", {})) or msg.get("snippet", "")

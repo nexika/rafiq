@@ -187,6 +187,9 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    # Said before a slow tool that has no waiting phrase of its own (see Tool.waiting_phrase).
+    "wait": {"en": "One moment.", "fr": "Un instant.", "es": "Un momento.", "de": "Einen Moment.",
+             "ar": "لحظة من فضلك.", "ar-EG": "ثانية واحدة."},
     "limit": {"en": "That was taking too long, so I stopped. Try asking in a simpler way.",
               "fr": "Ça prenait trop de temps, alors j'ai arrêté. Essaie de demander plus simplement.",
               "es": "Estaba tardando demasiado, así que paré. Prueba a pedirlo de forma más sencilla.",

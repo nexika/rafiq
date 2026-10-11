@@ -133,6 +133,7 @@ def test_saying_stop_over_a_confirmation_cancels_it():
     a = object.__new__(Assistant)
     a.events = a.speaker = Silent()
     a.pending_answer, a.interrupted = queue.Queue(), threading.Event()
+    a.speech = None                              # no answer being spoken
     a.set_state = lambda state: None
     said, listened = [], []
 
