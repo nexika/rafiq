@@ -75,6 +75,10 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[screen]
+ollama_model = ""               # a local vision model (e.g. "qwen2.5vl:7b") to read the screen offline
+ask_first = true                # ask before each screenshot that goes to Claude, in the cloud
+
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
@@ -99,12 +103,38 @@ port = 9
 # [apps.RetroArch]
 # command = ["retroarch", "--fullscreen"]
 
+# Scenes: say a name (in any language you list) and Rafiq runs the steps, each a tool call. Steps that
+# change something (power) are asked about first; a step whose tool is missing is skipped.
+[scenes.film]
+names = ["film mode", "mode film", "modo película", "Filmmodus", "وضع الفيلم", "مود الفيلم"]
+steps = [
+    { tool = "volume", args = { level = 40 } },
+]
+
+# Built in: "turn everything off" (and the same in the other languages) offers to shut down.
+# Put your music and lights steps before the power step (tool names depend on what is set up):
+# [scenes.all_off]
+# steps = [{ tool = "music_pause" }, { tool = "lights", args = { on = false } },
+#          { tool = "power", args = { action = "shutdown" } }]
+
+# [scenes.morning]
+# names = ["good morning", "bonjour"]
+# steps = [
+#     { tool = "open_app", args = { name = "Spotify" } },
+#     { tool = "volume", args = { level = 30 }, hours = [5, 12] },   # only from 05:00 to 12:00
+#     { tool = "daily_brief", speak = true },                          # read its answer aloud
+# ]
+
+[day_start]
+scene = ""                      # e.g. "morning": runs at the first start of each day
+
 [hue]
 enabled = false                 # true after `rafiq hue-setup`
 
 [hue.rooms]                     # names you say -> the Hue app's room names, for other languages
 # "الصالة" = "Living room"
 # "chambre" = "Bedroom"
+
 [presence]                      # react when your phone leaves or comes home (see the README)
 phone_ip = ""                   # the phone's fixed IP, e.g. "192.168.1.20"; empty: off
 phone_mac = ""                  # optional; only this MAC counts

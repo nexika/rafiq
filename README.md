@@ -17,12 +17,14 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 |---|---|
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
+| The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
-| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -240,6 +242,9 @@ can drive any lights or plugs you already control from the terminal.
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
+  asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
+  in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
 - What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
   read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
   each request, never as instructions.
@@ -275,6 +280,9 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 Rafiq reads every calendar in your list, subscribed ones too, and adds or deletes events (after asking)
 in your primary calendar only. A token made before Rafiq read the calendar list only sees the primary
 calendar: run `rafiq google-setup` again to give it the others.
+
+Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
+before Rafiq had them, run `rafiq google-setup` again.
 
 ## Home devices (Nest, Hue, plugs)
 

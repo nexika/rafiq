@@ -5,8 +5,9 @@ and Gmail APIs enabled, save its JSON as ~/.config/rafiq/google/credentials.json
 `rafiq google-setup`. The token is stored next to it, readable only by you.
 
 Reading is free to do, in every calendar of the user's list (subscribed ones too); creating and
-deleting happen in the primary calendar only. Creating or deleting an event or sending an email is
-confirmed out loud first, with who and what. Email text is data for the model, never instructions.
+deleting happen in the primary calendar only. Creating or deleting an event, sending or replying to an
+email (the draft is read back) and moving an email to the trash are confirmed out loud first, with who
+and what. Email text is data for the model, never instructions.
 """
 
 from __future__ import annotations
@@ -18,10 +19,11 @@ from email.message import EmailMessage
 from .. import config
 from . import tool
 
+# gmail.modify covers reading, sending and the trash (but not deleting for good). A token made before
+# it was added needs `rafiq google-setup` again.
 SCOPES = ["https://www.googleapis.com/auth/calendar.events",
           "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-          "https://www.googleapis.com/auth/gmail.readonly",
-          "https://www.googleapis.com/auth/gmail.send"]
+          "https://www.googleapis.com/auth/gmail.modify"]
 # Said while Gmail is asked for the list.
 CHECKING_MAIL = {"en": "Let me check your email.", "fr": "Je regarde tes mails.", "es": "Miro tu correo.",
                  "de": "Ich schaue in deine E-Mails.", "ar": "دعني أتحقق من بريدك.", "ar-EG": "ثانية أشوف الإيميل."}
@@ -209,12 +211,26 @@ def email_read(id: str) -> str:  # noqa: A002
             f"{text[:6000]}")
 
 
-@tool("email_send", "Send an email from the user's Gmail. Rafiq reads the recipient and subject to the "
-      "user and asks first.",
+def _draft(body: str, limit: int = 300) -> str:
+    """The draft as Rafiq reads it back before sending; a long one is cut short."""
+    text = " ".join(body.split())
+    return f"'{text[:limit].rstrip()}...'" if len(text) > limit else f"'{text}'"
+
+
+def _send(message: EmailMessage, thread: str = "") -> dict:
+    body = {"raw": base64.urlsafe_b64encode(message.as_bytes()).decode()}
+    if thread:
+        body["threadId"] = thread
+    return service("gmail", "v1").users().messages().send(userId="me", body=body).execute()
+
+
+@tool("email_send", "Send an email from the user's Gmail. Rafiq reads the recipient, subject and text to "
+      "the user and asks first.",
       {"to": {"type": "string", "description": "email address"}, "subject": {"type": "string"},
        "body": {"type": "string"}},
       required=("to", "subject", "body"),
-      confirm=lambda a: f"send an email to {a.get('to', '')} with the subject '{a.get('subject', '')}'",
+      confirm=lambda a: f"send an email to {a.get('to', '')} with the subject '{a.get('subject', '')}' "
+                        f"saying {_draft(a.get('body', ''))}",
       level="critical")
 def email_send(to: str, subject: str, body: str) -> str:
     if "@" not in to or any(c in to for c in "\r\n,;"):
@@ -222,6 +238,44 @@ def email_send(to: str, subject: str, body: str) -> str:
     message = EmailMessage()
     message["To"], message["Subject"] = to, subject
     message.set_content(body)
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-    sent = service("gmail", "v1").users().messages().send(userId="me", body={"raw": raw}).execute()
-    return f"sent (id {sent.get('id')})"
+    return f"sent (id {_send(message).get('id')})"
+
+
+@tool("email_reply", "Reply to an email by its id (from email_list), in the same conversation. Rafiq reads "
+      "the draft to the user and sends it only after a yes.",
+      {"id": {"type": "string"}, "body": {"type": "string", "description": "the reply text"},
+       "to_name": {"type": "string", "description": "who it goes to, as the user would say it (e.g. Sara)"}},
+      required=("id", "body"),
+      confirm=lambda a: f"reply to {a.get('to_name') or 'that email'} saying {_draft(a.get('body', ''))}",
+      level="critical")
+def email_reply(id: str, body: str) -> str:  # noqa: A002
+    original = service("gmail", "v1").users().messages().get(
+        userId="me", id=id, format="metadata",
+        metadataHeaders=["From", "Reply-To", "Subject", "Message-ID", "References"]).execute()
+    to = _header(original, "reply-to") or _header(original, "from")
+    if not to:
+        return "error: that email has no sender to reply to"
+    subject = _header(original, "subject")
+    message = EmailMessage()
+    message["To"] = to
+    message["Subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}".strip()
+    # In-Reply-To and References let every mail program thread the reply under the original.
+    message_id = _header(original, "message-id")
+    if message_id:
+        message["In-Reply-To"] = message_id
+        message["References"] = " ".join(filter(None, [_header(original, "references"), message_id]))
+    message.set_content(body)
+    return f"reply sent (id {_send(message, original.get('threadId', '')).get('id')})"
+
+
+@tool("email_trash", "Move an email to the Gmail trash by its id (from email_list); it can still be restored "
+      "from there. Rafiq asks first.",
+      {"id": {"type": "string"},
+       "about": {"type": "string", "description": "which email, as the user would say it "
+                                                  "(e.g. Sara's email about dinner)"}},
+      required=("id",),
+      confirm=lambda a: f"move {a.get('about') or 'that email'} to the trash",
+      level="critical")
+def email_trash(id: str) -> str:  # noqa: A002
+    service("gmail", "v1").users().messages().trash(userId="me", id=id).execute()
+    return "moved to the trash"

@@ -107,12 +107,29 @@ DEFAULTS: dict = {
         "home_command": [],              # the welcome-home scene
         "welcome": True,                 # also say "welcome home"
     },
+    # Scenes: names (in any language) and the tool calls they run; see rafiq/tools/scenes.py.
+    # "Turn everything off" ends by offering to shut down; add your lights and music steps before it.
+    "scenes": {
+        "all_off": {
+            "names": ["turn everything off", "everything off", "éteins tout", "apaga todo", "alles aus",
+                      "mach alles aus", "أطفئ كل شيء", "اقفل كل حاجة", "طفي كل حاجة"],
+            "steps": [{"tool": "power", "args": {"action": "shutdown"}}],
+        },
+    },
+    "day_start": {"scene": ""},          # a scene to run at the first start of each day
     # Home Assistant, for Nest, Hue, plugs and the rest: its address and a long-lived access token.
     "home_assistant": {"url": "", "token": ""},
     # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
     "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
     "hue": {"enabled": False, "rooms": {}},
+    "screen": {
+        # Questions about the screen go to Claude (in the cloud), and never while offline unless a
+        # local vision model is set: an Ollama model that reads images, e.g. "qwen2.5vl:7b".
+        "ollama_model": "",
+        "ask_first": True,               # ask before each screenshot that goes to the cloud
+        "max_side": 1568,                # shrink the screenshot to this many pixels on its long side
+    },
     "anthropic_api_key": "",
     "openai_api_key": "",
 }

@@ -168,6 +168,8 @@ PHRASES = {
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
     "welcome_home": {"en": "Welcome home.", "fr": "Bon retour à la maison.", "es": "Bienvenido a casa.",
                      "de": "Willkommen zu Hause.", "ar": "أهلًا بعودتك إلى البيت.", "ar-EG": "حمد الله على السلامة."},
+    "scene_done": {"en": "Done.", "fr": "C'est fait.", "es": "Hecho.", "de": "Erledigt.", "ar": "تم.",
+                   "ar-EG": "تمام، خلصت."},
     "task_done": {"en": "Your task is done. {result}", "fr": "Ta tâche est terminée. {result}",
                   "es": "Tu tarea está lista. {result}", "de": "Deine Aufgabe ist fertig. {result}",
                   "ar": "انتهت مهمتك. {result}", "ar-EG": "المهمة خلصت. {result}"},

@@ -15,6 +15,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import numpy as np
 
@@ -27,7 +28,8 @@ from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
-from .tools import load_all
+from .tools import Tool, load_all
+from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
 
 MIN_UTTERANCE_SECONDS = 0.35
@@ -40,7 +42,8 @@ class Context:
     """What a tool may use: settings, the scheduler, the language of the current request, a way
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
-    phone watcher when a phone is set up."""
+    phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
+    that changes something."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -49,6 +52,8 @@ class Context:
     facts: Facts | None = None
     tasks: Tasks | None = None
     presence: presence.Presence | None = None
+    confirm: Callable[[str, str], bool] | None = None
+    tools: dict[str, Tool] | None = None
 
 
 @dataclass
@@ -102,9 +107,10 @@ class Assistant:
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.presence = self._make_presence()
         self.facts = Facts(config_mod.data_dir() / "memory.json")
-        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
-                           on_mode=self._mode_changed, facts=self.facts, presence=self.presence)
         self.tools = load_all(self.cfg)
+        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
+                           on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
+                           confirm=self.confirm, tools=self.tools)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
             self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
@@ -308,6 +314,10 @@ class Assistant:
             return
         self.tag = tag
         self.ctx.tag = tag
+        scene = scenes_mod.match(text, scenes_mod.scenes_from(self.cfg))
+        if scene is not None:                            # "film mode": no need to think about it
+            self.play_scene(scene, tag)
+            return
         self.set_state("thinking")
         self.speech = self.speaker.stream()
         try:
@@ -317,6 +327,22 @@ class Assistant:
             self.speech.close()
             self.speech = None
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def play_scene(self, scene: scenes_mod.Scene, tag: str) -> None:
+        """Run a scene's steps and say what the steps marked to be read aloud returned, or that it's done."""
+        self.ctx.tag = tag
+        self.set_state("thinking")
+        outcomes = scenes_mod.play(scene, self.ctx)
+        self.events.publish("scene", {"id": scene.id, "steps": [[o.tool, o.result[:200]] for o in outcomes]})
+        spoken = " ".join(o.result for o in outcomes if o.speak and not o.result.startswith(("error", "skipped")))
+        self.say(spoken or lang.phrase("scene_done", tag), lang.script_language(spoken, tag) if spoken else tag)
+
+    def start_the_day(self) -> None:
+        """At the first start of the day, queue the day-start scene (music, lights, the daily brief)."""
+        name = self.cfg.get("day_start", {}).get("scene")
+        today = datetime.now().astimezone().date()
+        if name and scenes_mod.first_start_today(config_mod.data_dir() / "day_start.json", today):
+            self.submit("scene", name=name)
 
     # ------------------------------------------------------------------ jobs from other threads
 
@@ -338,6 +364,11 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "scene":
+                    scene = scenes_mod.scenes_from(self.cfg).get(data["name"])
+                    if scene is None:
+                        raise KeyError(f"no scene called {data['name']!r} (day_start.scene)")
+                    self.play_scene(scene, self.tag)
                 elif kind == "mode":
                     self.set_mode(data["mode"])
             except Exception as exc:
@@ -434,6 +465,7 @@ class Assistant:
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
         if self.presence:
             self.presence.start(every=float(self.cfg["presence"]["check_seconds"]))
+        self.start_the_day()
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
         if self.cfg["audio"]["auto_calibration"]:
