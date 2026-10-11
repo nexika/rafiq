@@ -135,7 +135,7 @@ def test_each_tool_has_a_level(tmp_path):
     approvals.remember("send_email")
     tools = {**tools_with([]), "send_email": Tool("send_email", "send", lambda: "", confirm="send it")}
     rows = {r["name"]: r["level"] for r in levels(tools, approvals)}
-    assert rows == {"power": "asks", "get_time": "free", "send_email": "remembered"}
+    assert rows == {"power": "asks", "get_time": "free", "web_search": "free", "send_email": "remembered"}
 
 
 def test_approvals_are_kept_and_revoked(tmp_path):
@@ -256,7 +256,7 @@ def test_the_pages_read_models_status_and_permissions(pages):
     status, parts = get(port, "/api/status")
     assert status == 200 and {p["part"] for p in parts["parts"]} >= {"ollama", "voice", "google", "satellites"}
     status, perms = get(port, "/api/permissions")
-    assert status == 200 and {t["name"] for t in perms["tools"]} == {"power", "get_time"}
+    assert status == 200 and {t["name"] for t in perms["tools"]} == {"power", "get_time", "web_search"}
 
 
 def test_the_pages_need_the_token(pages):
