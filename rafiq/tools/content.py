@@ -132,7 +132,7 @@ def _describe(video: Video) -> str:
       {"title": {"type": "string", "description": "the video's working title, in the user's language"},
        "due": {"type": "string", "description": "date it should be published by, YYYY-MM-DD; empty for none"},
        "stage": {"type": "string", "enum": list(STAGES), "description": "where it is now; default idea"}},
-      required=("title",))
+      required=("title",), level="act")
 def content_add(title: str, due: str = "", stage: str = "idea") -> str:
     try:
         return "added: " + _describe(pipeline().add(title, due, stage or "idea", today()))
@@ -143,7 +143,7 @@ def content_add(title: str, due: str = "", stage: str = "idea") -> str:
 @tool("content_advance", "Move a video in the content pipeline to its next stage, or to a named stage.",
       {"video": {"type": "string", "description": "its id or words from its title"},
        "stage": {"type": "string", "enum": list(STAGES), "description": "empty for the next stage"}},
-      required=("video",))
+      required=("video",), level="act")
 def content_advance(video: str, stage: str = "") -> str:
     try:
         moved = pipeline().advance(video, stage, today())
@@ -153,7 +153,8 @@ def content_advance(video: str, stage: str = "") -> str:
 
 
 @tool("content_list", "The videos in the content pipeline, late ones first.",
-      {"stage": {"type": "string", "enum": list(STAGES), "description": "only this stage; empty for all"}})
+      {"stage": {"type": "string", "enum": list(STAGES), "description": "only this stage; empty for all"}},
+      level="private")
 def content_list(stage: str = "") -> str:
     try:
         stage = _check_stage(stage) if stage else ""
@@ -169,7 +170,7 @@ def content_list(stage: str = "") -> str:
 
 
 @tool("content_remove", "Take a video out of the content pipeline.",
-      {"video": {"type": "string", "description": "its id or words from its title"}}, required=("video",))
+      {"video": {"type": "string", "description": "its id or words from its title"}}, required=("video",), level="act")
 def content_remove(video: str) -> str:
     try:
         return "removed: " + _describe(pipeline().remove(video))
