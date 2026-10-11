@@ -228,7 +228,7 @@ button.danger { color: var(--err); }
     <div class="rows" id="parts"></div>
   </section>
   <section id="page-permissions" hidden>
-    <p class="hint">Tools that change something ask before they run. Press “Always” when Rafiq asks to stop it asking for that tool; Revoke makes it ask again.</p>
+    <p class="hint">Tools that change something ask before they run. Press “Always” or say “yes, always” when Rafiq asks to stop it asking for that tool; Revoke makes it ask again. Shutting down, sending or deleting mail and deleting an event ask every time.</p>
     <div class="rows" id="tools"></div>
   </section>
 </main>
@@ -353,6 +353,7 @@ function handle(e) {
     case "voice": add("note", (e.match ? "Your voice" : "Not sure it was your voice") + " (similarity " + e.score
       + ", needs " + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
+      document.getElementById("always").hidden = e.always === false;   // this tool asks every time
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
@@ -500,9 +501,10 @@ const RENDER = {
     }));
   },
   permissions(d) {
-    const LEVEL = { free: "runs freely", asks: "asks first", remembered: "approved: always" };
+    const LEVEL = { free: "runs freely", asks: "asks first", remembered: "approved: always",
+                    always_asks: "asks every time" };
     document.getElementById("tools").replaceChildren(...d.tools.map((t) => row(t.name, t.description,
-      [[LEVEL[t.level], t.level === "remembered" ? "warn" : t.level === "asks" ? "on" : ""]],
+      [[LEVEL[t.level], t.level === "remembered" ? "warn" : t.level.endsWith("asks") ? "on" : ""]],
       t.level === "remembered" ? [button("Revoke", "/api/permissions/revoke", t.name)] : [])));
   },
 };

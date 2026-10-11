@@ -170,7 +170,7 @@ def _delete_action(args: dict) -> str:
 @tool("calendar_delete", "Delete an event from the user's primary Google Calendar, by its id from "
       "calendar_events. Rafiq names the event and its time to the user and asks first.",
       {"id": {"type": "string", "description": "the event id from calendar_events"}},
-      required=("id",), confirm=_delete_action, level="critical")
+      required=("id",), confirm=_delete_action, level="critical", always_asks=True)
 def calendar_delete(id: str) -> str:  # noqa: A002
     service("calendar", "v3").events().delete(calendarId="primary", eventId=id).execute()
     return f"deleted the event {id}"
@@ -238,7 +238,7 @@ def _send(message: EmailMessage, thread: str = "") -> dict:
       required=("to", "subject", "body"),
       confirm=lambda a: f"send an email to {a.get('to', '')} with the subject '{a.get('subject', '')}' "
                         f"saying {_draft(a.get('body', ''))}",
-      level="critical")
+      level="critical", always_asks=True)
 def email_send(to: str, subject: str, body: str) -> str:
     if "@" not in to or any(c in to for c in "\r\n,;"):
         return "error: one plain email address, please"
@@ -254,7 +254,7 @@ def email_send(to: str, subject: str, body: str) -> str:
        "to_name": {"type": "string", "description": "who it goes to, as the user would say it (e.g. Sara)"}},
       required=("id", "body"),
       confirm=lambda a: f"reply to {a.get('to_name') or 'that email'} saying {_draft(a.get('body', ''))}",
-      level="critical")
+      level="critical", always_asks=True)
 def email_reply(id: str, body: str) -> str:  # noqa: A002
     original = service("gmail", "v1").users().messages().get(
         userId="me", id=id, format="metadata",
@@ -282,7 +282,7 @@ def email_reply(id: str, body: str) -> str:  # noqa: A002
                                                   "(e.g. Sara's email about dinner)"}},
       required=("id",),
       confirm=lambda a: f"move {a.get('about') or 'that email'} to the trash",
-      level="critical")
+      level="critical", always_asks=True)
 def email_trash(id: str) -> str:  # noqa: A002
     service("gmail", "v1").users().messages().trash(userId="me", id=id).execute()
     return "moved to the trash"

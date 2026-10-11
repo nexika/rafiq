@@ -431,8 +431,10 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
-  answer cancels. The panel's Always button stops the asking for that one tool until you revoke it
-  on the Permissions page. With a voice print (`rafiq voiceid`), a spoken yes must also be in your voice.
+  answer cancels. The panel's Always button, or "yes, always" ("oui, toujours", "sí, siempre", "ja,
+  immer", "نعم، دائمًا", "أيوه على طول"), stops the asking for that one tool until you revoke it on the
+  Permissions page. Shutting down, sending, answering or deleting mail and deleting an event ask every
+  time. With a voice print (`rafiq voiceid`), a spoken yes must also be in your voice.
 - "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results, emails, Discord messages and the clipboard are passed to the model as data,

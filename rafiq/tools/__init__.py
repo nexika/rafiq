@@ -19,6 +19,8 @@ from ..lang import TAGS
 # safe: no personal data and no change. private: reads the user's own data (mail, calendar, reminders).
 # act: changes something that is easy to undo (a timer, the volume, an open app).
 # critical: hard to undo, or speaks for the user (power, sending mail, adding an event); always asked first.
+# A critical tool's "yes, always" is remembered, unless it is `always_asks` (shutting down, sending or
+# deleting mail, deleting an event): those ask every time.
 LEVELS = ("safe", "private", "act", "critical")
 # text: shown as it is. list: one item per line. facts: "name: value" lines.
 CARDS = ("text", "list", "facts")
@@ -43,6 +45,7 @@ class Tool:
     card: str = "text"
     # True: its arguments and results (amounts, payees) stay out of the event log and the panel.
     private: bool = False
+    always_asks: bool = False        # asks every time: "yes, always" is never remembered for it
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -79,6 +82,8 @@ def check(t: Tool) -> None:
         raise ValueError(f"{t.name}: card must be one of {CARDS}")
     if (t.confirm is not None) != (t.level == "critical"):
         raise ValueError(f"{t.name}: a critical tool asks first, and only a critical tool does")
+    if t.always_asks and t.level != "critical":
+        raise ValueError(f"{t.name}: only a critical tool can always ask")
     if t.expose and t.level != "safe":
         raise ValueError(f"{t.name}: only a safe tool may be exposed over MCP")
     if t.slow and (set(t.waiting_phrase) != set(TAGS) or not all(t.waiting_phrase.values())):
@@ -89,10 +94,10 @@ def check(t: Tool) -> None:
 
 def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None, *,
          level: str, slow: bool = False, waiting_phrase: dict | None = None, expose: bool = False,
-         card: str = "text", private: bool = False):
+         card: str = "text", private: bool = False, always_asks: bool = False):
     def register(fn: Callable) -> Callable:
         t = Tool(name, description, fn, params or {}, tuple(required), confirm, level, slow,
-                 dict(waiting_phrase or {}), expose, card, private)
+                 dict(waiting_phrase or {}), expose, card, private, always_asks)
         check(t)
         REGISTRY[name] = t
         return fn

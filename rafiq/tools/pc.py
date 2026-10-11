@@ -584,7 +584,8 @@ SHUTDOWN = DelayedShutdown()
 @tool("power", "Shut down, restart or suspend the computer. Rafiq asks the user first. A shutdown "
                "waits a little (30 seconds by default) and can be stopped with cancel_shutdown.",
       {"action": {"type": "string", "enum": list(POWER)}}, required=("action",),
-      confirm=lambda args: POWER.get(args.get("action", ""), (None, "change the power state"))[1], level="critical")
+      confirm=lambda args: POWER.get(args.get("action", ""), (None, "change the power state"))[1], level="critical",
+      always_asks=True)
 def power(action: str, ctx=None) -> str:
     if action not in POWER:
         return f"error: action is one of {', '.join(POWER)}"
