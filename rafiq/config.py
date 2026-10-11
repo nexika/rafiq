@@ -1,7 +1,7 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
 Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN,
-RAFIQ_AGENT_TOKEN), then the file, and are never logged.
+RAFIQ_AGENT_TOKEN, DISCORD_BOT_TOKEN), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -106,6 +106,11 @@ DEFAULTS: dict = {
     "google": {"enabled": False},
     # The daily brief, said once a day at the first start, in this language tag (en, fr, ..., ar-EG).
     "brief": {"at_first_start": False, "language": "en"},
+    # A Discord bot token (DISCORD_BOT_TOKEN), never a user token; user_id is your own Discord id.
+    "discord": {"enabled": False, "bot_token": "", "user_id": ""},
+    "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
+    # accounts: usernames to report on; empty for every account linked to the token.
+    "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
     "presence": {
         "phone_ip": "",                  # the phone's fixed IP on the home Wi-Fi; empty: presence is off
         "phone_mac": "",                 # optional: only this MAC counts (turn off the phone's private MAC)
@@ -178,6 +183,8 @@ def load(path: Path | None = None) -> dict:
         cfg["home_assistant"]["token"] = os.environ["HOME_ASSISTANT_TOKEN"]
     if os.environ.get("RAFIQ_AGENT_TOKEN"):
         cfg["agent"]["token"] = os.environ["RAFIQ_AGENT_TOKEN"]
+    if os.environ.get("DISCORD_BOT_TOKEN"):
+        cfg["discord"]["bot_token"] = os.environ["DISCORD_BOT_TOKEN"]
     return cfg
 
 

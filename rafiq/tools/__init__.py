@@ -98,13 +98,13 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 # Skills that need an account or another app, loaded only when enabled in their config section.
-OPTIONAL = ("google", "obs")
+OPTIONAL = ("google", "discord", "instagram", "obs")
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; the optional ones, Home Assistant, Hue, the smart plugs and presence only
     when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
-    from . import background, everyday, memory, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
+    from . import background, everyday, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
     for name in OPTIONAL:
@@ -112,6 +112,10 @@ def load_all(cfg: dict) -> dict[str, Tool]:
             importlib.import_module(f"{__name__}.{name}")
         else:
             off.add(f"{__name__}.{name}")
+    if cfg.get("google", {}).get("enabled"):
+        from . import parcels  # noqa: F401
+    else:
+        off.add(f"{__name__}.parcels")
     if cfg.get("home_assistant", {}).get("url") and cfg.get("home_assistant", {}).get("token"):
         from . import home  # noqa: F401
     else:
