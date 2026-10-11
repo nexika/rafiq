@@ -78,6 +78,14 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[paper]                         # the morning paper: rafiq paper (rafiq paper --demo to try it)
+title = "Rafiq"
+languages = ["en"]              # ["en", "ar"] prints headings in both; Arabic first lays the page out right to left
+feeds = []                      # RSS or Atom addresses, e.g. ["https://feeds.bbci.co.uk/news/rss.xml"]
+tech_feeds = []
+priorities = []                 # ["Send the report"]
+deadlines = []                  # [{title = "Tax return", date = "2026-10-15"}]
+
 [phone]                         # notes and commands from an iOS or Android shortcut: `rafiq phone`
 enabled = false
 host = "127.0.0.1"              # this computer only; "0.0.0.0" to reach it on your home Wi-Fi
@@ -89,6 +97,11 @@ ask_first = true                # ask before each screenshot that goes to Claude
 
 [google]
 enabled = false                 # true after `rafiq google-setup`
+
+[spotify]
+enabled = false                 # true after `rafiq spotify-setup`
+client_id = ""                  # your Spotify developer app (or SPOTIFY_CLIENT_ID)
+port = 8888                     # the app's redirect URI must be http://127.0.0.1:8888/callback
 
 [deadlines]                     # deadlines from iCal feeds (the .ics or webcal:// address a calendar publishes)
 feeds = []                      # e.g. [{ name = "Loopstr", url = "https://..." }] or ["https://..."]
