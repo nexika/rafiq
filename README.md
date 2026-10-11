@@ -366,6 +366,12 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 
+## Always on
+
+Rafiq can run day and night on this PC, a mini-PC, a NAS, a Raspberry Pi or a VPS, as a systemd
+service. [docs/hosting.md](docs/hosting.md) explains where to run it and how to keep its panel
+private. On the server, `rafiq status` says whether it is running and safe, and `rafiq update` pulls
+the new version, reinstalls it and restarts the service.
 ## From your phone
 
 Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").
