@@ -9,6 +9,7 @@ dependencies = [
     "anthropic>=0.40",
     "httpx>=0.27",
     "numpy>=1.26",
+    "scipy>=1.11",
     "sounddevice>=0.4",
     "faster-whisper>=1.1",
     "onnxruntime>=1.17",
@@ -21,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 google = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 offline-voice = ["piper-tts>=1.2"]
+nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
 dev = ["pytest>=8", "ruff>=0.5"]
 

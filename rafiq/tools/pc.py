@@ -1,14 +1,16 @@
-"""This computer: open apps, volume, how it is doing, lock it, power off, and wake other computers on
-the network (Wake-on-LAN). Linux with PipeWire (wpctl) and a desktop that reads .desktop files (GNOME,
-KDE, ...).
+"""This computer: open apps, volume, media, how it is doing, lock it, power off, and wake other computers
+on the network (Wake-on-LAN). Linux with PipeWire (wpctl), playerctl and a desktop that reads .desktop
+files (GNOME, KDE, ...).
 
 Commands run as argument lists, never through a shell: no word the user says can become a command.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import threading
@@ -17,7 +19,7 @@ from configparser import ConfigParser
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import lang
+from .. import config, lang
 from . import tool
 
 APP_DIRS = ["/usr/share/applications", "/usr/local/share/applications", "~/.local/share/applications",
@@ -69,24 +71,153 @@ def find_app(query: str, entries: list[dict]) -> dict | None:
     return None
 
 
-@tool("open_app", "Open an application by name, e.g. 'Firefox', 'Files', 'Calculator', 'Terminal'.",
+# ---------------------------------------------------------------------- app catalogue
+# Games and launchers the menu does not know, from [apps] in config.toml and from apps.json (the ones
+# added by voice). Each runs as an argument list: a Steam game, a Flatpak, or a command.
+
+FLATPAK_ID = re.compile(r"[A-Za-z][\w-]*(\.[A-Za-z_][\w-]*){2,}")
+STEAM_LINK = re.compile(r"steam://rungameid/(\d+)")
+
+
+def launch_args(spec: dict) -> list[str]:
+    """The command for one catalogue entry: {"steam": 49520}, {"flatpak": "com.x.Y"} or
+    {"command": ["prog", "arg"]}. Raises ValueError for anything else."""
+    kinds = [k for k in ("steam", "flatpak", "command") if k in spec]
+    if len(kinds) != 1 or set(spec) - {"steam", "flatpak", "command"}:
+        raise ValueError("an app needs exactly one of steam, flatpak or command")
+    value = spec[kinds[0]]
+    if kinds[0] == "steam":
+        text = str(value).strip()
+        link = STEAM_LINK.fullmatch(text)
+        game = link.group(1) if link else text
+        if isinstance(value, bool) or not game.isdigit():
+            raise ValueError("steam is a game id like 49520 or a steam://rungameid/ link")
+        return ["xdg-open", f"steam://rungameid/{game}"]
+    if kinds[0] == "flatpak":
+        if not isinstance(value, str) or not FLATPAK_ID.fullmatch(value):
+            raise ValueError("flatpak is an app id like com.valvesoftware.Steam")
+        return ["flatpak", "run", value]
+    if not isinstance(value, list) or not value or not all(isinstance(a, str) and a and "\0" not in a
+                                                            for a in value):
+        raise ValueError("command is a list of words, the program first, never a shell line")
+    return [os.path.expanduser(value[0]), *value[1:]]
+
+
+def _added_path() -> Path:
+    return config.home() / "apps.json"
+
+
+def _added() -> dict:
+    try:
+        data = json.loads(_added_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def catalogue(cfg: dict) -> list[dict]:
+    """The catalogue as app entries with their command; the config wins over a voice-added name, and
+    an entry that does not make sense is left out."""
+    configured = cfg.get("apps", {}) if isinstance(cfg.get("apps"), dict) else {}
+    taken = {name.lower() for name in configured}
+    merged = {**{k: v for k, v in _added().items() if k.lower() not in taken}, **configured}
+    found = []
+    for name, spec in merged.items():
+        try:
+            args = launch_args(spec) if isinstance(spec, dict) else None
+        except ValueError:
+            args = None
+        if args:
+            found.append({"id": name, "name": name, "names": [name.lower()], "keywords": [], "launch": args})
+    return found
+
+
+def _spawn(args: list[str]) -> None:
+    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def _cfg(ctx) -> dict:
+    return ctx.cfg if ctx is not None else config.load()
+
+
+@tool("open_app", "Open an application or game by name, e.g. 'Firefox', 'Files', 'Calculator', 'Borderlands'.",
       {"name": {"type": "string", "description": "the app's name, in English where possible"}},
       required=("name",), level="act")
-def open_app(name: str) -> str:
-    app = find_app(name, desktop_entries())
+def open_app(name: str, ctx=None) -> str:
+    # The catalogue comes first, so on a tie the name the user chose wins over the menu's.
+    app = find_app(name, catalogue(_cfg(ctx)) + desktop_entries())
     if not app:
         return f"error: no installed app matches {name!r}"
-    subprocess.Popen(["gtk-launch", app["id"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True)
+    try:
+        _spawn(app.get("launch") or ["gtk-launch", app["id"]])
+    except OSError as exc:
+        return f"error: could not start {app['name']}: {exc.strerror or exc}"
     return f"opened {app['name']}"
 
 
-@tool("list_apps", "Names of the installed applications, to find the right one to open.",
+@tool("list_apps", "Names of the installed applications and games, to find the right one to open.",
       {"filter": {"type": "string", "description": "only names containing this"}},
       level="safe", expose=True, card="list")
-def list_apps(filter: str = "") -> str:  # noqa: A002
-    names = sorted({e["name"] for e in desktop_entries() if filter.lower() in e["name"].lower()})
+def list_apps(filter: str = "", ctx=None) -> str:  # noqa: A002
+    entries = catalogue(_cfg(ctx)) + desktop_entries()
+    names = sorted({e["name"] for e in entries if filter.lower() in e["name"].lower()})
     return ", ".join(names[:80]) or "none"
+
+
+def _new_spec(steam: str = "", flatpak: str = "", command: list | None = None) -> dict:
+    spec: dict = {}
+    if steam:
+        spec["steam"] = steam
+    if flatpak:
+        spec["flatpak"] = flatpak
+    if command:
+        spec["command"] = command
+    return spec
+
+
+def _describe(args: dict) -> str:
+    name = str(args.get("name", "")).strip() or "a new app"
+    if args.get("steam"):
+        game = STEAM_LINK.fullmatch(str(args["steam"]).strip())
+        what = f"opens Steam game {game.group(1) if game else args['steam']}"
+    elif args.get("flatpak"):
+        what = f"runs the Flatpak {args['flatpak']}"
+    elif isinstance(args.get("command"), list):
+        what = "runs " + " ".join(str(a) for a in args["command"])
+    else:
+        what = "runs nothing yet"
+    return f"add an app called {name} that {what}"
+
+
+@tool("add_app", "Remember a new app or game to open by name: a Steam game id, a Flatpak id, or a command "
+      "as a list of words (program first). Rafiq asks the user first.",
+      {"name": {"type": "string", "description": "the name the user will say"},
+       "steam": {"type": "string", "description": "a Steam game id like 49520, or a steam://rungameid/ link"},
+       "flatpak": {"type": "string", "description": "a Flatpak app id like com.mojang.Minecraft"},
+       "command": {"type": "array", "items": {"type": "string"},
+                   "description": "the program and its arguments, one word each, never a shell line"}},
+      required=("name",), confirm=_describe, level="critical")
+def add_app(name: str, steam: str = "", flatpak: str = "", command: list | None = None, ctx=None) -> str:
+    name = name.strip()
+    if not name or len(name) > 60:
+        return "error: the app needs a name of 1 to 60 characters"
+    spec = _new_spec(steam, flatpak, command)
+    try:
+        args = launch_args(spec)
+    except ValueError as exc:
+        return f"error: {exc}"
+    if "command" in spec and not shutil.which(args[0]):
+        return f"error: no program {args[0]!r} on this computer"
+    if name.lower() in {k.lower() for k in (_cfg(ctx).get("apps") or {})}:
+        return f"error: {name} is set in config.toml; change it there"
+    added = {k: v for k, v in _added().items() if k.lower() != name.lower()}
+    added[name] = spec
+    path = _added_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(added, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return f"added {name}"
 
 
 # ---------------------------------------------------------------------- volume
@@ -118,6 +249,54 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
         _run(["wpctl", "set-volume", SINK, f"{target / 100:.2f}"])
         current = target
     return f"volume {current}%" + (", muted" if muted else "")
+
+
+# ---------------------------------------------------------------------- media
+
+# Any player that speaks MPRIS over D-Bus (Spotify, Firefox and Chromium videos, VLC, mpv...), through
+# playerctl. What the user asks for, and the playerctl command for it.
+MEDIA = {"play": "play", "pause": "pause", "toggle": "play-pause", "next": "next", "previous": "previous",
+         "stop": "stop"}
+MEDIA_DONE = {"play": "playing", "pause": "paused", "toggle": "toggled", "next": "skipped to the next on",
+              "previous": "went back on", "stop": "stopped"}
+
+
+def active_player(run=_run) -> tuple[str, str] | None:
+    """The player to control and its status: one that is playing, else one that is paused, else the
+    first one."""
+    result = run(["playerctl", "--list-all"])
+    players = [p.strip() for p in result.stdout.splitlines() if p.strip()] if result.returncode == 0 else []
+    statuses = [(p, run(["playerctl", "--player", p, "status"]).stdout.strip()) for p in players]
+    for wanted in ("Playing", "Paused"):
+        for player, status in statuses:
+            if status == wanted:
+                return player, status
+    return statuses[0] if statuses else None
+
+
+@tool("media", "Control whatever is playing music or video (Spotify, a browser video, VLC...): play, pause, "
+      "next, previous, or say what is playing.",
+      {"action": {"type": "string", "enum": [*MEDIA, "status"],
+                  "description": "toggle switches between play and pause; status says what is playing"}},
+      required=("action",), level="act")
+def media(action: str, run=_run) -> str:
+    if action not in MEDIA and action != "status":
+        return f"error: action is one of {', '.join([*MEDIA, 'status'])}"
+    try:
+        found = active_player(run)
+        if not found:
+            return "error: nothing is playing music or video"
+        player, status = found
+        if action == "status":
+            title = run(["playerctl", "--player", player, "metadata", "--format",
+                         "{{artist}} - {{title}}"]).stdout.strip().strip(" -")
+            return f"{player} is {status.lower()}" + (f": {title}" if title else "")
+        result = run(["playerctl", "--player", player, MEDIA[action]])
+    except FileNotFoundError:
+        return "error: playerctl is not installed"
+    if result.returncode != 0:
+        return f"error: {result.stderr.strip()[:200]}"
+    return f"{MEDIA_DONE[action]} {player}"
 
 
 # ---------------------------------------------------------------------- audio output
@@ -218,7 +397,7 @@ def audio_output(name: str = "", ctx=None) -> str:
 
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.",
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime, GPU.",
       level="safe", expose=True, card="facts")
 def system_status() -> str:
     import psutil
@@ -238,7 +417,99 @@ def system_status() -> str:
         parts.append(f"hottest sensor {hottest:.0f}°C")
     up = int(time.time() - psutil.boot_time())
     parts.append(f"up {up // 3600} h {up % 3600 // 60} min")
+    parts += [describe_gpu(g) for g in gpus()]
     return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------- graphics card
+
+DRM = Path("/sys/class/drm")
+AMD = "0x1002"
+
+
+@dataclass
+class Gpu:
+    name: str
+    load: float | None = None  # percent busy
+    temperature: float | None = None  # °C
+    memory_used: int | None = None  # bytes of video memory
+    memory_total: int | None = None
+
+
+def _read_number(path: Path) -> float | None:
+    try:
+        return float(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def amd_gpus(drm: Path = DRM) -> list[Gpu]:
+    """AMD cards through the amdgpu driver's files: no extra tool needed. card1-eDP-1 and the like are
+    screens, not cards, so only cardN is read."""
+    found = []
+    for card in sorted(drm.glob("card[0-9]*")):
+        device = card / "device"
+        try:
+            if "-" in card.name or (device / "vendor").read_text().strip() != AMD:
+                continue
+        except OSError:
+            continue
+        temp = next((t for t in map(_read_number, sorted(device.glob("hwmon/*/temp1_input"))) if t is not None),
+                    None)
+        used, total = _read_number(device / "mem_info_vram_used"), _read_number(device / "mem_info_vram_total")
+        found.append(Gpu("AMD GPU", load=_read_number(device / "gpu_busy_percent"),
+                         temperature=temp / 1000 if temp is not None else None,
+                         memory_used=int(used) if used is not None else None,
+                         memory_total=int(total) if total is not None else None))
+    return found
+
+
+def nvidia_gpus(nvml=None) -> list[Gpu]:
+    """NVIDIA cards through NVML (pip install nvidia-ml-py). Without it or without the driver: none."""
+    if nvml is None:
+        try:
+            import pynvml as nvml
+        except ImportError:
+            return []
+    try:
+        nvml.nvmlInit()
+    except nvml.NVMLError:
+        return []
+    found = []
+    try:
+        for i in range(nvml.nvmlDeviceGetCount()):
+            handle = nvml.nvmlDeviceGetHandleByIndex(i)
+            name = nvml.nvmlDeviceGetName(handle)
+            memory = nvml.nvmlDeviceGetMemoryInfo(handle)
+            found.append(Gpu(name.decode() if isinstance(name, bytes) else name,
+                             load=nvml.nvmlDeviceGetUtilizationRates(handle).gpu,
+                             temperature=nvml.nvmlDeviceGetTemperature(handle, nvml.NVML_TEMPERATURE_GPU),
+                             memory_used=memory.used, memory_total=memory.total))
+    except nvml.NVMLError:
+        pass  # keep the cards read so far
+    finally:
+        nvml.nvmlShutdown()
+    return found
+
+
+def gpus() -> list[Gpu]:
+    return nvidia_gpus() + amd_gpus()
+
+
+def describe_gpu(gpu: Gpu) -> str:
+    figures = []
+    if gpu.load is not None:
+        figures.append(f"{gpu.load:.0f}% busy")
+    if gpu.temperature is not None:
+        figures.append(f"{gpu.temperature:.0f}°C")
+    if gpu.memory_used is not None and gpu.memory_total:
+        figures.append(f"video memory {gpu.memory_used / 2**30:.1f} of {gpu.memory_total / 2**30:.1f} GB used")
+    return f"{gpu.name} " + ", ".join(figures) if figures else f"{gpu.name}: no figures"
+
+
+@tool("gpu_status", "How the graphics card is doing: load, temperature, video memory.", level="safe")
+def gpu_status() -> str:
+    return ", ".join(describe_gpu(g) for g in gpus()) or "no graphics card figures available"
 
 
 # ---------------------------------------------------------------------- lock and power
