@@ -19,12 +19,14 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, timing, wake
-from .audio import RATE, Endpointer, Microphone, SileroVAD, echo_cancel_source
+from . import kws, lang, modes, timing, wake
+from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
+from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
+from .tasks import ClaudeAgent, Task, Tasks
 from .tools import load_all
 from .tts import Speaker, SpeechStream
 
@@ -35,12 +37,16 @@ CONFIRM_SECONDS = 10.0
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler, the language of the current request, and a way
-    to say something later (a countdown) from another thread."""
+    """What a tool may use: settings, the scheduler, the language of the current request, a way
+    to say something later (a countdown) from another thread, who to tell when the mode changes
+    (the panel shows it), the long-term memory, and the background tasks (None without Claude)."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
     say: Callable[[str, str], None] | None = None
+    on_mode: Callable[[str], None] | None = None
+    facts: Facts | None = None
+    tasks: Tasks | None = None
 
 
 @dataclass
@@ -78,9 +84,13 @@ class Assistant:
         speech = self.cfg["speech"]
         self.events = Events()
         self.jobs: queue.Queue = queue.Queue()
-        self.mic = Microphone(device=self._echo_cancelled_device())
+        self.mic = Microphone.from_config(self.cfg)
+        if self.mic.device is None:          # no microphone chosen: the echo-cancelled one, if loaded
+            self.mic.device = self._echo_cancelled_device()
+            self.mic.fallback = self.mic.device is not None
         self.vad = SileroVAD()
-        self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
+        self.endpointer = Endpointer(end_seconds=speech["end_silence_seconds"],
+                                     max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
@@ -88,12 +98,18 @@ class Assistant:
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
-        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag))
+        self.facts = Facts(config_mod.data_dir() / "memory.json")
+        self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
+                           on_mode=self._mode_changed, facts=self.facts)
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
+        if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
+            self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
+        self.confirming = False
+        self.muted = False                   # `rafiq mute`: the name and follow-ups are not listened for
         self.interrupted = threading.Event()                # "stop" said over Rafiq's last sentence
         self.state = "starting"
         self.speech: SpeechStream | None = None       # the answer being spoken while it is written
@@ -107,8 +123,21 @@ class Assistant:
     # ------------------------------------------------------------------ state shown in the panel
 
     def set_state(self, state: str) -> None:
+        if state == "idle" and self.muted:
+            state = "muted"
         self.state = state
         self.events.publish("state", {"state": state})
+
+    @property
+    def mode(self) -> str:
+        return modes.current(self.cfg)
+
+    def set_mode(self, mode: str) -> None:
+        modes.switch(self.cfg, mode)
+        self._mode_changed(self.mode)
+
+    def _mode_changed(self, mode: str) -> None:
+        self.events.publish("mode", {"mode": mode})
 
     def _mute(self) -> None:
         """Rafiq starts speaking: the microphone only listens for "stop", or not at all."""
@@ -118,6 +147,25 @@ class Assistant:
         else:
             self.mic.muted = True
         self.set_state("speaking")
+
+    def set_muted(self, muted: bool | None = None) -> bool:
+        """Stop or start listening (None: the other way round). Muting also ends the conversation:
+        no follow-up, and a question asked before an action is answered no. Called from the panel's
+        thread, so it only sets flags."""
+        self.muted = (not self.muted) if muted is None else muted
+        self.events.publish("muted", {"muted": self.muted})
+        if self.muted:
+            self.follow_up_until = 0.0
+            if self.confirming:
+                self.pending_answer.put(False)
+        if self.state in ("idle", "muted"):
+            self.set_state("idle")
+        return self.muted
+
+    def go_to_sleep(self) -> None:
+        """"Go to sleep": the follow-up window closes at once; the name wakes Rafiq again."""
+        self.follow_up_until = 0.0
+        self.events.publish("sleep", {})
 
     def _unmute(self) -> None:
         if self.barge_in:
@@ -153,14 +201,27 @@ class Assistant:
 
     # ------------------------------------------------------------------ hearing
 
-    def next_utterance(self, timeout: float | None) -> np.ndarray | None:
-        """The next thing said, or None when nothing starts before the timeout (None: wait forever)."""
+    def calibrate(self) -> None:
+        """Listen to the room for a moment and fit the speech thresholds to its noise."""
+        speech = self.cfg["speech"]
+        frames, probs = measure_noise(self.mic, self.vad, float(self.cfg["audio"]["calibration_seconds"]))
+        cal = calibrate(frames, probs, threshold=0.5, end_seconds=speech["end_silence_seconds"])
+        self.endpointer.apply(cal)
+        self.events.publish("calibrated", {"threshold": cal.threshold, "end_seconds": cal.end_seconds,
+                                           "noise_rms": round(cal.noise_rms, 4), "rate": self.mic.rate})
+
+    def next_utterance(self, timeout: float | None, idle: bool = False) -> np.ndarray | None:
+        """The next thing said, or None when nothing starts before the timeout (None: wait forever).
+        While muted, what is heard when idle (waiting for the name or a follow-up) is dropped."""
         deadline = None if timeout is None else time.monotonic() + timeout
         while not self._stop.is_set():
             self._run_jobs()
             if deadline and time.monotonic() > deadline and not self.endpointer.active:
                 return None
             frame = self.mic.read(timeout=0.1)
+            if idle and self.muted:
+                self.endpointer.reset()          # half an utterance from before the mute
+                continue
             if frame is None:
                 continue
             utterance = self.endpointer.push(frame, self.vad(frame))
@@ -171,7 +232,10 @@ class Assistant:
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
         with timing.Timer("stt", model=getattr(self.stt.local, "size", "")):
-            heard = self.stt.transcribe(audio, hint=self.tag)
+            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
+                heard = self.stt.local.transcribe(audio)
+            else:
+                heard = self.stt.transcribe(audio, hint=self.tag)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
@@ -190,6 +254,13 @@ class Assistant:
         if self.speech:                      # finish what was being said before asking
             self.speech.wait()
         self.events.publish("confirm", {"action": action, "tag": tag})
+        self.confirming = True
+        try:
+            return self._ask_yes_or_no(action, tag)
+        finally:
+            self.confirming = False
+
+    def _ask_yes_or_no(self, action: str, tag: str) -> bool:
         for _attempt in range(2):
             self.interrupted.clear()
             self.say(lang.phrase("confirm", tag, action=action), tag)
@@ -208,6 +279,10 @@ class Assistant:
                 if audio is None:
                     continue
                 text, _ = self.hear(audio)
+                if lang.is_sleep(text):
+                    self.events.publish("confirmed", {"yes": False})
+                    self.go_to_sleep()
+                    return False
                 answer = lang.yes_or_no(text)
                 if answer is not None:
                     self.events.publish("confirmed", {"yes": answer})
@@ -224,6 +299,9 @@ class Assistant:
         rest is still being written."""
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
+            return
+        if lang.is_sleep(text):
+            self.go_to_sleep()
             return
         self.tag = tag
         self.ctx.tag = tag
@@ -257,6 +335,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "mode":
+                    self.set_mode(data["mode"])
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")
@@ -264,6 +344,14 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def _task_done(self, task: Task) -> None:
+        """Said on this thread, between requests, like an alarm."""
+        if task.state == "done":
+            text = lang.phrase("task_done", task.tag, result=task.result)
+        else:
+            text = lang.phrase("task_failed", task.tag, goal=task.goal)
+        self.submit("say", text=text, tag=lang.script_language(text, task.tag))
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
@@ -320,10 +408,13 @@ class Assistant:
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
+        if self.cfg["audio"]["auto_calibration"]:
+            self.set_state("calibrating")
+            self.calibrate()
         self.set_state("idle")
         try:
             while not self._stop.is_set():
-                audio = self.next_utterance(timeout=None)
+                audio = self.next_utterance(timeout=None, idle=True)
                 if audio is None:
                     continue
                 try:
