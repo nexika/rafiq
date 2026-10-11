@@ -118,6 +118,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         notes,
         paper,
         pc,
+        reading,
         scenes,
         screen,
         spending,

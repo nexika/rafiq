@@ -4,6 +4,7 @@ import pytest
 
 from rafiq import config
 from rafiq.assistant import Assistant, Context
+from rafiq.reader import Reader
 from rafiq.tools import Tool, load_all
 from rafiq.tools import scenes as scenes_mod
 
@@ -170,6 +171,7 @@ def bare_assistant(scenes, log, confirm=lambda action, tag: True):
     a.say = lambda text, tag: a.said.append((text, tag))
     a.set_state = lambda state: None
     a.publish_spending = lambda tag: None
+    a.reader = Reader(interrupt=lambda: None)
     a.speaker = SimpleNamespace(stream=lambda: SimpleNamespace(put=lambda text, tag: None, close=lambda: True))
     a.events = type("E", (), {"publish": lambda self, kind, data: None})()
     return a

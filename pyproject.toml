@@ -30,6 +30,7 @@ paper = ["playwright>=1.45"]
 obs = ["obsws-python>=1.6"]
 nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
+pdf = ["pypdf>=4"]
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.scripts]

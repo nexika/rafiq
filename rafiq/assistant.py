@@ -33,6 +33,7 @@ from .gestures import settings as gesture_settings
 from .models import Models
 from .paper_print import MorningPaper
 from .permissions import Approvals
+from .reader import Reader
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
@@ -50,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler, the language of the current request, a way
+    """What a tool may use: settings, the scheduler, the reader, the language of the current request, a way
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
@@ -69,6 +70,7 @@ class Context:
     gestures: GestureControl | None = None
     room: str = ""
     budget: Budget | None = None
+    reader: Reader | None = None
 
 
 @dataclass
@@ -138,6 +140,7 @@ class Assistant:
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
+        self.reader = Reader(interrupt=self.speaker.stop)
         # Hand gestures: the camera tracker posts to the panel, so `rafiq run` sets the url once it serves.
         self.gestures = GestureControl(SystemDesktop(), self.speaker.stop, self.events.publish,
                                        options=gesture_settings(self.cfg))
@@ -150,7 +153,8 @@ class Assistant:
         self.paper = MorningPaper(self.cfg)
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
-                           confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget)
+                           confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
+                           reader=self.reader)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
@@ -431,7 +435,20 @@ class Assistant:
                 self.speech.close()
             self.speech = None
         self.publish_spending(tag)
+        if self.reader.active:            # read_aloud or "resume reading" loaded something
+            self.read()
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def read(self) -> None:
+        """Read aloud what the reader holds, until the end, a pause or a stop (from the panel)."""
+        def say(text: str, tag: str) -> None:
+            if not self.speaker.say(text, tag):      # no voice works: don't notify sentence after sentence
+                self.reader.stop()
+
+        self.reader.run(say, on_progress=lambda i, n: self.events.publish("reading", {"index": i, "total": n,
+                                                                                    "state": "reading"}))
+        self.events.publish("reading", {"index": self.reader.index, "total": len(self.reader.segments),
+                                        "state": self.reader.state})
 
     def interpret(self, pair: interpret.Pair) -> None:
         """Interpreter mode: say what each person says in the other's language until one says stop."""
@@ -506,6 +523,8 @@ class Assistant:
                     self.play_scene(scene, self.tag)
                 elif kind == "mode":
                     self.set_mode(data["mode"])
+                elif kind == "read":
+                    self.read()
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")

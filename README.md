@@ -21,6 +21,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
 | Your project | "run the tests", "what's my git status?", "why did CI fail?", "what's on my PR?", through Nexika's barq, tabib and mizan when they are on the PATH; set the project folder in the panel or as `[dev] project` |
 | Interpreter | "interpret between me and her, Egyptian and German", "ترجم بيني وبينه بالمصري والفرنساوي": each turn is said in the other language until someone says "stop" or "كفاية" |
 | Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
@@ -194,7 +195,10 @@ factor`). With PipeWire, `pactl load-module module-echo-cancel` removes most of 
 listens through it on its own. `enabled = false` mutes the microphone while Rafiq speaks, as before.
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
-Yes/No buttons when it asks before an action, and the choice of style. Its other pages:
+Yes/No buttons when it asks before an action, and the choice of style. While it reads aloud, it shows Pause/Resume, Skip and
+Stop. The microphone is off while Rafiq speaks, so a reading is paused from the panel; "Rafiq, resume
+reading" or "stop reading" work once it is paused. The selection needs `wl-clipboard` (Wayland) or
+`xclip`/`xsel` (X11); PDFs need `pip install 'rafiq[pdf]'`. Its other pages:
 
 - **Models**: the Ollama models with what fits this computer's memory; install, benchmark, activate
   and delete them, and pick the Whisper model that hears you. Choices are kept in

@@ -3,6 +3,7 @@ import pytest
 from rafiq import assistant as assistant_mod
 from rafiq import config
 from rafiq.assistant import Context, Events
+from rafiq.reader import Reader
 from rafiq.tools import media
 
 
@@ -99,6 +100,7 @@ def bare_assistant(said):
     a.speech, a.silent = None, False
     a.set_state = lambda state: None
     a.publish_spending = lambda tag: None
+    a.reader = Reader(interrupt=lambda: None)
     return a
 
 

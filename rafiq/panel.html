@@ -61,6 +61,12 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   border: 1px solid var(--warn); border-radius: 14px; padding: 12px 14px; gap: 10px; align-items: center; }
 #confirm.on { display: flex; }
 #confirm p { margin: 0; flex: 1; }
+#reading { display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px;
+  width: min(728px, calc(100% - 32px)); background: var(--accent-soft); color: var(--ink);
+  border: 1px solid var(--accent); border-radius: 14px; padding: 8px 14px; gap: 8px; align-items: center; }
+#reading.on { display: flex; }
+#reading p { margin: 0; flex: 1; }
+#reading button { padding: 6px 12px; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--line); }
 footer form { max-width: 760px; margin: 0 auto; padding: 14px 16px; display: flex; gap: 8px; }
 input[type=text] { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 12px;
@@ -198,6 +204,12 @@ header .grow { flex: 1; min-width: 0; }
   <button id="always" title="Yes, and don't ask again for this tool">Always</button>
   <button id="no">No</button>
 </div>
+<div id="reading" role="region" aria-label="Reading aloud">
+  <p id="reading-text" role="status"></p>
+  <button id="pause">Pause</button>
+  <button id="skip" title="Next sentence">Skip</button>
+  <button id="reading-stop">Stop</button>
+</div>
 <aside id="drawer" aria-label="Settings" hidden>
   <h2>Settings <button type="button" id="close-settings" title="Close">✕</button></h2>
   <label for="s-mode">Brain</label>
@@ -301,6 +313,7 @@ function handle(e) {
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "reading": showReading(e); break;
     case "level": meter.style.width = Math.round(e.level * 100) + "%"; break;
     case "tool_start": nowEl.textContent = "⚙ Using " + e.name + "…"; break;
     case "spend": showSpend(e); break;
@@ -315,6 +328,14 @@ function handle(e) {
     case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
       if (page === "models") show("models"); break;
   }
+}
+const readingBox = document.getElementById("reading"), pauseBtn = document.getElementById("pause");
+function showReading(e) {
+  readingBox.classList.toggle("on", e.state !== "idle");
+  const where = "sentence " + Math.min(e.index + 1, e.total) + " of " + e.total;
+  document.getElementById("reading-text").textContent = (e.state === "paused" ? "Paused at " : "Reading ") + where;
+  pauseBtn.textContent = e.state === "paused" ? "Resume" : "Pause";
+  pauseBtn.dataset.action = e.state === "paused" ? "resume" : "pause";
 }
 
 // ---------------------------------------------------------------- the other pages
@@ -411,6 +432,9 @@ document.getElementById("talk").onclick = () => post("/api/listen");
 modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });
 document.getElementById("persona").onchange = (ev) => post("/api/persona", { name: ev.target.value });
 document.getElementById("stop").onclick = () => post("/api/stop");
+pauseBtn.onclick = () => post("/api/reading", { action: pauseBtn.dataset.action || "pause" });
+document.getElementById("skip").onclick = () => post("/api/reading", { action: "skip" });
+document.getElementById("reading-stop").onclick = () => post("/api/reading", { action: "stop" });
 muteBtn.onclick = () => post("/api/mute", { muted: muteBtn.getAttribute("aria-pressed") !== "true" });
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
 document.getElementById("always").onclick = () => post("/api/confirm", { yes: true, always: true });
