@@ -21,7 +21,7 @@ def _session(ctx):
       {"language": {"type": "string", "description": "en, fr, es, de, ar or ar-EG"},
        "level": {"type": "string", "description": f"CEFR level, one of {', '.join(LEVELS)}; A2 if not said"},
        "topic": {"type": "string", "description": "what to talk about, if the user said"}},
-      required=("language",))
+      required=("language",), level="act")
 def practice_start(language: str, level: str = "A2", topic: str = "", ctx=None) -> str:
     try:
         practice = _session(ctx)
@@ -39,7 +39,7 @@ def practice_start(language: str, level: str = "A2", topic: str = "", ctx=None) 
       {"said": {"type": "string", "description": "what the user said"},
        "correct": {"type": "string", "description": "the correct form"},
        "note": {"type": "string", "description": "a one-line explanation, in the user's own language"}},
-      required=("said", "correct"))
+      required=("said", "correct"), level="act")
 def practice_correct(said: str, correct: str, note: str = "", ctx=None) -> str:
     try:
         practice = _session(ctx)
@@ -51,7 +51,8 @@ def practice_correct(said: str, correct: str, note: str = "", ctx=None) -> str:
     return "noted"
 
 
-@tool("practice_end", "End language practice and get the list of what the learner should work on.")
+@tool("practice_end", "End language practice and get the list of what the learner should work on.",
+      level="act")
 def practice_end(ctx=None) -> str:
     try:
         practice = _session(ctx)
