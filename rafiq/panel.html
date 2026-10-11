@@ -350,6 +350,8 @@ function handle(e) {
     case "mode": modeEl.value = e.mode; break;
     case "wake": if (e.score !== undefined) add("note", "Heard the name (match " + e.score + ", wakes below "
       + e.threshold + ")"); break;
+    case "voice": add("note", (e.match ? "Your voice" : "Not sure it was your voice") + " (similarity " + e.score
+      + ", needs " + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "interrupted": add("note", "Stopped: you said stop"); break;

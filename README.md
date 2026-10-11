@@ -414,7 +414,7 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - Anything that changes something outside Rafiq (power off, send an email, add an event) is said
   back to you and runs only on a clear "yes" (or the panel's Yes button). A "no" anywhere in the
   answer cancels. The panel's Always button stops the asking for that one tool until you revoke it
-  on the Permissions page.
+  on the Permissions page. With a voice print (`rafiq voiceid`), a spoken yes must also be in your voice.
 - "Shut down" then waits 30 seconds and warns you 10 seconds before; "cancel the shutdown" stops it
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results, emails, Discord messages and the clipboard are passed to the model as data,
@@ -481,6 +481,26 @@ claude mcp add rafiq -- /path/to/rafiq/.venv/bin/rafiq mcp
 
 For Claude Desktop, add to `claude_desktop_config.json`:
 `"mcpServers": {"rafiq": {"command": "/path/to/rafiq/.venv/bin/rafiq", "args": ["mcp"]}}`.
+
+## Voice ID: only your voice confirms
+
+After `rafiq enroll`, run `rafiq voiceid` once. It turns your recordings into a voice print (speaker
+embeddings from WeSpeaker's ResNet34 model, about 26 MB, downloaded on first use and checked against
+its checksum). From then on, a spoken yes to an action (power off, send an email, add an event) is
+compared with your voice print. When Rafiq is not sure it was you, it says so and only the panel's
+Yes button goes ahead. A no is taken from anyone.
+
+`rafiq voiceid` reports how many of your own recordings it would refuse; add `--others DIR` with
+16 kHz `.wav` files of other people (or of a video) to count false accepts too. `rafiq voiceid --off`
+deletes the voice print. The panel shows each check's similarity next to the threshold.
+
+Tested with five synthetic voices (Piper, one per language), each enrolled with ten recordings and
+checked against the others' answers: no other voice was accepted (0 of 60). A single word ("yes",
+"oui", "نعم") is too short to recognise and was never accepted (0 of 10); "yes, go ahead" was accepted
+4 times in 5. Say a few words, or use the panel.
+
+Voice ID can be fooled by a recording or a cloned voice: it is an extra check on top of the spoken
+yes, never the only one.
 
 ## Google calendar and Gmail
 
