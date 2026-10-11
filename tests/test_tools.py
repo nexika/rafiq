@@ -38,7 +38,7 @@ def test_only_critical_tools_ask_first_and_every_critical_tool_does():
     for t in load_all({"google": {"enabled": True}}).values():
         assert (t.confirm is not None) == (t.level == "critical"), t.name
     assert {n for n, t in REGISTRY.items() if t.level == "critical"} == {"power", "email_send", "calendar_add",
-                                                                        "calendar_delete"}
+                                                                        "calendar_delete", "add_app"}
 
 
 def test_only_safe_tools_are_exposed_over_mcp():
@@ -174,6 +174,99 @@ def test_only_the_public_internet_is_fetched(url, addresses, ok):
 def test_open_in_browser_only_opens_web_addresses():
     assert web.open_in_browser("file:///etc/passwd").startswith("error")
     assert web.open_in_browser("javascript:alert(1)").startswith("error")
+
+
+# ---------------------------------------------------------------------- app catalogue
+
+@pytest.fixture
+def launched(monkeypatch):
+    """Record what would be started instead of starting it."""
+    calls = []
+    monkeypatch.setattr(pc, "_spawn", calls.append)
+    monkeypatch.setattr(pc, "desktop_entries", lambda dirs=None: [
+        {"id": "org.mozilla.firefox", "name": "Firefox", "names": ["firefox"], "keywords": []}])
+    return calls
+
+
+def ctx_with(apps):
+    return type("Ctx", (), {"cfg": {"apps": apps}})()
+
+
+@pytest.mark.parametrize("spec, args", [
+    ({"steam": 49520}, ["xdg-open", "steam://rungameid/49520"]),
+    ({"steam": "steam://rungameid/49520"}, ["xdg-open", "steam://rungameid/49520"]),
+    ({"flatpak": "com.mojang.Minecraft"}, ["flatpak", "run", "com.mojang.Minecraft"]),
+    ({"command": ["retroarch", "--fullscreen"]}, ["retroarch", "--fullscreen"]),
+])
+def test_catalogue_entries_become_argument_lists(spec, args):
+    assert pc.launch_args(spec) == args
+
+
+@pytest.mark.parametrize("spec", [
+    {}, {"steam": "abc"}, {"steam": "steam://install/1"}, {"flatpak": "minecraft; rm -rf ~"},
+    {"command": "retroarch --fullscreen"}, {"command": []}, {"command": ["a", 3]},
+    {"steam": 1, "flatpak": "com.a.B"}, {"uri": "file:///etc/passwd"},
+])
+def test_bad_catalogue_entries_are_refused(spec):
+    with pytest.raises(ValueError):
+        pc.launch_args(spec)
+
+
+def test_open_app_launches_a_game_from_the_config(launched):
+    text = pc.open_app("borderlands", ctx=ctx_with({"Borderlands 2": {"steam": 49520}}))
+    assert text == "opened Borderlands 2"
+    assert launched == [["xdg-open", "steam://rungameid/49520"]]
+
+
+def test_open_app_still_opens_desktop_apps(launched):
+    assert pc.open_app("firefox", ctx=ctx_with({"Borderlands": {"steam": 49520}})) == "opened Firefox"
+    assert launched == [["gtk-launch", "org.mozilla.firefox"]]
+
+
+def test_a_broken_config_entry_does_not_hide_the_others(launched):
+    ctx = ctx_with({"Broken": {"steam": "nope"}, "Minecraft": {"flatpak": "com.mojang.Minecraft"}})
+    assert pc.open_app("minecraft", ctx=ctx) == "opened Minecraft"
+    assert "Minecraft" in pc.list_apps(ctx=ctx) and "Broken" not in pc.list_apps(ctx=ctx)
+
+
+def test_adding_an_app_asks_first_and_names_what_it_runs():
+    load_all({})
+    tool = REGISTRY["add_app"]
+    assert tool.action({"name": "Borderlands", "steam": "49520"}) == \
+        "add an app called Borderlands that opens Steam game 49520"
+    assert "/usr/bin/retroarch --fullscreen" in tool.action(
+        {"name": "Retro", "command": ["/usr/bin/retroarch", "--fullscreen"]})
+
+
+def test_an_added_app_is_remembered_and_opens(launched, rafiq_home):
+    ctx = ctx_with({})
+    assert pc.add_app("Borderlands", steam="49520", ctx=ctx) == "added Borderlands"
+    assert (rafiq_home / "apps.json").is_file()
+    assert pc.open_app("Borderlands", ctx=ctx) == "opened Borderlands"
+    assert launched == [["xdg-open", "steam://rungameid/49520"]]
+    assert "Borderlands" in pc.list_apps(ctx=ctx)
+
+
+def test_adding_a_command_checks_the_program_exists(launched):
+    import sys
+
+    ctx = ctx_with({})
+    assert pc.add_app("Nothing", command=["no-such-program-rafiq"], ctx=ctx).startswith("error")
+    assert pc.add_app("Py", command=[sys.executable, "-V"], ctx=ctx) == "added Py"
+    pc.open_app("py", ctx=ctx)
+    assert launched == [[sys.executable, "-V"]]
+
+
+def test_adding_needs_exactly_one_way_to_launch():
+    ctx = ctx_with({})
+    assert pc.add_app("X", ctx=ctx).startswith("error")
+    assert pc.add_app("X", steam="1", flatpak="com.a.B", ctx=ctx).startswith("error")
+    assert pc.add_app("", steam="1", ctx=ctx).startswith("error")
+
+
+def test_an_app_in_the_config_is_not_replaced_by_voice():
+    ctx = ctx_with({"Borderlands": {"steam": 49520}})
+    assert pc.add_app("borderlands", steam="1", ctx=ctx).startswith("error")
 
 
 class FakePlayerctl:

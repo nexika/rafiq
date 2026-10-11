@@ -6,8 +6,10 @@ Commands run as argument lists, never through a shell: no word the user says can
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -15,7 +17,7 @@ from configparser import ConfigParser
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import lang
+from .. import config, lang
 from . import tool
 
 APP_DIRS = ["/usr/share/applications", "/usr/local/share/applications", "~/.local/share/applications",
@@ -67,24 +69,153 @@ def find_app(query: str, entries: list[dict]) -> dict | None:
     return None
 
 
-@tool("open_app", "Open an application by name, e.g. 'Firefox', 'Files', 'Calculator', 'Terminal'.",
+# ---------------------------------------------------------------------- app catalogue
+# Games and launchers the menu does not know, from [apps] in config.toml and from apps.json (the ones
+# added by voice). Each runs as an argument list: a Steam game, a Flatpak, or a command.
+
+FLATPAK_ID = re.compile(r"[A-Za-z][\w-]*(\.[A-Za-z_][\w-]*){2,}")
+STEAM_LINK = re.compile(r"steam://rungameid/(\d+)")
+
+
+def launch_args(spec: dict) -> list[str]:
+    """The command for one catalogue entry: {"steam": 49520}, {"flatpak": "com.x.Y"} or
+    {"command": ["prog", "arg"]}. Raises ValueError for anything else."""
+    kinds = [k for k in ("steam", "flatpak", "command") if k in spec]
+    if len(kinds) != 1 or set(spec) - {"steam", "flatpak", "command"}:
+        raise ValueError("an app needs exactly one of steam, flatpak or command")
+    value = spec[kinds[0]]
+    if kinds[0] == "steam":
+        text = str(value).strip()
+        link = STEAM_LINK.fullmatch(text)
+        game = link.group(1) if link else text
+        if isinstance(value, bool) or not game.isdigit():
+            raise ValueError("steam is a game id like 49520 or a steam://rungameid/ link")
+        return ["xdg-open", f"steam://rungameid/{game}"]
+    if kinds[0] == "flatpak":
+        if not isinstance(value, str) or not FLATPAK_ID.fullmatch(value):
+            raise ValueError("flatpak is an app id like com.valvesoftware.Steam")
+        return ["flatpak", "run", value]
+    if not isinstance(value, list) or not value or not all(isinstance(a, str) and a and "\0" not in a
+                                                            for a in value):
+        raise ValueError("command is a list of words, the program first, never a shell line")
+    return [os.path.expanduser(value[0]), *value[1:]]
+
+
+def _added_path() -> Path:
+    return config.home() / "apps.json"
+
+
+def _added() -> dict:
+    try:
+        data = json.loads(_added_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def catalogue(cfg: dict) -> list[dict]:
+    """The catalogue as app entries with their command; the config wins over a voice-added name, and
+    an entry that does not make sense is left out."""
+    configured = cfg.get("apps", {}) if isinstance(cfg.get("apps"), dict) else {}
+    taken = {name.lower() for name in configured}
+    merged = {**{k: v for k, v in _added().items() if k.lower() not in taken}, **configured}
+    found = []
+    for name, spec in merged.items():
+        try:
+            args = launch_args(spec) if isinstance(spec, dict) else None
+        except ValueError:
+            args = None
+        if args:
+            found.append({"id": name, "name": name, "names": [name.lower()], "keywords": [], "launch": args})
+    return found
+
+
+def _spawn(args: list[str]) -> None:
+    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def _cfg(ctx) -> dict:
+    return ctx.cfg if ctx is not None else config.load()
+
+
+@tool("open_app", "Open an application or game by name, e.g. 'Firefox', 'Files', 'Calculator', 'Borderlands'.",
       {"name": {"type": "string", "description": "the app's name, in English where possible"}},
       required=("name",), level="act")
-def open_app(name: str) -> str:
-    app = find_app(name, desktop_entries())
+def open_app(name: str, ctx=None) -> str:
+    # The catalogue comes first, so on a tie the name the user chose wins over the menu's.
+    app = find_app(name, catalogue(_cfg(ctx)) + desktop_entries())
     if not app:
         return f"error: no installed app matches {name!r}"
-    subprocess.Popen(["gtk-launch", app["id"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True)
+    try:
+        _spawn(app.get("launch") or ["gtk-launch", app["id"]])
+    except OSError as exc:
+        return f"error: could not start {app['name']}: {exc.strerror or exc}"
     return f"opened {app['name']}"
 
 
-@tool("list_apps", "Names of the installed applications, to find the right one to open.",
+@tool("list_apps", "Names of the installed applications and games, to find the right one to open.",
       {"filter": {"type": "string", "description": "only names containing this"}},
       level="safe", expose=True, card="list")
-def list_apps(filter: str = "") -> str:  # noqa: A002
-    names = sorted({e["name"] for e in desktop_entries() if filter.lower() in e["name"].lower()})
+def list_apps(filter: str = "", ctx=None) -> str:  # noqa: A002
+    entries = catalogue(_cfg(ctx)) + desktop_entries()
+    names = sorted({e["name"] for e in entries if filter.lower() in e["name"].lower()})
     return ", ".join(names[:80]) or "none"
+
+
+def _new_spec(steam: str = "", flatpak: str = "", command: list | None = None) -> dict:
+    spec: dict = {}
+    if steam:
+        spec["steam"] = steam
+    if flatpak:
+        spec["flatpak"] = flatpak
+    if command:
+        spec["command"] = command
+    return spec
+
+
+def _describe(args: dict) -> str:
+    name = str(args.get("name", "")).strip() or "a new app"
+    if args.get("steam"):
+        game = STEAM_LINK.fullmatch(str(args["steam"]).strip())
+        what = f"opens Steam game {game.group(1) if game else args['steam']}"
+    elif args.get("flatpak"):
+        what = f"runs the Flatpak {args['flatpak']}"
+    elif isinstance(args.get("command"), list):
+        what = "runs " + " ".join(str(a) for a in args["command"])
+    else:
+        what = "runs nothing yet"
+    return f"add an app called {name} that {what}"
+
+
+@tool("add_app", "Remember a new app or game to open by name: a Steam game id, a Flatpak id, or a command "
+      "as a list of words (program first). Rafiq asks the user first.",
+      {"name": {"type": "string", "description": "the name the user will say"},
+       "steam": {"type": "string", "description": "a Steam game id like 49520, or a steam://rungameid/ link"},
+       "flatpak": {"type": "string", "description": "a Flatpak app id like com.mojang.Minecraft"},
+       "command": {"type": "array", "items": {"type": "string"},
+                   "description": "the program and its arguments, one word each, never a shell line"}},
+      required=("name",), confirm=_describe, level="critical")
+def add_app(name: str, steam: str = "", flatpak: str = "", command: list | None = None, ctx=None) -> str:
+    name = name.strip()
+    if not name or len(name) > 60:
+        return "error: the app needs a name of 1 to 60 characters"
+    spec = _new_spec(steam, flatpak, command)
+    try:
+        args = launch_args(spec)
+    except ValueError as exc:
+        return f"error: {exc}"
+    if "command" in spec and not shutil.which(args[0]):
+        return f"error: no program {args[0]!r} on this computer"
+    if name.lower() in {k.lower() for k in (_cfg(ctx).get("apps") or {})}:
+        return f"error: {name} is set in config.toml; change it there"
+    added = {k: v for k, v in _added().items() if k.lower() != name.lower()}
+    added[name] = spec
+    path = _added_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(added, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return f"added {name}"
 
 
 # ---------------------------------------------------------------------- volume

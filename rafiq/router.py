@@ -44,7 +44,7 @@ DOMAINS: dict[str, tuple[tuple[str, ...], set[str]]] = {
         "posteingang",
         "بريد", "ايميل", "ايميلات", "الايميل",
     }),
-    "computer": (("open_app", "list_apps", "volume", "media", "system_status", "lock_screen", "power",
+    "computer": (("open_app", "list_apps", "add_app", "volume", "media", "system_status", "lock_screen", "power",
                   "open_in_browser"), {
         "volume", "louder", "quieter", "mute", "unmute", "open", "launch", "app", "apps", "application",
         "shutdown", "shut", "restart", "reboot", "lock", "battery", "cpu", "computer", "pc", "suspend",
