@@ -150,6 +150,7 @@ def assistant():
     a.ctx = Context(a.cfg, None)
     a.keyboard, a.dictating, a.follow_up_until = FakeKeyboard(), False, 0.0
     a._stop = __import__("threading").Event()
+    a.stt_lock, a.muted = __import__("threading").Lock(), False
     a.spoken, a.utterances = [], []
     a.say = lambda text, tag: a.spoken.append((text, tag))
     a.brain = type("B", (), {"think": lambda self, *args: pytest.fail("dictation went to the brain")})()
