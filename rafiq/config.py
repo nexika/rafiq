@@ -131,6 +131,8 @@ DEFAULTS: dict = {
         "max_side": 1568,                # shrink the screenshot to this many pixels on its long side
     },
     "plugs": [],                         # smart plugs, one table each; see the README
+    # OBS Studio 28+ with its WebSocket server on; OBS_WEBSOCKET_PASSWORD overrides the password here.
+    "obs": {"enabled": False, "host": "localhost", "port": 4455, "password": "", "timeout": 5},
     "anthropic_api_key": "",
     "openai_api_key": "",
 }

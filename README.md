@@ -26,6 +26,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
 | Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
+| OBS Studio | "start recording" (asks first), "go live" (asks first), "switch to the camera scene", "clip that" |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -337,6 +338,14 @@ token = ""                      # a long-lived access token, or set HOME_ASSISTA
 
 Rafiq only picks a plug by its name, never an address. Plugs protected by a password are not
 supported yet.
+
+## OBS Studio
+
+1. OBS 28 or newer: in OBS, **Tools > WebSocket Server Settings**, tick **Enable WebSocket server**
+   and note the password.
+2. `.venv/bin/pip install -e ".[obs]"`
+3. Under `[obs]` in the config set `enabled = true` and the `password` (or set `OBS_WEBSOCKET_PASSWORD`).
+4. For "clip that", turn on the replay buffer in OBS (Settings > Output > Replay Buffer) and start it.
 
 ## Settings
 

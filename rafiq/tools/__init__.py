@@ -9,6 +9,7 @@ its result. The rules are checked when the tool is registered, so a tool that br
 from __future__ import annotations
 
 import dataclasses
+import importlib
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -96,16 +97,21 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
     return register
 
 
+# Skills that need an account or another app, loaded only when enabled in their config section.
+OPTIONAL = ("google", "obs")
+
+
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google, Home Assistant, Hue, the smart plugs and presence only when they
-    are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
+    """Import every skill module; the optional ones, Home Assistant, Hue, the smart plugs and presence only
+    when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
     from . import background, everyday, memory, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
-    if cfg.get("google", {}).get("enabled"):
-        from . import google  # noqa: F401
-    else:
-        off.add(f"{__name__}.google")
+    for name in OPTIONAL:
+        if cfg.get(name, {}).get("enabled"):
+            importlib.import_module(f"{__name__}.{name}")
+        else:
+            off.add(f"{__name__}.{name}")
     if cfg.get("home_assistant", {}).get("url") and cfg.get("home_assistant", {}).get("token"):
         from . import home  # noqa: F401
     else:

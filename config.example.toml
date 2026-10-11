@@ -149,3 +149,9 @@ away_minutes = 10               # off the Wi-Fi this long before the away scene
 away_command = []               # the away scene, e.g. ["/home/you/bin/lights", "off"]
 home_command = []               # the welcome-home scene
 welcome = true                  # also say "welcome home"
+
+[obs]                           # OBS Studio 28+: Tools > WebSocket Server Settings > Enable
+enabled = false                 # true to say "start recording", "switch to the camera scene", "clip that"
+host = "localhost"
+port = 4455
+password = ""                   # or set OBS_WEBSOCKET_PASSWORD
