@@ -1,6 +1,6 @@
-"""rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite | gestures |
-doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
-install-service | uninstall-service | wake-pc | backup | stt-score"""
+"""rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
+gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup |
+hue-setup | install-service | uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
 
