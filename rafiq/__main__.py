@@ -1,6 +1,6 @@
 """rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
 phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
-uninstall-service | wake-pc | backup"""
+uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
 
@@ -503,6 +503,32 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_stt_score(args) -> int:
+    """Score speech-to-text on your own recordings (name.wav with name.txt), for each Whisper model, with
+    and without the handling of English words inside Arabic."""
+    from pathlib import Path
+
+    from .stt import Transcriber, score
+
+    folder = Path(args.folder)
+    if not any(folder.glob("*.wav")):
+        print(f"No .wav recordings in {folder}", file=sys.stderr)
+        return 1
+    languages = config.load()["speech"]["languages"]
+    for model in args.models:
+        for mixed in (False, True):
+            results = score(folder, Transcriber(model, languages, mixed=mixed))
+            if not results:
+                print(f"No recording in {folder} has its text next to it (name.wav and name.txt)", file=sys.stderr)
+                return 1
+            mean = sum(r.error for r in results) / len(results)
+            print(f"{model}, mixed {'on' if mixed else 'off'}: {mean:.0%} word errors over {len(results)} recordings")
+            if args.verbose:
+                for r in results:
+                    print(f"  {r.error:4.0%} {r.name}: {r.heard}")
+    return 0
+
+
 def cmd_satellite(args) -> int:
     """This computer as a microphone and speaker in another room, a simulator, or a new device's token."""
     import secrets
@@ -722,6 +748,11 @@ def main(argv=None) -> int:
     token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    score = sub.add_parser("stt-score", help="score speech-to-text on your recordings (name.wav + name.txt)")
+    score.add_argument("folder")
+    score.add_argument("--models", nargs="+", default=["small", "medium"], help="default: small medium")
+    score.add_argument("-v", "--verbose", action="store_true", help="show what was heard in each recording")
+    score.set_defaults(fn=cmd_stt_score)
     sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
     sat.add_argument("action", choices=("run", "simulate", "token"),

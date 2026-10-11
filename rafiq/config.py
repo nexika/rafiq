@@ -49,6 +49,7 @@ DEFAULTS: dict = {
         "languages": ["en", "fr", "es", "de", "ar"],
         "follow_up_seconds": 6,          # after an answer, listen this long without the name
         "max_utterance_seconds": 20,
+        "mixed": True,                   # Arabic with English words ("افتحلي الـ settings"): keep them in Latin letters
         "end_silence_seconds": 0.7,      # this much silence ends what you say (a noisy room adds a little)
         # Speech to text. auto: Whisper on this computer; a cloud service only for the languages in
         # stt_by_language, or when Whisper can't run. local: never the cloud. azure or openai: every language.

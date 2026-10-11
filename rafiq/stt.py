@@ -8,11 +8,13 @@ import logging
 import os
 import wave
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
 from . import lang as lang_mod
 from .hallucinations import is_hallucination, is_speech
+from .lang import latinize, words
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,10 @@ HOTWORDS = "Rafiq رفيق"
 # name more often than hotwords (6 of 8 against 5 of 8) and as rarely by mistake.
 WAKE_PROMPT = "Rafiq, رفيق."
 WAKE_SECONDS = 2.5
+# For Arabic: Egyptians say English words inside Arabic sentences, and Whisper, which picks one language
+# per utterance, writes them in Arabic script. A prompt in that mixed style keeps them in Latin letters
+# more often; lang.latinize puts back the common ones it still writes in Arabic.
+MIXED_PROMPT = "يا رفيق، افتحلي الـ settings وشغّل الـ playlist بتاعتي على Spotify، وابعت email لسارة."
 
 
 @dataclass
@@ -38,9 +44,10 @@ def pick_language(probs: list[tuple[str, float]], allowed: list[str]) -> tuple[s
 
 
 class Transcriber:
-    def __init__(self, size: str = "small", languages: list[str] | None = None):
+    def __init__(self, size: str = "small", languages: list[str] | None = None, mixed: bool = False):
         self.size = size
         self.languages = languages or ["en", "fr", "es", "de", "ar"]
+        self.mixed = mixed  # Arabic with English words: the mixed prompt, and English words in Latin letters
         self._model = None
 
     @property
@@ -63,6 +70,9 @@ class Transcriber:
         confidence = 1.0
         if lang is None:
             lang, confidence = self.language(audio, languages)
+        mixed = self.mixed and lang == "ar"
+        if mixed and prompt is None:
+            prompt = MIXED_PROMPT
         segments, _ = self.model.transcribe(audio, language=lang, beam_size=beam_size,
                                             condition_on_previous_text=False, vad_filter=False,
                                             hotwords=hotwords, initial_prompt=prompt, without_timestamps=True)
@@ -71,7 +81,47 @@ class Transcriber:
         text = " ".join(kept).strip()
         if is_hallucination(text):
             text = ""
+        if mixed:
+            text = latinize(text)
         return Heard(text=text, lang=lang, confidence=confidence)
+
+
+def word_error_rate(reference: str, heard: str) -> float:
+    """Words substituted, dropped or added, over the words of the reference; spelling that varies in
+    speech-to-text output (hamza, ta marbuta, case) does not count."""
+    ref, hyp = words(reference), words(heard)
+    if not ref:
+        return float(bool(hyp))
+    row = list(range(len(hyp) + 1))
+    for i, r in enumerate(ref, 1):
+        prev, row[0] = row[0], i
+        for j, h in enumerate(hyp, 1):
+            prev, row[j] = row[j], min(row[j] + 1, row[j - 1] + 1, prev + (r != h))
+    return row[-1] / len(ref)
+
+
+@dataclass
+class Scored:
+    name: str
+    said: str
+    heard: str
+    error: float  # the word error rate
+
+
+def score(folder: Path, transcriber: Transcriber) -> list[Scored]:
+    """Transcribe every recording in a folder that has its text next to it (name.wav and name.txt), to
+    compare models and settings on your own voice, such as Egyptian Arabic mixed with English."""
+    from .enroll import load_wav
+
+    results = []
+    for wav in sorted(folder.glob("*.wav")):
+        txt = wav.with_suffix(".txt")
+        if not txt.is_file():
+            continue
+        said = txt.read_text(encoding="utf-8").strip()
+        heard = transcriber.transcribe(load_wav(wav)).text
+        results.append(Scored(wav.stem, said, heard, word_error_rate(said, heard)))
+    return results
 
 
 # ---------------------------------------------------------------------- cloud speech to text
@@ -189,7 +239,8 @@ class SpeechToText:
     @classmethod
     def from_config(cls, cfg: dict) -> SpeechToText:
         speech = cfg["speech"]
-        return cls(Transcriber(speech["whisper_model"], speech["languages"]), cloud_engines(cfg), speech)
+        return cls(Transcriber(speech["whisper_model"], speech["languages"], mixed=speech.get("mixed", False)),
+                   cloud_engines(cfg), speech)
 
     def engine_for(self, lang: str) -> str:
         engine = self.by_language.get(lang) or self.engine
