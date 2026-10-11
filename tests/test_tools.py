@@ -38,13 +38,14 @@ def test_every_tool_declares_its_level_speed_exposure_and_card():
 
 def test_only_critical_tools_ask_first_and_every_critical_tool_does():
     cfg = {"google": {"enabled": True}, "home_assistant": {"url": "http://ha.local", "token": "t"},
-           "obs": {"enabled": True}}
+           "obs": {"enabled": True}, "plugs": [{"name": "PC", "kind": "shelly", "host": "192.168.1.40"}]}
     for t in load_all(cfg).values():
         assert (t.confirm is not None) == (t.level == "critical"), t.name
     assert {n for n, t in REGISTRY.items() if t.level == "critical"} == {"power", "email_send", "calendar_add",
                                                                         "calendar_delete", "add_app", "wake_computer",
                                                                         "home_switch", "look_at_screen", "email_reply",
-                                                                        "email_trash", "obs_stream", "obs_record"}
+                                                                        "email_trash", "obs_stream", "obs_record",
+                                                                        "plug_switch"}
 
 
 def test_only_safe_tools_are_exposed_over_mcp():

@@ -70,11 +70,19 @@ def cmd_ask(args) -> int:
         print(lang.phrase("timer_done" if alarm.kind == "timer" else "reminder", alarm.tag, label=alarm.label))
 
     scheduler = Scheduler(config.data_dir() / "alarms.json", say_alarm)
+    # Only to turn presence on or off: the running Rafiq reads the saved setting at its next check.
+    watcher = None
+    if cfg["presence"].get("phone_ip"):
+        from .presence import Presence
+
+        watcher = Presence(config.data_dir() / "presence.json", lambda: False, lambda: None, lambda: None)
     facts = Facts(config.data_dir() / "memory.json")
-    brain = Brain(cfg, load_all(cfg), _terminal_confirm, on_event=show, facts=facts)
+    tools = load_all(cfg)
+    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts)
     stream = Speaker(cfg).stream() if args.speak else None
     try:
-        answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts=facts),
+        answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts=facts, presence=watcher,
+                                                confirm=_terminal_confirm, tools=tools),
                              on_speech=stream.put if stream else None)
         print(answer)
     finally:
