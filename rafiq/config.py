@@ -1,6 +1,7 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY, HOME_ASSISTANT_TOKEN), then the file, and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN), then the file,
+and are never logged.
 """
 
 from __future__ import annotations
@@ -13,15 +14,21 @@ from pathlib import Path
 
 DEFAULTS: dict = {
     "brain": {
-        # "auto": Claude when an API key is set and the network answers, else Ollama.
+        # "auto": Claude, then OpenAI, for each that has an API key and answers; else Ollama.
         "mode": "auto",
         # everyday: claude_model, fast and cheap; quality: quality_model; offline: Ollama and Piper only.
         "profile": "everyday",
         "claude_model": "claude-haiku-5-5",
         "quality_model": "claude-opus-5-5",
+        "openai_model": "gpt-5-mini",
+        # Any server that speaks OpenAI's chat completions works here (DeepSeek, Gemini, a local one).
+        "openai_url": "https://api.openai.com/v1",
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
+        "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names
         "max_tokens": 600,
+        # Offer the model only the tools a request needs (none for small talk); off: every tool, always.
+        "routing": True,
         # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
         # model rounds, tool calls in all, and seconds from the request to the answer.
         "limits": {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120},
@@ -71,6 +78,14 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "tasks": {
+        # Background research ("research the best e-bike under 2000 euros"); needs Claude.
+        "model": "",                     # empty: brain.claude_model
+        "max_tokens": 2000,
+        # US dollars per million tokens, [input, output], to show what each task cost.
+        "prices": {"claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2.00, 10.00],
+                   "claude-opus-5-5": [4.00, 20.00]},
+    },
     "interruption": {
         # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.
         "enabled": True,
@@ -85,7 +100,10 @@ DEFAULTS: dict = {
     "google": {"enabled": False},
     # Home Assistant, for Nest, Hue, plugs and the rest: its address and a long-lived access token.
     "home_assistant": {"url": "", "token": ""},
+    # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
+    "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     "anthropic_api_key": "",
+    "openai_api_key": "",
 }
 
 
@@ -114,8 +132,9 @@ def load(path: Path | None = None) -> dict:
     cfg = copy.deepcopy(DEFAULTS)
     if path.is_file():
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        cfg["anthropic_api_key"] = os.environ["ANTHROPIC_API_KEY"]
+    for key in ("anthropic_api_key", "openai_api_key"):
+        if os.environ.get(key.upper()):
+            cfg[key] = os.environ[key.upper()]
     if os.environ.get("HOME_ASSISTANT_TOKEN"):
         cfg["home_assistant"]["token"] = os.environ["HOME_ASSISTANT_TOKEN"]
     return cfg

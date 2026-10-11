@@ -7,18 +7,20 @@ Arabic and Egyptian Arabic. Say "Rafiq" (or "يا رفيق"), ask, and it answer
 and dialect you used. *Rafiq* means companion.
 
 ```
-microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + tools → voice → speaker
-                                                                   ↘ local panel (127.0.0.1)
+microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or Ollama + tools → voice → speaker
+                                                                           ↘ local panel (127.0.0.1)
 ```
 
 ## What it can do
 
 | Skill | Examples |
 |---|---|
-| This computer | "open Firefox", "volume to 30", "mute", "switch to the headphones", "how's the battery?", "lock the screen", "shut down" (asks first) |
+| This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
+| Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
+| Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
@@ -36,6 +38,7 @@ to paste into any chatbot, which then walks you through the install one command 
 git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
+.venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
 .venv/bin/rafiq doctor
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
@@ -60,12 +63,32 @@ Rafiq. The service does not see keys exported in your shell, so put them in
 - **Claude** (recommended): fast, good at tools and at all six languages. Set an API key from
   [console.anthropic.com](https://console.anthropic.com): `export ANTHROPIC_API_KEY=...`. The default
   model is `claude-haiku-5-5`, chosen for speed; change `brain.claude_model` for a stronger one.
-- **Ollama**: free and private, used when there is no key or Claude can't be reached. On a laptop
+- **OpenAI**: `export OPENAI_API_KEY=...`; the default model is `gpt-5-mini` (`brain.openai_model`).
+  Rafiq uses OpenAI's chat completions, so `brain.openai_url` can also point at another server that
+  speaks it (DeepSeek, Gemini's OpenAI endpoint, a local one), with that server's key.
+- **Ollama**: free and private, used when there is no key or the others can't be reached. On a laptop
   without a GPU, a 7B model takes about 10 to 20 seconds per answer, and it chooses tools and keeps
   the language less reliably than Claude. Rafiq warms the model up when it starts, so only the first
-  answer is slow.
+  answer is slow. It gets a smaller set of tools than Claude (fewer choices, fewer wrong ones;
+  `brain.ollama_tools = "all"` sends every tool), and a tool call with broken arguments is sent back
+  to it once to fix. `rafiq toolcheck` measures how often it picks the right tool, with every tool
+  and with its set.
 
-`rafiq run --brain claude|ollama|auto` picks one for a session; `brain.mode` in the config sets it.
+In auto mode Rafiq tries Claude, then OpenAI (each only when its key is set), then Ollama.
+`rafiq run --brain claude|openai|ollama|auto` picks one for a session; `brain.mode` in the config
+sets it. In the panel, the Brain menu lists the models your key can really use, asked of the
+provider itself, and switches to one after asking again; the choice lasts until Rafiq stops.
+
+### Modes: everyday, quality, offline
+
+- **Everyday** (the default): the fast model, `brain.claude_model`.
+- **Quality**: the strongest model, `brain.quality_model` (`claude-opus-5-5`), slower and costlier.
+- **Offline**: nothing leaves the computer: only Ollama and the Piper voices, whatever `brain.mode`
+  and `voice.engine` say. Speech-to-text is always local.
+
+Switch by voice ("Rafiq, switch to offline mode", "what mode are you in?"), with the switch at the
+top of the panel, or for a session with `rafiq run --mode quality`. `brain.profile` in the config
+sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
 
 ### Modes: everyday, quality, offline
 
@@ -98,6 +121,11 @@ Download the Piper voices once:
 cd ~/.config/rafiq/data/piper && ~/rafiq/.venv/bin/python -m piper.download_voices \
   en_US-ryan-medium fr_FR-tom-medium es_ES-davefx-medium de_DE-thorsten-medium ar_JO-kareem-medium
 ```
+
+Rafiq starts talking with the first sentence of an answer while Claude is still writing the rest, and
+says a short "let me look that up" before a slow tool (the web, the weather, Gmail, the calendar). How
+long each stage took (speech-to-text, model, tools, voice, first sound) goes to
+`~/.config/rafiq/logs/timing.log`, without what was said; `rafiq doctor` shows the medians.
 
 ## Hearing: Whisper, with the cloud for chosen languages
 
@@ -183,11 +211,29 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
+  read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
+  each request, never as instructions.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+
+## Rafiq's tools in other programs (MCP)
+
+`rafiq mcp` offers Rafiq's harmless tools to MCP clients such as Claude Desktop or Claude Code, over
+stdio: the time, the weather, web search and reading a page, how the computer is doing, arithmetic and
+unit conversion. Nothing that changes anything is offered (no power, email, apps, volume, or setting
+timers), and never a tool that would ask you first. Every call is logged to
+`~/.config/rafiq/data/mcp.log`.
+
+```bash
+claude mcp add rafiq -- /path/to/rafiq/.venv/bin/rafiq mcp
+```
+
+For Claude Desktop, add to `claude_desktop_config.json`:
+`"mcpServers": {"rafiq": {"command": "/path/to/rafiq/.venv/bin/rafiq", "args": ["mcp"]}}`.
 
 ## Google calendar and Gmail
 
