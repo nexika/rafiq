@@ -1,6 +1,6 @@
 """rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
 phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
-uninstall-service | wake-pc | stt-score"""
+uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import config, lang, modes
+from . import config, lang, modes, privacy
 
 
 def cmd_run(args) -> int:
@@ -21,6 +21,7 @@ def cmd_run(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    privacy.start_logging(config.data_dir() / "logs", int(cfg["privacy"]["log_days"]))
     if args.mode:
         modes.switch(cfg, args.mode)
     if args.server:
@@ -293,8 +294,11 @@ def cmd_paper(args) -> int:
     return 0
 
 
-def _check(label: str, ok: bool, detail: str = "") -> bool:
-    print(f"  {'ok ' if ok else 'no '} {label}" + (f": {detail}" if detail else ""))
+def _check(label: str, ok: bool, detail: str = "", fix: str = "", optional: bool = False) -> bool:
+    mark = "ok " if ok else "-- " if optional else "no "
+    print(f"  {mark} {label}" + (f": {detail}" if detail else ""))
+    if fix:
+        print(f"        {'tip' if ok or optional else 'fix'}: {fix}")
     return ok
 
 
@@ -326,30 +330,21 @@ def _check_microphone(cfg: dict) -> None:
 
 
 def cmd_doctor(_args) -> int:
-    import httpx
+    from . import doctor
 
     cfg = config.load()
     print(f"Rafiq settings: {config.home() / 'config.toml'}")
     _check_microphone(cfg)
     _check("audio player (ffplay)", bool(shutil.which("ffplay")))
+    print("Integrations:")
+    for check in doctor.integrations(cfg):
+        _check(check.label, check.ok, check.detail, check.fix, check.optional)
     brain = cfg["brain"]
-    _check("Claude API key", bool(cfg.get("anthropic_api_key")),
-           brain["claude_model"] if cfg.get("anthropic_api_key") else "set ANTHROPIC_API_KEY to use Claude")
     _check("OpenAI API key", bool(cfg.get("openai_api_key")),
            brain["openai_model"] if cfg.get("openai_api_key") else "set OPENAI_API_KEY to use OpenAI")
-    try:
-        tags = httpx.get(f"{brain['ollama_url']}/api/tags", timeout=3).json().get("models", [])
-        names = [m["name"] for m in tags]
-        _check("Ollama", brain["ollama_model"] in names,
-               f"{brain['ollama_model']} " + ("installed" if brain["ollama_model"] in names else
-                                              f"missing (ollama pull {brain['ollama_model']})"))
-    except Exception:
-        _check("Ollama", False, f"not reachable at {brain['ollama_url']}")
     from .tts import Speaker
 
     speaker = Speaker(cfg)
-    _check("Azure voices (Egyptian Arabic)", bool(speaker.key and speaker.region),
-           "set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION" if not speaker.key else speaker.region)
     _check("ElevenLabs voices", bool(speaker.eleven_key),
            speaker.cfg.get("elevenlabs_model", "") if speaker.eleven_key else "set ELEVENLABS_API_KEY")
     kokoro = speaker.kokoro_paths()
@@ -358,9 +353,6 @@ def cmd_doctor(_args) -> int:
     for tag in ("en", "fr", "es", "de", "ar"):
         path = speaker.piper_path(tag)
         _check(f"offline voice {tag}", path is not None, path.name if path else "missing")
-    google = config.home() / "google" / "token.json"
-    _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
-           "connected" if google.is_file() else "run: rafiq google-setup")
     import importlib.util
 
     _check("hand gestures (mediapipe, opencv)", all(importlib.util.find_spec(m) for m in ("mediapipe", "cv2")),
@@ -396,6 +388,9 @@ def cmd_doctor(_args) -> int:
     from . import timing
 
     print(f"  latency: {timing.line()}")
+    print("Models for this machine:")
+    for line in doctor.advice_lines(cfg, doctor.machine()):
+        print(line)
     return 0
 
 
@@ -642,6 +637,19 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    """Save settings, recordings and everything else Rafiq keeps to a private archive on this computer."""
+    from . import maintain
+
+    try:
+        path = maintain.backup(args.to)
+    except (maintain.MaintenanceError, OSError) as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved {path} (readable only by you; it holds your keys, keep it off public places).")
+    return 0
+
+
 def cmd_spotify_setup(_args) -> int:
     from .tools.spotify import setup
 
@@ -763,7 +771,8 @@ def main(argv=None) -> int:
                               "calibrate (tune the timing)")
     gestures.add_argument("action", choices=("on", "off", "demo", "calibrate"))
     gestures.set_defaults(fn=cmd_gestures)
-    sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("doctor", help="check the microphone, voices, keys and integrations; suggest models").set_defaults(
+        fn=cmd_doctor)
     sub.add_parser("status", help="is Rafiq running, its version, and is the panel private").set_defaults(
         fn=cmd_status)
     update = sub.add_parser("update", help="pull the new version, reinstall it and restart the service")
@@ -777,6 +786,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    backup = sub.add_parser("backup", help="save settings and recordings to a private local archive")
+    backup.add_argument("--to", type=Path, help="the folder for the archive (default: <settings>/backups)")
+    backup.set_defaults(fn=cmd_backup)
     wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
     wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
     wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
