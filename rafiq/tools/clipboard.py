@@ -39,7 +39,7 @@ def _missing(program: str) -> str:
 
 
 @tool("read_clipboard", "Read the text the user copied, to translate, summarise or explain it. "
-      "Only when the user asks about what they copied.")
+      "Only when the user asks about what they copied.", level="private")
 def read_clipboard() -> str:
     found = commands()
     if not found:
@@ -58,7 +58,7 @@ def read_clipboard() -> str:
 
 
 @tool("copy_to_clipboard", "Put text on the clipboard, e.g. a translation, when the user asks for it.",
-      {"text": {"type": "string"}}, required=("text",))
+      {"text": {"type": "string"}}, required=("text",), level="act")
 def copy_to_clipboard(text: str) -> str:
     if not text:
         return "error: nothing to copy"
