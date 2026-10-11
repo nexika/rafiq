@@ -25,7 +25,7 @@ from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_canc
 from .bargein import BargeIn
 from .brain import Brain
 from .facts import Facts
-from .paper import MorningPaper
+from .paper_print import MorningPaper
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks

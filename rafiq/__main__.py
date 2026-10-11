@@ -1,5 +1,5 @@
-"""rafiq run | ask | say | agent | agent-token | doctor | phone | mcp | toolcheck | google-setup |
-instagram-setup | hue-setup | install-service | uninstall-service | paper"""
+"""rafiq run | ask | say | paper | agent | agent-token | doctor | phone | mcp | toolcheck | google-setup |
+spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service | wake-pc"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import threading
+from pathlib import Path
 
 from . import config, lang, modes
 
@@ -241,6 +242,33 @@ def cmd_say(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_paper(args) -> int:
+    """Make today's morning paper: a PDF (or HTML with --html) of the weather, calendar, feeds and more."""
+    from datetime import date
+
+    from . import paper
+
+    if args.paper_command:
+        return cmd_paper_print(args)
+    cfg = config.load()
+    day = date.today()
+    if args.demo:
+        edition = paper.demo_edition(day, args.lang or None)
+    else:
+        if args.lang:
+            cfg["paper"]["languages"] = args.lang
+        edition = paper.gather(cfg, paper.LiveSources(cfg), day)
+    suffix = ".html" if args.html else ".pdf"
+    out = Path(args.out) if args.out else config.data_dir() / "paper" / f"{day.isoformat()}{suffix}"
+    try:
+        paper.make(edition, out, None if args.html else paper.ChromiumPrinter())
+    except paper.PrintError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(out)
+    return 0
+
+
 def _check(label: str, ok: bool, detail: str = "") -> bool:
     print(f"  {'ok ' if ok else 'no '} {label}" + (f": {detail}" if detail else ""))
     return ok
@@ -309,6 +337,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    spotify = config.home() / "spotify" / "token.json"
+    _check("Spotify", spotify.is_file() and cfg["spotify"].get("enabled", False),
+           "connected" if spotify.is_file() else "run: rafiq spotify-setup")
     instagram = config.home() / "instagram" / "token.json"
     _check("Instagram statistics", instagram.is_file() and cfg["instagram"].get("enabled", False),
            "connected" if instagram.is_file() else "run: rafiq instagram-setup <token>")
@@ -404,12 +435,10 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
-def cmd_paper(args) -> int:
-    """The morning paper: print it now (asking first), have the running Rafiq offer it, or install the
-    systemd timer that does that every morning."""
-    from pathlib import Path
-
-    from . import paper
+def cmd_paper_print(args) -> int:
+    """The morning paper on paper: print it now (asking first), have the running Rafiq offer it, or install
+    the systemd timer that does that every morning."""
+    from . import paper_print as paper
 
     if args.paper_command == "print":
         result = paper.MorningPaper(config.load()).print_today(lambda action: _terminal_confirm(action, "en"))
@@ -428,6 +457,19 @@ def cmd_paper(args) -> int:
         (folder / name).write_text(text)
     print(f"Wrote {folder / paper.TIMER}. Turn it on with:\n"
           f"  systemctl --user daemon-reload && systemctl --user enable --now {paper.TIMER}")
+    return 0
+
+
+def cmd_wake_pc(args) -> int:
+    """Start a computer that is off, with Wake-on-LAN (what a satellite does when the main computer is off)."""
+    from .fallback import wake_pc
+
+    try:
+        wake_pc(args.mac, args.broadcast, args.port)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wake-on-LAN packet sent to {args.mac}.")
     return 0
 
 
@@ -457,6 +499,14 @@ def cmd_google_setup(_args) -> int:
 
     print(setup())
     print("Then set [google] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
+def cmd_spotify_setup(_args) -> int:
+    from .tools.spotify import setup
+
+    print(setup(config.load()))
+    print("Then set [spotify] enabled = true in", config.home() / "config.toml")
     return 0
 
 
@@ -529,6 +579,16 @@ def main(argv=None) -> int:
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
     enroll.set_defaults(fn=cmd_enroll)
+    news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF), print it, or schedule that")
+    news.add_argument("paper_command", nargs="?", choices=("print", "offer", "timer"),
+                      help="print: print today's paper now (asks first); offer: have the running Rafiq offer to "
+                           "print it (what the timer runs); timer: install a systemd user timer that offers it")
+    news.add_argument("--at", default="07:00", help="with timer: time of day, HH:MM (default 07:00)")
+    news.add_argument("--demo", action="store_true", help="made-up data, to see the layout")
+    news.add_argument("--html", action="store_true", help="write HTML instead of printing a PDF")
+    news.add_argument("--out", help="where to save it (default: the data folder, paper/<date>.pdf)")
+    news.add_argument("--lang", nargs="+", choices=lang.TAGS, help="languages, e.g. --lang en ar")
+    news.set_defaults(fn=cmd_paper)
     agent = sub.add_parser("agent", help="lend this PC (screen, speakers, apps) to a `rafiq run --server`")
     agent.add_argument("--server", help="the server's address, e.g. http://100.101.12.3:8766")
     agent.add_argument("--name", help="this agent's name, as given to `rafiq agent-token`")
@@ -544,13 +604,6 @@ def main(argv=None) -> int:
     mute.add_argument("state", nargs="?", choices=("on", "off"), help="on: stop listening; default: toggle")
     mute.set_defaults(fn=cmd_mute)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
-    paper_cmd = sub.add_parser("paper", help="print the morning paper, or schedule it")
-    paper_sub = paper_cmd.add_subparsers(dest="paper_command", required=True)
-    paper_sub.add_parser("print", help="print today's paper now (asks first)")
-    paper_sub.add_parser("offer", help="have the running Rafiq offer to print it (what the timer runs)")
-    timer = paper_sub.add_parser("timer", help="install a systemd user timer that offers it every day")
-    timer.add_argument("--at", default="07:00", help="time of day, HH:MM (default 07:00)")
-    paper_cmd.set_defaults(fn=cmd_paper)
     sub.add_parser("phone", help="show how to set up a phone shortcut for the phone bridge").set_defaults(
         fn=cmd_phone)
     sub.add_parser("mcp", help="offer the harmless tools to MCP clients such as Claude Desktop (stdio)").set_defaults(
@@ -558,6 +611,12 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
+    wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
+    wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
+    wake.add_argument("--port", type=int, default=9)
+    wake.set_defaults(fn=cmd_wake_pc)
+    sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
     insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")
     insta.set_defaults(fn=cmd_instagram_setup)

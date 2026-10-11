@@ -1,209 +1,211 @@
-import subprocess
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
-from rafiq import config, lang
-from rafiq import paper as paper_mod
+from rafiq import paper
 from rafiq.__main__ import main
-from rafiq.paper import CupsPrinter, DailyLock, MorningPaper, PrintError, timer_units
-from rafiq.tools import load_all
 
-DAY = date(2026, 10, 10)
+DAY = date(2026, 10, 12)
+
+RSS = """<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Daily Tech</title>
+<item><title>Chips get smaller</title><link>https://example.com/chips</link>
+<description>&lt;p&gt;A new process &lt;b&gt;halves&lt;/b&gt; the size of transistors.&lt;/p&gt;</description></item>
+<item><title>Second story</title><link>https://example.com/2</link><description>Short.</description></item>
+</channel></rss>"""
+
+ATOM = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Atom News</title>
+<entry><title>Rain in Cairo</title><link href="https://example.org/rain"/>
+<summary>The first rain of the season fell on Cairo.</summary></entry>
+</feed>"""
+
+
+class FakeSources:
+    def __init__(self, feeds=None, events=None, reminders=None, weather=None, fail=()):
+        self.feeds = feeds or {}
+        self._events = events or []
+        self._reminders = reminders or []
+        self._weather = weather
+        self.fail = set(fail)
+
+    def weather(self):
+        if "weather" in self.fail:
+            raise OSError("offline")
+        return self._weather
+
+    def events(self, day):
+        if "events" in self.fail:
+            raise OSError("no calendar")
+        return self._events
+
+    def reminders(self, day):
+        return self._reminders
+
+    def feed(self, url):
+        if url not in self.feeds:
+            raise OSError("not found")
+        return self.feeds[url]
+
+
+def test_rss_items_keep_their_own_text_without_markup():
+    items = paper.parse_feed(RSS)
+    assert [a.title for a in items] == ["Chips get smaller", "Second story"]
+    assert items[0].source == "Daily Tech"
+    assert items[0].url == "https://example.com/chips"
+    assert items[0].summary == "A new process halves the size of transistors."
+
+
+def test_atom_entries_are_read():
+    items = paper.parse_feed(ATOM)
+    assert items == [paper.Article("Rain in Cairo", "https://example.org/rain",
+                                   "The first rain of the season fell on Cairo.", "Atom News")]
+
+
+def test_a_broken_feed_is_empty_not_an_error():
+    assert paper.parse_feed("<html>not a feed") == []
+
+
+def test_long_summaries_are_cut_at_a_word():
+    text = "word " * 200
+    cut = paper.shorten(text, 60)
+    assert len(cut) <= 61 and cut.endswith("…") and not cut.endswith(" …")
+
+
+def test_gather_builds_an_edition_from_the_config():
+    cfg = {"paper": {"title": "My Paper", "languages": ["en"], "max_articles": 5,
+                     "feeds": ["https://a/news.xml"], "tech_feeds": ["https://a/tech.xml"],
+                     "priorities": ["Finish the report"],
+                     "deadlines": [{"title": "Tax return", "date": "2026-10-15"},
+                                   {"title": "Long past", "date": "2026-01-01"}]}}
+    sources = FakeSources(
+        feeds={"https://a/news.xml": ATOM, "https://a/tech.xml": RSS},
+        events=[paper.Event("09:00", "Stand-up", "")],
+        reminders=["Call mum"],
+        weather=paper.Weather("Cairo", 31.0, 22.0, "clear sky", 0))
+    edition = paper.gather(cfg, sources, DAY)
+    assert edition.title == "My Paper" and edition.day == DAY
+    assert [a.title for a in edition.news] == ["Rain in Cairo"]
+    assert [a.title for a in edition.tech] == ["Chips get smaller", "Second story"]
+    assert edition.events[0].title == "Stand-up"
+    assert edition.reminders == ["Call mum"]
+    assert edition.priorities == ["Finish the report"]
+    assert edition.deadlines == [paper.Deadline("Tax return", date(2026, 10, 15))]
+    assert edition.weather.city == "Cairo"
+    assert edition.puzzle is not None
+
+
+def test_a_failing_source_leaves_its_section_empty():
+    cfg = {"paper": {"feeds": ["https://gone/feed.xml"]}}
+    edition = paper.gather(cfg, FakeSources(fail={"weather", "events"}), DAY)
+    assert edition.weather is None and edition.events == [] and edition.news == []
+    assert any("weather" in note for note in edition.notes)
+
+
+def test_density_follows_how_much_there_is():
+    small = paper.demo_edition(DAY)
+    small.news, small.tech, small.events = small.news[:1], [], []
+    big = paper.demo_edition(DAY)
+    big.news = big.news * 6
+    assert paper.density(small) == "airy"
+    assert paper.density(paper.demo_edition(DAY)) in ("normal", "airy")
+    assert paper.density(big) == "compact"
+
+
+def test_demo_edition_is_made_up_and_says_so():
+    edition = paper.demo_edition(DAY)
+    assert edition.demo and edition.news and edition.tech and edition.events and edition.puzzle
+    assert "demo" in paper.render_html(edition).lower()
+
+
+def test_html_is_a4_and_escapes_feed_text():
+    edition = paper.demo_edition(DAY)
+    edition.news[0] = paper.Article("<script>alert(1)</script>", "javascript:alert(1)", "x & y", "Evil")
+    html = paper.render_html(edition)
+    assert "size: A4" in html
+    assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html
+    assert 'href="javascript:' not in html
+    assert "x &amp; y" in html
+
+
+def test_arabic_edition_is_right_to_left():
+    edition = paper.demo_edition(DAY, languages=["ar"])
+    html = paper.render_html(edition)
+    assert 'dir="rtl"' in html and 'lang="ar"' in html
+    assert "الطقس" in html
+
+
+def test_bilingual_edition_shows_both_languages_in_headings():
+    edition = paper.demo_edition(DAY, languages=["en", "ar"])
+    html = paper.render_html(edition)
+    assert 'dir="ltr"' in html
+    assert "Weather" in html and "الطقس" in html
+
+
+def test_sudoku_puzzle_has_a_valid_solution_and_blanks():
+    puzzle = paper.sudoku(seed=7)
+    rows = puzzle.solution
+    for i in range(9):
+        assert sorted(rows[i]) == list(range(1, 10))
+        assert sorted(r[i] for r in rows) == list(range(1, 10))
+        box = [rows[r][c] for r in range(i // 3 * 3, i // 3 * 3 + 3) for c in range(i % 3 * 3, i % 3 * 3 + 3)]
+        assert sorted(box) == list(range(1, 10))
+    blanks = sum(cell == 0 for row in puzzle.grid for cell in row)
+    assert 35 <= blanks <= 55
+    for r in range(9):
+        for c in range(9):
+            assert puzzle.grid[r][c] in (0, rows[r][c])
+    assert paper.sudoku(seed=7) == puzzle
+
+
+def test_reminders_come_from_the_scheduler_for_that_day():
+    from rafiq.scheduler import Alarm
+
+    morning = datetime(2026, 10, 12, 8, 30).astimezone().timestamp()
+    tomorrow = datetime(2026, 10, 13, 8, 30).astimezone().timestamp()
+    alarms = [Alarm("a", morning, "Water the plants", "reminder", "en"),
+              Alarm("b", morning, "tea", "timer", "en"),
+              Alarm("c", tomorrow, "Dentist", "reminder", "en")]
+    assert paper.reminders_on(alarms, DAY) == ["08:30 Water the plants"]
 
 
 class FakePrinter:
-    def __init__(self, fail=False):
-        self.printed, self.fail = [], fail
+    def __init__(self):
+        self.calls = []
 
-    def print_file(self, path):
-        if self.fail:
-            raise PrintError("printer is out of paper")
-        self.printed.append(path)
-        return "office-12"
+    def print_pdf(self, html, out):
+        self.calls.append((html, out))
+        out.write_bytes(b"%PDF-1.7 fake")
 
 
-def make(tmp_path, fail=False, **settings):
-    cfg = config.load()
-    cfg["paper"].update(settings)
-    printer = FakePrinter(fail)
-    paper = MorningPaper(cfg, printer=printer, lock=DailyLock(tmp_path / "paper.lock"),
-                         folder=tmp_path / "paper")
-    return paper, printer
-
-
-def write_pdf(paper, day=DAY):
-    path = paper.pdf_for(day)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"%PDF-1.4\n")
-    return path
-
-
-def test_the_paper_prints_after_a_yes(tmp_path):
-    paper, printer = make(tmp_path)
-    pdf = write_pdf(paper)
-    asked = []
-    result = paper.print_today(lambda action: asked.append(action) or True, DAY)
-    assert result.startswith("printed") and "office-12" in result
-    assert printer.printed == [pdf]
-    assert asked == ["print today's morning paper"]
-
-
-def test_nothing_prints_without_a_yes(tmp_path):
-    paper, printer = make(tmp_path)
-    write_pdf(paper)
-    assert paper.print_today(lambda _action: False, DAY) == "declined"
-    assert printer.printed == []
-    # A no today does not use up the day: a later yes still prints.
-    assert paper.print_today(lambda _action: True, DAY).startswith("printed")
-
-
-def test_the_paper_never_prints_twice_in_a_day(tmp_path):
-    paper, printer = make(tmp_path)
-    write_pdf(paper)
-    paper.print_today(lambda _action: True, DAY)
-    asked = []
-    assert paper.print_today(lambda action: asked.append(action) or True, DAY) == "already printed today"
-    assert len(printer.printed) == 1 and asked == []        # and it does not even ask
-
-
-def test_the_lock_is_shared_by_every_rafiq_process(tmp_path):
-    """The timer, the voice and the terminal each make their own MorningPaper; the lock file is one."""
-    first, printer = make(tmp_path)
-    write_pdf(first)
-    first.print_today(lambda _action: True, DAY)
-    second, other_printer = make(tmp_path)
-    assert second.print_today(lambda _action: True, DAY) == "already printed today"
-    assert other_printer.printed == []
-
-
-def test_a_new_day_prints_again(tmp_path):
-    paper, printer = make(tmp_path)
-    write_pdf(paper, DAY)
-    write_pdf(paper, date(2026, 10, 11))
-    paper.print_today(lambda _action: True, DAY)
-    assert paper.print_today(lambda _action: True, date(2026, 10, 11)).startswith("printed")
-    assert len(printer.printed) == 2
-
-
-def test_no_paper_for_today_is_said_before_asking(tmp_path):
-    paper, printer = make(tmp_path)
-    asked = []
-    result = paper.print_today(lambda action: asked.append(action) or True, DAY)
-    assert result.startswith("error: no paper for today") and asked == [] and printer.printed == []
-
-
-def test_a_failed_print_can_be_tried_again(tmp_path):
-    paper, _ = make(tmp_path, fail=True)
-    write_pdf(paper)
-    result = paper.print_today(lambda _action: True, DAY)
-    assert result.startswith("error") and "out of paper" in result
-    paper.printer = FakePrinter()
-    assert paper.print_today(lambda _action: True, DAY).startswith("printed")
-
-
-def test_the_file_setting_names_where_the_paper_is(tmp_path):
-    paper, _ = make(tmp_path, file=str(tmp_path / "news-{date}.pdf"))
-    assert paper.pdf_for(DAY) == tmp_path / "news-2026-10-10.pdf"
-
-
-def test_after_the_brief_only_when_asked_for(tmp_path):
-    paper, printer = make(tmp_path)
-    write_pdf(paper)
-    assert paper.after_brief(lambda _action: True, DAY) is None and printer.printed == []
-    paper, printer = make(tmp_path, after_brief=True)
-    assert paper.after_brief(lambda _action: True, DAY).startswith("printed")
-    assert paper.after_brief(lambda _action: True, DAY) == "already printed today"     # the second brief
-
-
-def test_cups_runs_lp_with_an_argument_list():
-    calls = []
-
-    def run(args, **kwargs):
-        calls.append((args, kwargs))
-        return subprocess.CompletedProcess(args, 0, "request id is Office-12 (1 file(s))\n", "")
-
-    assert CupsPrinter("Office", run=run).print_file("/tmp/p.pdf") == "Office-12"
-    args, kwargs = calls[0]
-    assert args == ["lp", "-d", "Office", "--", "/tmp/p.pdf"] and kwargs["timeout"] and not kwargs.get("shell")
-    CupsPrinter(run=run).print_file("/tmp/p.pdf")
-    assert calls[1][0] == ["lp", "--", "/tmp/p.pdf"]          # the default printer
-
-
-@pytest.mark.parametrize("outcome", [
-    subprocess.CompletedProcess([], 1, "", "lp: The printer or class does not exist."),
-    FileNotFoundError("lp"),
-    subprocess.TimeoutExpired("lp", 30),
-])
-def test_cups_failures_are_print_errors(outcome):
-    def run(args, **kwargs):
-        if isinstance(outcome, Exception):
-            raise outcome
-        return outcome
-
-    with pytest.raises(PrintError):
-        CupsPrinter(run=run).print_file("/tmp/p.pdf")
-
-
-def test_the_timer_offers_at_the_chosen_time():
-    units = timer_units("07:30", "/usr/bin/python3")
-    assert "OnCalendar=*-*-* 07:30:00" in units["rafiq-paper.timer"]
-    assert "ExecStart=/usr/bin/python3 -m rafiq paper offer" in units["rafiq-paper.service"]
-
-
-@pytest.mark.parametrize("bad", ["7", "25:00", "07:60", "seven", "07:30; rm -rf ~"])
-def test_the_timer_needs_a_real_time(bad):
-    with pytest.raises(ValueError):
-        timer_units(bad, "/usr/bin/python3")
-
-
-def test_rafiq_paper_timer_writes_the_systemd_units(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    assert main(["paper", "timer", "--at", "06:45"]) == 0
-    timer = tmp_path / "xdg" / "systemd" / "user" / "rafiq-paper.timer"
-    assert "06:45:00" in timer.read_text()
-    assert "systemctl --user enable --now rafiq-paper.timer" in capsys.readouterr().out
-
-
-def test_rafiq_paper_print_asks_in_the_terminal(tmp_path, monkeypatch, capsys):
+def test_make_writes_html_and_hands_it_to_the_printer(tmp_path):
     printer = FakePrinter()
-    monkeypatch.setattr(paper_mod, "CupsPrinter", lambda name="": printer)
-    write_pdf(MorningPaper(config.load(), printer=printer), date.today())
-    monkeypatch.setattr("builtins.input", lambda _prompt: "no")
-    assert main(["paper", "print"]) == 1 and printer.printed == []
-    monkeypatch.setattr("builtins.input", lambda _prompt: "yes")
-    assert main(["paper", "print"]) == 0 and len(printer.printed) == 1
+    out = paper.make(paper.demo_edition(DAY), tmp_path / "paper.pdf", printer)
+    assert out.read_bytes().startswith(b"%PDF")
+    assert "<html" in printer.calls[0][0]
 
 
-def test_the_print_tool_asks_first_and_prints(tmp_path, monkeypatch):
-    tools = load_all(config.load())
-    tool = tools["print_paper"]
-    assert tool.action({}) == "print today's morning paper"
-    printer = FakePrinter()
-    monkeypatch.setattr(paper_mod, "CupsPrinter", lambda name="": printer)
-    cfg = config.load()
-    write_pdf(MorningPaper(cfg, printer=printer), date.today())
-    ctx = type("Ctx", (), {"cfg": cfg})()
-    assert tool.run({}, ctx).startswith("printed") and len(printer.printed) == 1
+def test_make_html_only_needs_no_printer(tmp_path):
+    out = paper.make(paper.demo_edition(DAY), tmp_path / "paper.html", None)
+    assert out.read_text(encoding="utf-8").startswith("<!doctype html>")
 
 
-def test_the_paper_phrases_exist_in_every_language():
-    for key in ("paper_printed", "paper_failed"):
-        for tag in lang.TAGS:
-            assert key in lang.PHRASES and tag in lang.PHRASES[key], (key, tag)
+def test_missing_chromium_gives_a_clear_error(monkeypatch, tmp_path):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_playwright(name, *args, **kwargs):
+        if name.startswith("playwright"):
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_playwright)
+    with pytest.raises(paper.PrintError, match="playwright install chromium"):
+        paper.ChromiumPrinter().print_pdf("<html></html>", tmp_path / "x.pdf")
 
 
-@pytest.mark.parametrize("printed, said", [("printed (job 1)", "paper_printed"),
-                                           ("error: printing failed: jam", "paper_failed"),
-                                           ("already printed today", None), ("declined", None)])
-def test_the_running_rafiq_says_how_the_offer_went(printed, said):
-    from rafiq.assistant import Assistant, Events
-
-    spoken = []
-    fake = type("A", (), {})()
-    fake.tag, fake.events = "en", Events()
-    fake.paper = type("P", (), {"print_today": lambda self, confirm: printed})()
-    fake.confirm = lambda action, tag: True
-    fake.say = lambda text, tag: spoken.append(text)
-    Assistant.offer_paper(fake)
-    assert spoken == ([lang.phrase(said, "en")] if said else [])
+def test_cli_demo_html(tmp_path, capsys):
+    out = tmp_path / "demo.html"
+    assert main(["paper", "--demo", "--html", "--out", str(out)]) == 0
+    assert out.is_file() and str(out) in capsys.readouterr().out

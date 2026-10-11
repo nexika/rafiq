@@ -109,9 +109,22 @@ DEFAULTS: dict = {
               "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
-    # The morning paper on real paper: the CUPS printer (empty: the default one), where the day's PDF is
-    # ("{date}" becomes YYYY-MM-DD; empty: data/paper/<date>.pdf), and whether to offer it after the brief.
-    "paper": {"printer": "", "file": "", "after_brief": False},
+    # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
+    "spotify": {"enabled": False, "client_id": "", "port": 8888},
+    "paper": {
+        "title": "Rafiq",
+        "languages": [],                 # e.g. ["en", "ar"] for a bilingual paper; empty: the first speech language
+        "feeds": [],                     # RSS or Atom addresses for the news section
+        "tech_feeds": [],
+        "max_articles": 6,               # per section
+        "priorities": [],
+        "deadlines": [],                 # [{title = "Tax return", date = "2026-10-15"}]
+        # Printing with CUPS: the printer (empty: the default one), the PDF to print ("{date}" becomes
+        # YYYY-MM-DD; empty: data/paper/<date>.pdf), and whether to offer it after the brief.
+        "printer": "",
+        "file": "",
+        "after_brief": False,
+    },
     "deadlines": {
         "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}
         "cache_minutes": 15,

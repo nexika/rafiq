@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .. import paper
+from .. import paper_print as paper
 from . import tool
 
 
