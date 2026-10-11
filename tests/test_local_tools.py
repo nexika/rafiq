@@ -75,14 +75,14 @@ def test_the_setting_picks_the_tools(choice, names):
 def test_ollama_gets_the_local_set_by_default(ollama):
     script, requests = ollama
     script += [{"role": "assistant", "content": "hi"}]
-    make_brain(timer_tools([])).think("hello", "en")
+    make_brain(timer_tools([]), routing=False).think("hello", "en")
     assert [t["function"]["name"] for t in requests[0]["tools"]] == ["set_timer"]
 
 
 def test_all_tools_can_still_be_sent_to_ollama(ollama):
     script, requests = ollama
     script += [{"role": "assistant", "content": "hi"}]
-    make_brain(timer_tools([]), ollama_tools="all").think("hello", "en")
+    make_brain(timer_tools([]), ollama_tools="all", routing=False).think("hello", "en")
     assert len(requests[0]["tools"]) == 2
 
 

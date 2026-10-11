@@ -86,6 +86,7 @@ def test_a_slow_tool_announces_a_waiting_phrase_and_each_result_carries_its_card
                                                     {"function": {"name": "get_time", "arguments": {}}}]},
                {"role": "assistant", "content": "Done."}]
     brain = make_brain()
+    brain.cfg["brain"]["routing"] = False      # "cherche" alone would offer only the web tools
     brain.on_event = lambda kind, data: events.append((kind, data))
     brain.think("cherche", "fr")
     waits = [d for k, d in events if k == "waiting"]

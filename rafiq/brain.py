@@ -2,6 +2,8 @@
 
 Both backends get the same system prompt and the same tools. A turn loops: the model asks for tools,
 Rafiq runs them (asking the user first for any that change something), the model answers in words.
+Before that, the router picks the tools a request needs, so a simple request reaches the model with
+a short list, or none for small talk.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
-from . import modes, persona
+from . import modes, persona, router
 from .tools import Tool, claude_schemas, local_tools, ollama_schemas
 
 HISTORY_TURNS = 10
@@ -164,15 +166,21 @@ class Brain:
     def think(self, text: str, tag: str, ctx=None) -> str:
         """Answer one thing the user said. Tries Claude, then Ollama in auto mode."""
         history = self.memory.recent(self.clock(), tag)
+        if self.cfg["brain"].get("routing", True):
+            route = router.route(text, self.tools)
+        else:
+            route = router.Route("all", self.tools)
         limits = self.cfg["brain"]["limits"]
         deadline = self.clock() + limits["max_seconds"]
         errors = []
         for backend in self.backends():
             try:
                 run = self._claude_turn if backend == "claude" else self._ollama_turn
-                answer = run(history, text, tag, ctx, Budget(limits, self.clock, deadline))
+                # A local model gets its smaller set when the router kept every tool.
+                tools = self.local_tools() if backend == "ollama" and route.name == "all" else route.tools
+                answer = run(history, text, tag, ctx, tools, Budget(limits, self.clock, deadline))
                 self.memory.add(text, answer, self.clock(), tag)
-                self.on_event("brain", {"backend": backend})
+                self.on_event("brain", {"backend": backend, "route": route.name})
                 return answer
             except LimitReached as exc:
                 self.on_event("error", {"error": f"{backend} stopped: {exc}"})
@@ -190,8 +198,9 @@ class Brain:
 
     # ------------------------------------------------------------------ tools
 
-    def _run_tool(self, name: str, args: dict, tag: str, ctx) -> str:
-        tool = self.tools.get(name)
+    def _run_tool(self, name: str, args: dict, tag: str, ctx, tools: dict[str, Tool]) -> str:
+        """Run a tool the model asked for; only the ones it was offered for this request."""
+        tool = tools.get(name)
         if tool is None:
             return f"error: there is no tool named {name}"
         action = tool.action(args)
@@ -236,18 +245,20 @@ class Brain:
             self._claude = anthropic.Anthropic(api_key=self.cfg["anthropic_api_key"], max_retries=1, timeout=30)
         return self._claude
 
-    def _claude_turn(self, history: list[Turn], text: str, tag: str, ctx, budget: Budget) -> str:
+    def _claude_turn(self, history: list[Turn], text: str, tag: str, ctx, tools: dict[str, Tool],
+                     budget: Budget) -> str:
         import anthropic
 
         messages = ([{"role": t.role, "content": t.content} for t in history]
                     + [{"role": "user", "content": self._note(text, tag)}])
-        schemas = claude_schemas(self.tools)
+        # The API wants no tools field at all rather than an empty list.
+        extra = {"tools": claude_schemas(tools)} if tools else {}
         while True:
             wait = budget.next_round(30)
             try:
                 resp = self._claude_client().messages.create(
                     model=self.claude_model(), max_tokens=self.cfg["brain"]["max_tokens"],
-                    system=system_prompt(self.cfg), tools=schemas, messages=messages, timeout=wait)
+                    system=system_prompt(self.cfg), messages=messages, timeout=wait, **extra)
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
@@ -256,19 +267,20 @@ class Brain:
                 return " ".join(b.text for b in resp.content if b.type == "text").strip()
             budget.tool_calls(len(calls))
             messages.append({"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": c.id, "content": self._run_tool(c.name, c.input or {}, tag, ctx)}
+                {"type": "tool_result", "tool_use_id": c.id,
+                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools)}
                 for c in calls]})
 
     # ------------------------------------------------------------------ Ollama
 
-    def _ollama_turn(self, history: list[Turn], text: str, tag: str, ctx, budget: Budget) -> str:
+    def _ollama_turn(self, history: list[Turn], text: str, tag: str, ctx, tools: dict[str, Tool],
+                     budget: Budget) -> str:
         import httpx
 
         brain = self.cfg["brain"]
         messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
                     + [{"role": t.role, "content": t.content} for t in history]
                     + [{"role": "user", "content": self._note(text, tag)}])
-        tools = self.local_tools()
         schemas = ollama_schemas(tools)
         retried = False
         while True:
@@ -299,5 +311,5 @@ class Brain:
                     self.on_event("tool", {"name": name, "args": fn.get("arguments"), "result": problem})
                     result = f"error: {problem}. Call {name} again with valid JSON arguments."
                 else:
-                    result = self._run_tool(name, args, tag, ctx)
+                    result = self._run_tool(name, args, tag, ctx, tools)
                 messages.append({"role": "tool", "tool_name": name, "content": result})

@@ -23,6 +23,8 @@ DEFAULTS: dict = {
         "ollama_url": "http://127.0.0.1:11434",
         "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names
         "max_tokens": 600,
+        # Offer the model only the tools a request needs (none for small talk); off: every tool, always.
+        "routing": True,
         # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
         # model rounds, tool calls in all, and seconds from the request to the answer.
         "limits": {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120},
