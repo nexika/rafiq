@@ -119,10 +119,16 @@ rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
+rafiq mute                # stop listening, or start again (rafiq mute on / off to choose)
 ```
 
 **A keyboard shortcut** is the most reliable way to call it: in GNOME, Settings → Keyboard → Custom
-Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
+Shortcuts, command `/path/to/rafiq/.venv/bin/rafiq listen`, keys such as Super+R. Add a second one
+for `rafiq mute`, such as Ctrl+Alt+M (GNOME on Wayland does not let apps grab keys themselves). While
+muted Rafiq ignores the microphone, even its name; the Talk button and `rafiq listen` still work once.
+
+Say **"go to sleep"** ("نام", "mets-toi en veille") to end a conversation at once: Rafiq stops waiting
+for a follow-up and drops a question it was asking before an action.
 
 **To interrupt Rafiq**, say "stop", "attends", "espera", "warte", "توقف" or "استنى" while it speaks.
 The microphone stays open: you must be about 1.8 times louder than Rafiq's own voice (`[interruption]
