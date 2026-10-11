@@ -97,8 +97,8 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google, Home Assistant, Hue and presence only when they are set up. The
-    scene tool names the scenes in the config, so the brain knows which exist."""
+    """Import every skill module; Google, Home Assistant, Hue, the smart plugs and presence only when they
+    are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
     from . import background, everyday, memory, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
@@ -114,6 +114,12 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         from . import hue  # noqa: F401
     else:
         off.add(f"{__name__}.hue")
+    if cfg.get("plugs"):
+        from . import plugs
+
+        plugs.configure(cfg)
+    else:
+        off.add(f"{__name__}.plugs")
     if cfg.get("presence", {}).get("phone_ip"):
         from . import presence  # noqa: F401
     else:

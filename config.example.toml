@@ -135,6 +135,13 @@ enabled = false                 # true after `rafiq hue-setup`
 # "الصالة" = "Living room"
 # "chambre" = "Bedroom"
 
+# Smart plugs: one [[plugs]] block per plug. See the README for Home Assistant.
+# [[plugs]]
+# name = "PC"
+# kind = "shelly"               # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
+# host = "192.168.1.40"
+# ask_before_off = true         # confirm out loud before turning it off
+
 [presence]                      # react when your phone leaves or comes home (see the README)
 phone_ip = ""                   # the phone's fixed IP, e.g. "192.168.1.20"; empty: off
 phone_mac = ""                  # optional; only this MAC counts

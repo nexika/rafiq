@@ -25,6 +25,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
+| Smart plugs | "turn on the desk lamp", "how much is the PC drawing?", "turn off the PC plug" (asks first when you mark it so) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -309,6 +310,33 @@ your network directly; no Hue cloud account is used.
 
 Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
 Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
+## Smart plugs and energy meters
+
+Shelly and Tasmota plugs are reached over their local HTTP API, with no cloud; anything else can go
+through Home Assistant. List each plug under `[[plugs]]` with the name you will say:
+
+```toml
+[[plugs]]
+name = "PC"
+kind = "shelly"                 # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
+host = "192.168.1.40"
+ask_before_off = true           # confirm out loud before turning it off
+
+[[plugs]]
+name = "heater"
+kind = "home-assistant"
+entity = "switch.heater"
+power_entity = "sensor.heater_power"   # optional, W or kW
+energy_entity = "sensor.heater_energy" # optional, kWh
+
+[home_assistant]
+url = "http://homeassistant.local:8123"
+token = ""                      # a long-lived access token, or set HOME_ASSISTANT_TOKEN
+```
+
+Rafiq only picks a plug by its name, never an address. Plugs protected by a password are not
+supported yet.
 
 ## Settings
 

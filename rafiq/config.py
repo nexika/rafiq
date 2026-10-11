@@ -130,6 +130,7 @@ DEFAULTS: dict = {
         "ask_first": True,               # ask before each screenshot that goes to the cloud
         "max_side": 1568,                # shrink the screenshot to this many pixels on its long side
     },
+    "plugs": [],                         # smart plugs, one table each; see the README
     "anthropic_api_key": "",
     "openai_api_key": "",
 }
