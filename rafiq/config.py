@@ -104,6 +104,13 @@ DEFAULTS: dict = {
     "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
     "hue": {"enabled": False, "rooms": {}},
+    "screen": {
+        # Questions about the screen go to Claude (in the cloud), and never while offline unless a
+        # local vision model is set: an Ollama model that reads images, e.g. "qwen2.5vl:7b".
+        "ollama_model": "",
+        "ask_first": True,               # ask before each screenshot that goes to the cloud
+        "max_side": 1568,                # shrink the screenshot to this many pixels on its long side
+    },
     "anthropic_api_key": "",
     "openai_api_key": "",
 }

@@ -17,6 +17,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 |---|---|
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
+| The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
@@ -211,6 +212,9 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
+  asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
+  in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
 - What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
   read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
   each request, never as instructions.
