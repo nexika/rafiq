@@ -7,6 +7,11 @@ Only this computer can reach it, and only the page it serves can drive it: every
 the random token embedded in that page, and the Host header must be the panel's own address (so a
 web site that rebinds its name to 127.0.0.1 is refused). The hand-gesture tracker posts labels to
 /api/gesture with a token of its own, made each time it starts, which opens nothing else.
+
+Besides the conversation, the page has three more: models (Ollama and Whisper), status (is each part
+up) and permissions (each tool's level, remembered approvals). They read with GET and the token in
+the X-Rafiq-Token header; changes are POSTs to the paths listed in WRITES, with names checked against
+what is offered, so nothing else can be changed through the panel.
 """
 
 from __future__ import annotations
@@ -18,10 +23,32 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import lang, modes, persona, subscriptions
+from . import lang, modes, permissions, persona, status, subscriptions
 from .brain import BrainError
 
 MAX_BODY = 10_000
+
+# The panel's changes besides talking: path -> what it does with the name sent.
+WRITES = {
+    "/api/models/install": lambda a, name: a.models.install(name),
+    "/api/models/benchmark": lambda a, name: a.models.benchmark(name),
+    "/api/models/delete": lambda a, name: a.models.delete(name),
+    "/api/models/activate": lambda a, name: a.models.activate(name),
+    "/api/whisper/activate": lambda a, name: a.models.activate_whisper(name),
+    "/api/permissions/revoke": lambda a, name: a.approvals.revoke(name),
+}
+
+
+def page_data(assistant, path: str) -> dict | None:
+    """What the models, status and permissions pages show; None for an unknown page."""
+    if path == "/api/models":
+        return {"ollama": assistant.models.ollama_page(), "whisper": assistant.models.whisper_page()}
+    if path == "/api/status":
+        return {"parts": status.check_all(assistant.cfg, assistant.models, assistant.speaker)}
+    if path == "/api/permissions":
+        return {"tools": permissions.levels(assistant.tools, assistant.approvals),
+                "remembered": assistant.approvals.names()}
+    return None
 
 
 def make_handler(assistant, token: str, port: int):
@@ -66,10 +93,16 @@ def make_handler(assistant, token: str, port: int):
                     summary = subscriptions.summary(subscriptions.default_store())
                     return self._send(200, json.dumps(summary, ensure_ascii=False).encode())
                 return self._stream()
-            if url.path == "/api/status":
+            if url.path == "/api/settings":     # what the settings drawer shows
                 if not self._token_ok(self.headers.get("X-Rafiq-Token")):
                     return self._send(403, b'{"error":"token"}')
                 return self._send(200, json.dumps(assistant.status(), ensure_ascii=False).encode())
+            if url.path.startswith("/api/"):
+                if not self._token_ok(self.headers.get("X-Rafiq-Token")):
+                    return self._send(403, b'{"error":"token"}')
+                data = page_data(assistant, url.path)
+                if data is not None:
+                    return self._send(200, json.dumps(data, ensure_ascii=False).encode())
             return self._send(404, b'{"error":"not found"}')
 
         def _stream(self) -> None:
@@ -131,7 +164,7 @@ def make_handler(assistant, token: str, port: int):
             elif path == "/api/mute" and isinstance(data.get("muted", False), bool):
                 assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
-                assistant.pending_answer.put(data["yes"])
+                assistant.pending_answer.put("always" if data["yes"] and data.get("always") is True else data["yes"])
             elif path == "/api/show":
                 assistant.submit("show_again")
             elif path == "/api/paper":
@@ -167,6 +200,11 @@ def make_handler(assistant, token: str, port: int):
                     return self._send(400, json.dumps({"error": str(exc)}).encode())
                 assistant.events.publish("brain", {"backend": data["backend"], "mode": data["backend"],
                                                    "model": data["model"]})
+            elif path in WRITES and isinstance(data.get("name"), str):
+                try:
+                    WRITES[path](assistant, data["name"])
+                except ValueError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             return self._send(200, b'{"ok":true}')

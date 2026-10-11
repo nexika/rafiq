@@ -202,10 +202,12 @@ def check_arguments(tool: Tool | None, raw) -> tuple[dict, str | None]:
 class Brain:
     def __init__(self, cfg: dict, tools: dict[str, Tool], confirm: Callable[[str, str], bool],
                  on_event: Callable[[str, dict], None] | None = None, clock=time.time, facts: Facts | None = None,
-                 budget=None):
+                 budget=None, approvals=None):
         self.cfg, self.tools, self.confirm = cfg, tools, confirm
         self.facts = facts
         self.budget = budget                 # charged for each Claude response; at its cap, offline only
+        # confirm answers True, False, or "always" (yes, and remember it in `approvals`).
+        self.approvals = approvals
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
@@ -346,9 +348,13 @@ class Brain:
         if tool is None:
             return f"error: there is no tool named {name}"
         action = tool.action(args, ctx)
-        if action and not self.confirm(action, tag):
-            self.on_event("tool", {"name": name, "args": args, "result": "declined"})
-            return "The user said no; it was not done. Tell them briefly that you didn't do it."
+        if action and not (self.approvals and self.approvals.allowed(name)):
+            answer = self.confirm(action, tag)
+            if not answer:
+                self.on_event("tool", {"name": name, "args": args, "result": "declined"})
+                return "The user said no; it was not done. Tell them briefly that you didn't do it."
+            if answer == "always" and self.approvals:
+                self.approvals.remember(name)
         self.on_event("tool_start", {"name": name})
         if tool.slow:
             self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag})

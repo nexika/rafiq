@@ -204,14 +204,14 @@ def request(port, path, body=None, token="t" * 40):
 
 def test_the_status_carries_settings_but_no_key(panel):
     _, port = panel
-    status, body = request(port, "/api/status")
+    status, body = request(port, "/api/settings")
     assert status == 200 and json.loads(body)["settings"]["brain.mode"] == "auto"
     assert "sk-secret" not in body
 
 
 def test_the_status_needs_the_token(panel):
     _, port = panel
-    assert request(port, "/api/status", token=None)[0] == 403
+    assert request(port, "/api/settings", token=None)[0] == 403
 
 
 def test_the_panel_changes_an_allowlisted_setting(panel):

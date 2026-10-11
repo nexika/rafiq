@@ -59,7 +59,7 @@ class FakeSpeaker:
 
 
 class FakeBrain:
-    def __init__(self, cfg, tools, confirm, on_event=None, facts=None, budget=None):
+    def __init__(self, cfg, tools, confirm, on_event=None, facts=None, budget=None, approvals=None):
         self.asked = []
 
     def backends(self):
