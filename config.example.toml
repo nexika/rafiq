@@ -225,3 +225,9 @@ tls_key = ""
 [agent]                         # rafiq agent: lend this PC to a server; the token goes in RAFIQ_AGENT_TOKEN
 server = ""                     # e.g. "http://100.101.12.3:8766"
 name = ""                       # as given to `rafiq agent-token NAME` on the server
+
+[gestures]
+enabled = false                 # webcam hand gestures at start (pip install -e ".[gestures]"); see README
+hold_seconds = 0.6              # how long to hold a gesture; `rafiq gestures calibrate` tunes these
+cooldown_seconds = 1.0          # the pause before the next gesture counts
+camera = 0                      # which webcam

@@ -95,6 +95,8 @@ DEFAULTS: dict = {
         "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
     },
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # Hand gestures through the webcam (pip install rafiq[gestures]); on at start, or by voice or shortcut.
+    "gestures": {"enabled": False, "hold_seconds": 0.6, "cooldown_seconds": 1.0, "camera": 0},
     # Devices in other rooms that hear "Rafiq" and send the request here (rafiq satellite on the device).
     # devices: name -> {token, room, blocked_tools = [...], risky = "ask" or "block"}. The hub starts
     # only when a device is listed; set host to this computer's address on a private network, or set
