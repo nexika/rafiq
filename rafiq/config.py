@@ -97,6 +97,8 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
+    "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     "anthropic_api_key": "",
     "openai_api_key": "",
 }

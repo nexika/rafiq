@@ -15,7 +15,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 
 | Skill | Examples |
 |---|---|
-| This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first) |
+| This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |

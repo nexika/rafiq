@@ -78,6 +78,14 @@ port = 8765
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
+[wake_on_lan]                   # "wake the gaming PC"; see docs/wake-on-lan.md
+broadcast = "255.255.255.255"   # or your network's, e.g. "192.168.1.255"
+port = 9
+
+[wake_on_lan.machines]          # name -> network card address (`ip link` on that computer)
+# "gaming pc" = "aa:bb:cc:dd:ee:ff"
+# nas = { mac = "11:22:33:44:55:66", broadcast = "192.168.2.255" }
+
 # Games and launchers the app menu does not show. "Launch Borderlands" opens them; "add an app called X"
 # adds one to apps.json in this folder, after asking. Each runs as an argument list, never a shell line.
 # [apps."Borderlands 2"]
