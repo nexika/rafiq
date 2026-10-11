@@ -11,6 +11,7 @@ from rafiq import config
 from rafiq.assistant import Events
 from rafiq.brain import Brain
 from rafiq.panel import serve
+from rafiq.reader import Reader, Segment
 from rafiq.tools import Tool
 
 
@@ -229,10 +230,14 @@ class FakeAssistant:
 
         self.pending_answer = queue.Queue()
         self.speaker = type("S", (), {"stop": lambda self: None})()
+        self.reader = Reader(interrupt=lambda: None)
 
     def submit(self, kind, **data):
         self.jobs.append((kind, data))
 
+    def set_project(self, path):
+        self.jobs.append(("project", {"path": path}))
+        return "error: not a folder" if path == "/nowhere" else path
     def set_muted(self, muted=None):
         self.jobs.append(("mute", {"muted": muted}))
 
@@ -280,6 +285,14 @@ def test_the_dictate_button_and_shortcut_are_queued_for_the_assistant(panel):
     assert assistant.jobs == [("dictate", {})]
 
 
+def test_the_project_folder_is_set_from_the_panel(panel):
+    assistant, port = panel
+    assert request(port, "/api/project", {"path": "/home/me/code"})[0] == 200
+    assert request(port, "/api/project", {"path": "/nowhere"})[0] == 400
+    assert request(port, "/api/project", {"path": 3})[0] == 400
+    assert assistant.jobs == [("project", {"path": "/home/me/code"}), ("project", {"path": "/nowhere"})]
+
+
 def test_the_morning_paper_timers_offer_reaches_the_running_rafiq(panel):
     assistant, port = panel
     assert request(port, "/api/paper", {})[0] == 200
@@ -307,6 +320,25 @@ def test_another_host_name_is_refused(panel):
     assert request(port, "/", host=f"evil.example:{port}")[0] == 403
     assert request(port, "/api/listen", {}, host="evil.example")[0] == 403
     assert assistant.jobs == []
+
+
+def test_the_panel_pauses_resumes_skips_and_stops_the_reading(panel):
+    assistant, port = panel
+    assistant.reader.load([Segment("One.", "en"), Segment("Two.", "en"), Segment("Three.", "en")])
+    assert request(port, "/api/reading", {"action": "pause"})[0] == 200
+    assert assistant.reader.state == "paused"
+    assert request(port, "/api/reading", {"action": "skip"})[0] == 200
+    assert assistant.reader.index == 1
+    assert request(port, "/api/reading", {"action": "resume"})[0] == 200
+    assert assistant.reader.active and assistant.jobs == [("read", {})]
+    assert request(port, "/api/stop", {})[0] == 200
+    assert not assistant.reader.active
+    assert assistant.events.history[-1]["state"] == "idle"   # the panel hides its reading controls
+
+
+def test_an_unknown_reading_action_is_refused(panel):
+    _, port = panel
+    assert request(port, "/api/reading", {"action": "explode"})[0] == 400
 
 
 def test_the_panel_will_not_listen_beyond_this_computer():

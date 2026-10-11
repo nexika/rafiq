@@ -109,6 +109,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
     from . import (  # noqa: F401  (registers the tools)
         background,
         content,
+        dev,
         everyday,
         finance,
         lists,
@@ -117,6 +118,8 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         notes,
         paper,
         pc,
+        practice,
+        reading,
         scenes,
         screen,
         spending,

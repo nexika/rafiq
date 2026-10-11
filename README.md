@@ -21,6 +21,9 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Language practice | "let's practise French, level A2, about food": a simple conversation with short spoken corrections (the full list in the panel, slower voice for A1 and A2), then "let's stop" lists what to work on; common mistakes are kept in `data/practice.json` |
+| Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
+| Your project | "run the tests", "what's my git status?", "why did CI fail?", "what's on my PR?", through Nexika's barq, tabib and mizan when they are on the PATH; set the project folder in the panel or as `[dev] project` |
 | Interpreter | "interpret between me and her, Egyptian and German", "ترجم بيني وبينه بالمصري والفرنساوي": each turn is said in the other language until someone says "stop" or "كفاية" |
 | Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
@@ -204,7 +207,10 @@ factor`). With PipeWire, `pactl load-module module-echo-cancel` removes most of 
 listens through it on its own. `enabled = false` mutes the microphone while Rafiq speaks, as before.
 
 The **panel** shows what Rafiq heard, said and which tools it used, with a Talk button, a text box,
-Yes/No buttons when it asks before an action, and the choice of style. Its other pages:
+Yes/No buttons when it asks before an action, and the choice of style. While it reads aloud, it shows Pause/Resume, Skip and
+Stop. The microphone is off while Rafiq speaks, so a reading is paused from the panel; "Rafiq, resume
+reading" or "stop reading" work once it is paused. The selection needs `wl-clipboard` (Wayland) or
+`xclip`/`xsel` (X11); PDFs need `pip install 'rafiq[pdf]'`. Its other pages:
 
 - **Models**: the Ollama models with what fits this computer's memory; install, benchmark, activate
   and delete them, and pick the Whisper model that hears you. Choices are kept in
@@ -226,6 +232,18 @@ subscription updates it and raises the "amount changed" alert.
 timer or music when the answer used one. It never takes the focus, and the next answer replaces it.
 Say "show it again" (or run `rafiq show`) to bring back the last one. With `silent = true` under
 `[overlay]` Rafiq answers on screen only; `display = "off"` turns the notifications off.
+
+**Spoken notifications** tell you when a long job ends, so you can stop watching terminals:
+
+```bash
+rafiq notify --done "the benchmark"   # "Finished: the benchmark", in the language you last spoke
+make test; rafiq notify --failed tests
+rafiq mute                            # muted: shown in the panel, not spoken
+rafiq hooks claude-code               # a Claude Code Stop hook ("Finished: Claude Code")
+rafiq hooks shell                     # `announce <command>` and `watch-ci` (GitHub Actions) for your shell
+```
+
+Set `notify.quiet_hours = "22:00-07:00"` in the config to keep them silent at night.
 
 ## The wake word
 
@@ -389,6 +407,7 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - "What's the weather?" with no city set asks GNOME's location service, at city accuracy. Your IP
   is sent to a lookup service (ipapi.co) only if you set `ip_lookup = true` under `[place]`.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
+  The project tools only read (tests, git status, CI, PR); the model picks the question, never the command.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
 - The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.

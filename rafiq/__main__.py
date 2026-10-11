@@ -1,5 +1,5 @@
-"""rafiq run | ask | say | dictate | show | paper | agent | agent-token | satellite | gestures | doctor |
-status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
+"""rafiq run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite | gestures |
+doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
 install-service | uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
@@ -399,6 +399,19 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
+def cmd_notify(args) -> int:
+    """Tell the running Rafiq that a long job ended; it says so unless muted or in quiet hours."""
+    return _ask_running("/api/notify", {"text": " ".join(args.text), "event": args.event or "",
+                                        "lang": args.lang})
+
+
+def cmd_hooks(args) -> int:
+    from .notify import HOOKS
+
+    print(HOOKS[args.kind], end="")
+    return 0
+
+
 def cmd_status(_args) -> int:
     """Is Rafiq up, and is it safe? Works over SSH on a server without a screen."""
     from . import hosting
@@ -731,6 +744,18 @@ def main(argv=None) -> int:
     say.add_argument("text", nargs="+")
     say.add_argument("--lang", choices=lang.TAGS, default="en")
     say.set_defaults(fn=cmd_say)
+    notify = sub.add_parser("notify", help="have the running Rafiq say that a long job ended")
+    notify.add_argument("text", nargs="+")
+    event = notify.add_mutually_exclusive_group()
+    event.add_argument("--done", dest="event", action="store_const", const="done",
+                       help='say "Finished: TEXT" in your language')
+    event.add_argument("--failed", dest="event", action="store_const", const="failed",
+                       help='say "Failed: TEXT" in your language')
+    notify.add_argument("--lang", choices=lang.TAGS, help="default: the language you last spoke")
+    notify.set_defaults(fn=cmd_notify)
+    hooks = sub.add_parser("hooks", help="print a ready-made hook that calls rafiq notify")
+    hooks.add_argument("kind", choices=("claude-code", "shell"))
+    hooks.set_defaults(fn=cmd_hooks)
     enroll = sub.add_parser("enroll", help="record yourself saying the name, for a reliable wake word")
     enroll.add_argument("--forms", nargs="+", help='the ways you call it (default: "Rafiq" "يا رفيق")')
     enroll.add_argument("--takes", type=int, default=3, help="recordings of each form (default 3)")

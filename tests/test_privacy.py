@@ -2,11 +2,13 @@ import logging
 import os
 import queue
 import time
+from pathlib import Path
 
 import pytest
 
 from rafiq import privacy
 from rafiq.assistant import Assistant, Events
+from rafiq.practice import Practice
 
 
 @pytest.mark.parametrize("text, hidden, mark", [
@@ -95,6 +97,7 @@ class FakeSpeaker:
 def bare_assistant():
     """An Assistant without a microphone, models or speaker: only what running jobs needs."""
     a = Assistant.__new__(Assistant)
+    a.practice = Practice(Path("practice.json"))   # no session running
     a.events, a.jobs, a.speaker, a.state = Events(), queue.Queue(), FakeSpeaker(), "idle"
     a.silent, a.muted, a.dictating = False, False, False
     return a

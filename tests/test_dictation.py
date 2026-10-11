@@ -139,9 +139,11 @@ class FakeKeyboard:
 def assistant():
     """An Assistant without microphone, models or speaker: each utterance is the text it would be heard as."""
     import queue
+    from pathlib import Path
 
     from rafiq import config
     from rafiq.assistant import Assistant, Context, Events
+    from rafiq.practice import Practice
     from rafiq.stt import Heard
 
     a = Assistant.__new__(Assistant)
@@ -151,6 +153,7 @@ def assistant():
     a.keyboard, a.dictating, a.follow_up_until = FakeKeyboard(), False, 0.0
     a._stop = __import__("threading").Event()
     a.stt_lock, a.muted = __import__("threading").Lock(), False
+    a.practice = Practice(Path("practice.json"))   # no session running
     a.spoken, a.utterances = [], []
     a.say = lambda text, tag: a.spoken.append((text, tag))
     a.brain = type("B", (), {"think": lambda self, *args: pytest.fail("dictation went to the brain")})()
