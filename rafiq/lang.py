@@ -191,6 +191,12 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "at_home": {"en": "I can't do that from your phone; do that at home by voice.",
+                "fr": "Je ne peux pas le faire depuis ton téléphone ; fais-le à la maison, à voix haute.",
+                "es": "No puedo hacerlo desde tu móvil; hazlo en casa, de viva voz.",
+                "de": "Das geht nicht vom Handy aus; mach das zu Hause per Sprache.",
+                "ar": "لا أستطيع فعل ذلك من هاتفك؛ اطلبه مني في البيت بصوتك.",
+                "ar-EG": "مش هقدر أعمل كده من الموبايل؛ اطلبها مني في البيت بصوتك."},
     # Said before a slow tool that has no waiting phrase of its own (see Tool.waiting_phrase).
     "wait": {"en": "One moment.", "fr": "Un instant.", "es": "Un momento.", "de": "Einen Moment.",
              "ar": "لحظة من فضلك.", "ar-EG": "ثانية واحدة."},
