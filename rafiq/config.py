@@ -105,6 +105,8 @@ DEFAULTS: dict = {
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
     "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
+    # accounts: usernames to report on; empty for every account linked to the token.
+    "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
     "presence": {
         "phone_ip": "",                  # the phone's fixed IP on the home Wi-Fi; empty: presence is off
         "phone_mac": "",                 # optional: only this MAC counts (turn off the phone's private MAC)

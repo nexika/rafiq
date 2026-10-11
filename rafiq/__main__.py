@@ -1,5 +1,5 @@
-"""rafiq run | ask | say | agent | agent-token | doctor | mcp | toolcheck | google-setup | hue-setup | install-service |
-uninstall-service"""
+"""rafiq run | ask | say | agent | agent-token | doctor | mcp | toolcheck | google-setup | instagram-setup |
+hue-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -300,6 +300,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    instagram = config.home() / "instagram" / "token.json"
+    _check("Instagram statistics", instagram.is_file() and cfg["instagram"].get("enabled", False),
+           "connected" if instagram.is_file() else "run: rafiq instagram-setup <token>")
     home_assistant = cfg["home_assistant"]
     _check("Home Assistant (Nest, Hue, plugs)", bool(home_assistant.get("url") and home_assistant.get("token")),
            home_assistant.get("url") or "set home_assistant.url and HOME_ASSISTANT_TOKEN")
@@ -406,6 +409,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_instagram_setup(args) -> int:
+    from .tools.instagram import setup
+
+    print(setup(args.token))
+    print("Then set [instagram] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def cmd_hue_setup(args) -> int:
     from .tools import hue
 
@@ -487,6 +498,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
+    insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")
+    insta.set_defaults(fn=cmd_instagram_setup)
     hue = sub.add_parser("hue-setup", help="pair with the Philips Hue bridge (press its link button)")
     hue.add_argument("--host", help="the bridge's address on your network (default: look for it)")
     hue.set_defaults(fn=cmd_hue_setup)
