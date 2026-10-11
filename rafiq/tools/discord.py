@@ -138,7 +138,7 @@ def digest(api, user_id: str, now: datetime) -> str:
 
 
 @tool("discord_digest", "What's new on Discord: the user's mentions in the last 24 hours and today's messages "
-      "in the channels Rafiq's bot can read. Summarise it for the user.")
+      "in the channels Rafiq's bot can read. Summarise it for the user.", level="private")
 def discord_digest(ctx=None) -> str:
     import httpx
 
