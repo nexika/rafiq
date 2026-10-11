@@ -21,6 +21,7 @@ DEFAULTS: dict = {
         "quality_model": "claude-opus-5-5",
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
+        "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names
         "max_tokens": 600,
         # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
         # model rounds, tool calls in all, and seconds from the request to the answer.

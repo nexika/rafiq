@@ -9,6 +9,7 @@ claude_model = "claude-haiku-5-5"
 quality_model = "claude-opus-5-5"   # quality mode's model
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
+ollama_tools = "local"          # the tools Ollama gets: "local" (a smaller set), "all", or a list of names
 persona = "neutral"             # neutral, concise or butler (a dry, witty butler); "be more concise" switches it by voice
 
 [brain.limits]                  # a request that keeps calling tools is stopped, and Rafiq says so
