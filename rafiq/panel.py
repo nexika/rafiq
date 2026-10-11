@@ -102,6 +102,8 @@ def make_handler(assistant, token: str, port: int):
                 assistant.submit("text", text=data["text"][:2000])
             elif path == "/api/listen":
                 assistant.submit("listen")
+            elif path == "/api/mute" and isinstance(data.get("muted", False), bool):
+                assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put(data["yes"])
             elif path == "/api/mode" and data.get("mode") in modes.MODES:

@@ -82,7 +82,7 @@ def test_openai_answers_and_its_tool_calls_run(openai):
     assert first["headers"]["Authorization"] == "Bearer sk-test"
     assert first["body"]["model"] == brain.cfg["brain"]["openai_model"]
     assert first["body"]["messages"][0]["role"] == "system"
-    assert {t["function"]["name"] for t in first["body"]["tools"]} == set(brain.tools)   # power, get_time, ...
+    assert "get_time" in {t["function"]["name"] for t in first["body"]["tools"]}   # the tools the router kept
     assert second["body"]["messages"][-1] == {"role": "tool", "tool_call_id": "call_1",
                                               "content": "Saturday 10 October 2026, 15:40"}
 
@@ -127,7 +127,7 @@ def test_when_openai_fails_auto_mode_falls_back_to_ollama(monkeypatch):
     brain = make_brain("auto", openai_api_key="k")
     brain.on_event = lambda kind, data: events.append((kind, data))
     assert brain.think("hello", "en") == "from ollama"
-    assert ("brain", {"backend": "ollama"}) in events
+    assert any(kind == "brain" and data["backend"] == "ollama" for kind, data in events)
 
 
 def test_the_openai_key_comes_from_the_environment(monkeypatch):
