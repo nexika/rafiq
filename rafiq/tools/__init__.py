@@ -108,6 +108,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
     when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
     from . import (  # noqa: F401  (registers the tools)
         background,
+        clipboard,
         content,
         dev,
         everyday,

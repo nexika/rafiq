@@ -1,6 +1,6 @@
-"""rafiq run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite | gestures |
-doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
-install-service | uninstall-service | wake-pc | backup | stt-score"""
+"""rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
+gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup |
+hue-setup | install-service | uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
 
@@ -531,6 +531,12 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_setup(args) -> int:
+    from . import setup
+
+    return setup.run(enroll=not args.no_enroll)
+
+
 def cmd_stt_score(args) -> int:
     """Score speech-to-text on your own recordings (name.wav with name.txt), for each Whisper model, with
     and without the handling of English words inside Arabic."""
@@ -732,6 +738,9 @@ def cmd_uninstall_service(_args) -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
+    wizard = sub.add_parser("setup", help="first-run wizard: keys, voices, models, microphone, wake word")
+    wizard.add_argument("--no-enroll", action="store_true", help="skip recording the wake word")
+    wizard.set_defaults(fn=cmd_setup)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
     run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
