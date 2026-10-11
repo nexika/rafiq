@@ -96,6 +96,7 @@ def bare_assistant():
     """An Assistant without a microphone, models or speaker: only what running jobs needs."""
     a = Assistant.__new__(Assistant)
     a.events, a.jobs, a.speaker, a.state = Events(), queue.Queue(), FakeSpeaker(), "idle"
+    a.silent, a.muted = False, False
     return a
 
 
