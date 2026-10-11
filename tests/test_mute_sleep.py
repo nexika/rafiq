@@ -56,7 +56,7 @@ class FakeSpeaker:
 
 
 class FakeBrain:
-    def __init__(self, cfg, tools, confirm, on_event=None):
+    def __init__(self, cfg, tools, confirm, on_event=None, facts=None):
         self.asked = []
 
     def think(self, text, tag, ctx=None):

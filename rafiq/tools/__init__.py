@@ -94,7 +94,7 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; Google only when it is set up."""
-    from . import everyday, pc, style, web  # noqa: F401  (registers the tools)
+    from . import everyday, memory, pc, style, web  # noqa: F401  (registers the tools)
 
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
@@ -106,7 +106,8 @@ def load_all(cfg: dict) -> dict[str, Tool]:
 # Left out: list_apps, lock_screen, open_in_browser, read_page, list_timers, cancel_timer, calendar_add,
 # email_read and email_send. [brain] ollama_tools = "all" sends everything, or a list names the set.
 LOCAL_TOOLS = ("get_time", "set_timer", "set_reminder", "weather", "calculate", "convert_units", "web_search",
-               "open_app", "volume", "system_status", "power", "calendar_events", "email_list")
+               "open_app", "volume", "system_status", "power", "calendar_events", "email_list",
+               "remember", "recall", "forget")
 
 
 def local_tools(tools: dict[str, Tool], choice: str | list = "local") -> dict[str, Tool]:

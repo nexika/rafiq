@@ -23,6 +23,7 @@ from . import kws, lang, modes, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
+from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tools import load_all
@@ -36,13 +37,14 @@ CONFIRM_SECONDS = 10.0
 @dataclass
 class Context:
     """What a tool may use: settings, the scheduler, the language of the current request, a way
-    to say something later (a countdown) from another thread, and who to tell when the mode changes
-    (the panel shows it)."""
+    to say something later (a countdown) from another thread, who to tell when the mode changes
+    (the panel shows it), and the long-term memory."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
     say: Callable[[str, str], None] | None = None
     on_mode: Callable[[str], None] | None = None
+    facts: Facts | None = None
 
 
 @dataclass
@@ -94,10 +96,11 @@ class Assistant:
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
+        self.facts = Facts(config_mod.data_dir() / "memory.json")
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
-                           on_mode=self._mode_changed)
+                           on_mode=self._mode_changed, facts=self.facts)
         self.tools = load_all(self.cfg)
-        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish)
+        self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel

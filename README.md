@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 | This computer | "open Firefox", "volume to 30", "mute", "switch to the headphones", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
 
@@ -185,6 +186,9 @@ once by mistake ("Rafael"). The Talk button and the keyboard shortcut always wor
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results and emails are passed to the model as data, never as instructions.
   Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
+  read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
+  each request, never as instructions.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.

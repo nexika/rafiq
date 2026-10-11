@@ -45,6 +45,7 @@ def cmd_ask(args) -> int:
     --speak). Useful without a microphone and for testing."""
     from .assistant import Context
     from .brain import Brain
+    from .facts import Facts
     from .scheduler import Scheduler
     from .tools import load_all
     from .tts import Speaker
@@ -69,8 +70,9 @@ def cmd_ask(args) -> int:
         print(lang.phrase("timer_done" if alarm.kind == "timer" else "reminder", alarm.tag, label=alarm.label))
 
     scheduler = Scheduler(config.data_dir() / "alarms.json", say_alarm)
-    brain = Brain(cfg, load_all(cfg), _terminal_confirm, on_event=show)
-    answer = brain.think(text, tag, Context(cfg, scheduler, tag))
+    facts = Facts(config.data_dir() / "memory.json")
+    brain = Brain(cfg, load_all(cfg), _terminal_confirm, on_event=show, facts=facts)
+    answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts))
     print(answer)
     if args.speak:
         Speaker(cfg).say(answer, lang.script_language(answer, tag))
