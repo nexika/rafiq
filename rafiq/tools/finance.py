@@ -316,7 +316,7 @@ def _statement(path: str) -> Path | None:
 @tool("bank_import", "Import a bank statement CSV (any bank: the columns are detected). Local only.",
       {"path": {"type": "string", "description": "the CSV file, or a folder such as ~/Downloads to take "
                                                  "its newest CSV"}},
-      required=("path",), private=True)
+      required=("path",), level="act", private=True)
 def bank_import(path: str) -> str:
     file = _statement(path)
     if file is None:
@@ -345,7 +345,7 @@ def bank_import(path: str) -> str:
       "Remembered for new imports and applied to the earlier transactions too.",
       {"payee": {"type": "string", "description": "a word of the payee as the bank writes it, e.g. uber"},
        "category": {"type": "string", "description": "e.g. transport, groceries, subscriptions, eating out"}},
-      required=("payee", "category"), private=True)
+      required=("payee", "category"), level="act", private=True)
 def bank_categorize(payee: str, category: str) -> str:
     if not payee.strip() or not category.strip():
         return "error: give both a payee and a category"
@@ -357,7 +357,7 @@ def bank_categorize(payee: str, category: str) -> str:
       "category for one month.",
       {"month": {"type": "string", "description": "YYYY-MM for one month in detail; empty for the last "
                                                   "six months"}},
-      private=True)
+      level="private", private=True)
 def bank_summary(month: str = "") -> str:
     book = ledger()
     if not book.transactions:
@@ -375,7 +375,7 @@ def bank_summary(month: str = "") -> str:
 
 
 @tool("bank_recurring", "Recurring charges (subscriptions, rent, bills) found in the imported bank "
-      "statements.", private=True)
+      "statements.", level="private", private=True)
 def bank_recurring() -> str:
     found = ledger().recurring()
     if not found:

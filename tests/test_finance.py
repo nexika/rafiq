@@ -134,6 +134,6 @@ def test_private_tools_keep_amounts_and_payees_out_of_events():
     tool = Tool("bank_summary", "money", lambda: "NETFLIX -13.99", private=True)
     cfg = config.load()
     brain = Brain(cfg, {"bank_summary": tool}, lambda a, t: True, on_event=lambda k, d: events.append(d))
-    assert brain._run_tool("bank_summary", {"payee": "Netflix"}, "en", None) == "NETFLIX -13.99"
+    assert brain._run_tool("bank_summary", {"payee": "Netflix"}, "en", None, brain.tools) == "NETFLIX -13.99"
     assert "13.99" not in str(events) and "Netflix" not in str(events)
     assert events[0]["name"] == "bank_summary"
