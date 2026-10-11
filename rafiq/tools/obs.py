@@ -60,7 +60,8 @@ def _scene_names(client) -> tuple[list[str], str]:
     return names, found.current_program_scene_name
 
 
-@tool("obs_status", "What OBS Studio is doing: streaming, recording, the current scene and the scene names.")
+@tool("obs_status", "What OBS Studio is doing: streaming, recording, the current scene and the scene names.",
+      level="safe")
 def obs_status(ctx) -> str:
     def status() -> str:
         with _obs(ctx) as client:
@@ -80,7 +81,7 @@ RECORD = {"start": "start recording in OBS", "stop": "stop the OBS recording"}
 
 @tool("obs_stream", "Start or stop streaming in OBS Studio. Rafiq asks the user first.",
       {"action": {"type": "string", "enum": list(STREAM)}}, required=("action",),
-      confirm=lambda a: STREAM.get(a.get("action", ""), "change the OBS stream"))
+      confirm=lambda a: STREAM.get(a.get("action", ""), "change the OBS stream"), level="critical")
 def obs_stream(action: str, ctx) -> str:
     if action not in STREAM:
         return f"error: action is one of {', '.join(STREAM)}"
@@ -102,7 +103,8 @@ def obs_stream(action: str, ctx) -> str:
 
 @tool("obs_record", "Start or stop recording in OBS Studio. Rafiq asks the user first.",
       {"action": {"type": "string", "enum": list(RECORD)}}, required=("action",),
-      confirm=lambda a: RECORD.get(a.get("action", ""), "change the OBS recording"))
+      confirm=lambda a: RECORD.get(a.get("action", ""), "change the OBS recording"),
+      level="critical")
 def obs_record(action: str, ctx) -> str:
     if action not in RECORD:
         return f"error: action is one of {', '.join(RECORD)}"
@@ -138,7 +140,8 @@ def find_scene(query: str, names: list[str]) -> str | None:
 
 
 @tool("obs_scene", "Switch OBS Studio to a scene, e.g. 'Camera' or 'Be right back'.",
-      {"name": {"type": "string", "description": "the scene's name as the user said it"}}, required=("name",))
+      {"name": {"type": "string", "description": "the scene's name as the user said it"}}, required=("name",),
+      level="act")
 def obs_scene(name: str, ctx) -> str:
     def run() -> str:
         with _obs(ctx) as client:
@@ -153,7 +156,7 @@ def obs_scene(name: str, ctx) -> str:
 
 # ---------------------------------------------------------------------- clips
 
-@tool("obs_clip", "Save the last moments as a clip from OBS Studio's replay buffer (\"clip that\").")
+@tool("obs_clip", "Save the last moments as a clip from OBS Studio's replay buffer (\"clip that\").", level="act")
 def obs_clip(ctx) -> str:
     def run() -> str:
         with _obs(ctx) as client:

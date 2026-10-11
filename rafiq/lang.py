@@ -119,7 +119,37 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+SLEEP = {"go to sleep", "sleep", "mets toi en veille", "en veille", "va dormir", "dors", "vete a dormir",
+         "a dormir", "duérmete", "duermete", "geh schlafen", "schlaf", "نام", "نم", "روح نام", "اذهب للنوم",
+         "اذهب إلى النوم"}
+# Said around the phrase without changing it ("go to sleep please", "نام يا رفيق").
+_SLEEP_FILLER = {"please", "now", "thanks", "rafiq", "rafik", "s'il", "te", "plait", "plaît", "merci",
+                 "maintenant", "por", "favor", "ya", "bitte", "jetzt", "يا", "رفيق", "خلاص", "دلوقتي", "شكرا"}
+
+
+def is_sleep(text: str) -> bool:
+    """True when the whole request is "go to sleep" (or "نام", "mets-toi en veille"...); a request that
+    only mentions sleep ("set a sleep timer") is not."""
+    return " ".join(w for w in words(text) if w not in _SLEEP_FILLER_N) in _SLEEP_N
+
+
+# What stops Rafiq while it speaks. Said over its voice, so only a short utterance counts: a long one is
+# more likely Rafiq's own sentence leaking past the echo check than you.
+STOP = {"stop", "wait", "enough", "attends", "arrête", "arrete", "espera", "para", "basta", "warte",
+        "stopp", "halt", "genug", "توقف", "قف", "استنى", "كفاية", "خلاص", "اسكت"}
+STOP_MAX_WORDS = 4
+
+
+def is_stop(text: str) -> bool:
+    """True for a short "stop" in any of Rafiq's languages ("Rafiq, stop", "attends", "استنى")."""
+    found = words(text)
+    return 0 < len(found) <= STOP_MAX_WORDS and any(w in _STOP for w in found)
+
+
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
+_SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
+_STOP = _norm(STOP)
 
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},
@@ -136,9 +166,36 @@ PHRASES = {
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "task_done": {"en": "Your task is done. {result}", "fr": "Ta tâche est terminée. {result}",
+                  "es": "Tu tarea está lista. {result}", "de": "Deine Aufgabe ist fertig. {result}",
+                  "ar": "انتهت مهمتك. {result}", "ar-EG": "المهمة خلصت. {result}"},
+    "task_failed": {"en": "I couldn't finish the task: {goal}", "fr": "Je n'ai pas pu finir la tâche : {goal}",
+                    "es": "No he podido terminar la tarea: {goal}",
+                    "de": "Ich konnte die Aufgabe nicht abschließen: {goal}",
+                    "ar": "لم أستطع إنهاء المهمة: {goal}", "ar-EG": "مقدرتش أخلّص المهمة: {goal}"},
+    "shutdown_soon": {"en": "Shutting down in {seconds} seconds. Say cancel the shutdown to stop it.",
+                      "fr": "Extinction dans {seconds} secondes. Dis « annule l'extinction » pour l'arrêter.",
+                      "es": "Me apago en {seconds} segundos. Di «cancela el apagado» para pararlo.",
+                      "de": "Ich fahre in {seconds} Sekunden herunter. "
+                            "Sag „Herunterfahren abbrechen“, um es zu stoppen.",
+                      "ar": "سأطفئ الجهاز بعد {seconds} ثوانٍ. قل «ألغِ إيقاف التشغيل» لإيقافه.",
+                      "ar-EG": "هقفل الجهاز كمان {seconds} ثواني. قول «إلغي القفل» لو عايز توقفه."},
+    "shutdown_failed": {"en": "I couldn't shut the computer down.",
+                        "fr": "Je n'ai pas pu éteindre l'ordinateur.", "es": "No he podido apagar el ordenador.",
+                        "de": "Ich konnte den Computer nicht herunterfahren.",
+                        "ar": "لم أستطع إطفاء الجهاز.", "ar-EG": "معرفتش أقفل الجهاز."},
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    # Said before a slow tool that has no waiting phrase of its own (see Tool.waiting_phrase).
+    "wait": {"en": "One moment.", "fr": "Un instant.", "es": "Un momento.", "de": "Einen Moment.",
+             "ar": "لحظة من فضلك.", "ar-EG": "ثانية واحدة."},
+    "limit": {"en": "That was taking too long, so I stopped. Try asking in a simpler way.",
+              "fr": "Ça prenait trop de temps, alors j'ai arrêté. Essaie de demander plus simplement.",
+              "es": "Estaba tardando demasiado, así que paré. Prueba a pedirlo de forma más sencilla.",
+              "de": "Das hat zu lange gedauert, also habe ich aufgehört. Frag es bitte einfacher.",
+              "ar": "استغرق ذلك وقتًا طويلًا فتوقفت. جرّب أن تسأل بطريقة أبسط.",
+              "ar-EG": "ده كان واخد وقت كتير فوقفت. جرّب تسأل بطريقة أبسط."},
 }
 
 
