@@ -43,7 +43,7 @@ build-backend = "setuptools.build_meta"
 include = ["rafiq*"]
 
 [tool.setuptools.package-data]
-rafiq = ["panel.html", "subscriptions.html"]
+rafiq = ["panel.html", "subscriptions.html", "rafiq.service"]
 
 [tool.ruff]
 line-length = 120

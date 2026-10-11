@@ -1,6 +1,6 @@
-"""rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | phone | mcp |
-toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service |
-wake-pc"""
+"""rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
+phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
+uninstall-service | wake-pc | backup"""
 
 from __future__ import annotations
 
@@ -211,6 +211,7 @@ def cmd_ask(args) -> int:
     --speak). Useful without a microphone and for testing."""
     from .assistant import Context
     from .brain import Brain
+    from .budget import Budget
     from .facts import Facts
     from .scheduler import Scheduler
     from .tools import load_all
@@ -244,11 +245,12 @@ def cmd_ask(args) -> int:
         watcher = Presence(config.data_dir() / "presence.json", lambda: False, lambda: None, lambda: None)
     facts = Facts(config.data_dir() / "memory.json")
     tools = load_all(cfg)
-    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts)
-    stream = Speaker(cfg).stream() if args.speak else None
+    budget = Budget(cfg)
+    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts, budget=budget)
+    stream = Speaker(cfg, budget=budget).stream() if args.speak else None
     try:
         answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts=facts, presence=watcher,
-                                                confirm=_terminal_confirm, tools=tools),
+                                                confirm=_terminal_confirm, tools=tools, budget=budget),
                              on_speech=stream.put if stream else None)
         print(answer)
     finally:
@@ -396,6 +398,24 @@ def cmd_doctor(_args) -> int:
 
     print(f"  latency: {timing.line()}")
     return 0
+
+
+def cmd_status(_args) -> int:
+    """Is Rafiq up, and is it safe? Works over SSH on a server without a screen."""
+    from . import hosting
+
+    checks = hosting.status(config.load())
+    for check in checks:
+        _check(check.label, check.ok, check.detail)
+    return 0 if all(check.ok for check in checks) else 1
+
+
+def cmd_update(args) -> int:
+    from . import hosting
+
+    code, lines = hosting.update(check=args.check, restart=not args.no_restart)
+    print("\n".join(lines))
+    return code
 
 
 def cmd_toolcheck(_args) -> int:
@@ -597,6 +617,19 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    """Save settings, recordings and everything else Rafiq keeps to a private archive on this computer."""
+    from . import maintain
+
+    try:
+        path = maintain.backup(args.to)
+    except (maintain.MaintenanceError, OSError) as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved {path} (readable only by you; it holds your keys, keep it off public places).")
+    return 0
+
+
 def cmd_spotify_setup(_args) -> int:
     from .tools.spotify import setup
 
@@ -714,6 +747,12 @@ def main(argv=None) -> int:
     gestures.add_argument("action", choices=("on", "off", "demo", "calibrate"))
     gestures.set_defaults(fn=cmd_gestures)
     sub.add_parser("doctor", help="check the microphone, models, voices and keys").set_defaults(fn=cmd_doctor)
+    sub.add_parser("status", help="is Rafiq running, its version, and is the panel private").set_defaults(
+        fn=cmd_status)
+    update = sub.add_parser("update", help="pull the new version, reinstall it and restart the service")
+    update.add_argument("--check", action="store_true", help="only say whether there is a new version")
+    update.add_argument("--no-restart", action="store_true", help="don't restart the rafiq service")
+    update.set_defaults(fn=cmd_update)
     sub.add_parser("phone", help="show how to set up a phone shortcut for the phone bridge").set_defaults(
         fn=cmd_phone)
     sub.add_parser("mcp", help="offer the harmless tools to MCP clients such as Claude Desktop (stdio)").set_defaults(
@@ -721,6 +760,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    backup = sub.add_parser("backup", help="save settings and recordings to a private local archive")
+    backup.add_argument("--to", type=Path, help="the folder for the archive (default: <settings>/backups)")
+    backup.set_defaults(fn=cmd_backup)
     wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
     wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
     wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
