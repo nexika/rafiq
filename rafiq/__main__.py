@@ -1,5 +1,5 @@
 """rafiq run | ask | say | paper | agent | agent-token | doctor | phone | mcp | toolcheck | google-setup |
-spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service"""
+spotify-setup | instagram-setup | hue-setup | install-service | uninstall-service | wake-pc"""
 
 from __future__ import annotations
 
@@ -433,6 +433,19 @@ def cmd_enroll(args) -> int:
     return enroll.run(forms=args.forms or None, takes=args.takes)
 
 
+def cmd_wake_pc(args) -> int:
+    """Start a computer that is off, with Wake-on-LAN (what a satellite does when the main computer is off)."""
+    from .fallback import wake_pc
+
+    try:
+        wake_pc(args.mac, args.broadcast, args.port)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wake-on-LAN packet sent to {args.mac}.")
+    return 0
+
+
 def cmd_phone(_args) -> int:
     """What to put in an iOS Shortcut or an Android HTTP Shortcut."""
     cfg = config.load()
@@ -567,6 +580,11 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
+    wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
+    wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
+    wake.add_argument("--port", type=int, default=9)
+    wake.set_defaults(fn=cmd_wake_pc)
     sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
     insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")
