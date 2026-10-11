@@ -16,10 +16,11 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Skill | Examples |
 |---|---|
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
-| Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
+| Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "what's the weather?" (where you are), "15% of 240", "5 miles in km" |
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
@@ -278,6 +279,8 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
   read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
   each request, never as instructions.
+- "What's the weather?" with no city set asks GNOME's location service, at city accuracy. Your IP
+  is sent to a lookup service (ipapi.co) only if you set `ip_lookup = true` under `[place]`.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.

@@ -137,7 +137,7 @@ def test_weather_reads_open_meteo():
 
 def test_weather_needs_a_city():
     ctx = type("Ctx", (), {"cfg": config.load()})()
-    assert everyday.weather("", ctx=ctx).startswith("error")
+    assert everyday.weather("", ctx=ctx, here=lambda cfg, get: None).startswith("error")
 
 
 def test_find_app_prefers_exact_then_prefix_then_keyword(tmp_path):
