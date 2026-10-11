@@ -81,25 +81,29 @@ SHORT = " Read the answer back in one or two short sentences; the panel shows th
 
 
 @tool("dev_check", "Run the current project's tests, build or lint and get the verdict and failures." + SHORT,
-      {"kind": {"type": "string", "enum": list(CHECKS), "description": "what to run; test by default"}})
+      {"kind": {"type": "string", "enum": list(CHECKS), "description": "what to run; test by default"}},
+      level="private")
 def run_check(kind: str = "test", ctx=None, run: Callable = _run, which: Callable = shutil.which) -> str:
     if kind not in CHECKS:
         return f"error: kind is one of {', '.join(CHECKS)}"
     return helper("barq", [f"run:{kind}"], ctx, run, which, timeout=900)
 
 
-@tool("dev_git_status", "The current project's git status: branch, ahead or behind, changed files." + SHORT)
+@tool("dev_git_status", "The current project's git status: branch, ahead or behind, changed files." + SHORT,
+      level="private")
 def git_status(ctx=None, run: Callable = _run, which: Callable = shutil.which) -> str:
     return helper("barq", ["git-status"], ctx, run, which)
 
 
-@tool("dev_ci_failure", "Why CI failed on the current project: what failed and what kind of failure." + SHORT)
+@tool("dev_ci_failure", "Why CI failed on the current project: what failed and what kind of failure." + SHORT,
+      level="private")
 def ci_failure(ctx=None, run: Callable = _run, which: Callable = shutil.which) -> str:
     folder = project_folder(ctx.cfg)
     return helper("tabib", ["triage", "--cwd", str(folder)], ctx, run, which)
 
 
-@tool("dev_pr_status", "The current project's branch, its pull request, review and CI state." + SHORT)
+@tool("dev_pr_status", "The current project's branch, its pull request, review and CI state." + SHORT,
+      level="private")
 def branch_and_pr(ctx=None, run: Callable = _run, which: Callable = shutil.which) -> str:
     folder = project_folder(ctx.cfg)
     return helper("mizan", ["report", "--cwd", str(folder)], ctx, run, which)
