@@ -145,6 +145,7 @@ DEFAULTS: dict = {
               "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "dev": {"project": ""},             # the folder "run the tests" works in; also set from the panel
     "privacy": {"log_days": 30},     # the log (data/logs) is redacted and deleted after this many days
     # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
     "spotify": {"enabled": False, "client_id": "", "port": 8888},
@@ -210,6 +211,8 @@ DEFAULTS: dict = {
     "plugs": [],                         # smart plugs, one table each; see the README
     # OBS Studio 28+ with its WebSocket server on; OBS_WEBSOCKET_PASSWORD overrides the password here.
     "obs": {"enabled": False, "host": "localhost", "port": 4455, "password": "", "timeout": 5},
+    # Notifications from long jobs (`rafiq notify`) are shown but not spoken in these hours.
+    "notify": {"quiet_hours": ""},   # e.g. "22:00-07:00"
     "anthropic_api_key": "",
     "openai_api_key": "",
 }

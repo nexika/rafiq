@@ -7,6 +7,7 @@ import pytest
 from rafiq import config, lang, timing
 from rafiq.brain import Brain
 from rafiq.practice import Practice
+from rafiq.reader import Reader
 from rafiq.tools import REGISTRY, Tool, load_all
 from rafiq.tools.web import SEARCHING
 from rafiq.tts import Sentences, Speaker
@@ -282,6 +283,7 @@ def test_the_assistant_speaks_the_answer_as_it_comes_and_shows_it_once(ollama):
     assistant.speaker = fake_speaker(log)
     assistant.brain = make_brain()
     assistant.publish_spending = lambda tag: None
+    assistant.reader = Reader(interrupt=lambda: None)
     assistant.respond("count", "en")
     assert [e for e in log if e[0] == "play"] == [("play", "say1.wav"), ("play", "say2.wav")]
     said = [e for e in assistant.events.history if e["kind"] == "said"]

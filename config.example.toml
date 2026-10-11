@@ -91,6 +91,9 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[dev]
+project = ""                    # the folder for "run the tests", "what's my git status?" (or set it in the panel)
+
 [overlay]
 display = "auto"                # answers on screen as desktop notifications; "off" for none
 seconds = 8                     # how long an answer stays on screen
@@ -252,3 +255,5 @@ enabled = false                 # webcam hand gestures at start (pip install -e 
 hold_seconds = 0.6              # how long to hold a gesture; `rafiq gestures calibrate` tunes these
 cooldown_seconds = 1.0          # the pause before the next gesture counts
 camera = 0                      # which webcam
+[notify]
+quiet_hours = ""                # e.g. "22:00-07:00": `rafiq notify` messages are shown, not spoken

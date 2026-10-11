@@ -63,6 +63,12 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   border: 1px solid var(--warn); border-radius: 14px; padding: 12px 14px; gap: 10px; align-items: center; }
 #confirm.on { display: flex; }
 #confirm p { margin: 0; flex: 1; }
+#reading { display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px;
+  width: min(728px, calc(100% - 32px)); background: var(--accent-soft); color: var(--ink);
+  border: 1px solid var(--accent); border-radius: 14px; padding: 8px 14px; gap: 8px; align-items: center; }
+#reading.on { display: flex; }
+#reading p { margin: 0; flex: 1; }
+#reading button { padding: 6px 12px; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--line); }
 footer form { max-width: 760px; margin: 0 auto; padding: 14px 16px; display: flex; gap: 8px; }
 input[type=text] { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 12px;
@@ -72,6 +78,9 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
   color: var(--ink); padding: 10px 14px; cursor: pointer; white-space: nowrap; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#project { display: flex; gap: 8px; margin: -8px 0 20px; }
+#project input { font-size: 14px; padding: 6px 10px; }
+#project button { font-size: 14px; padding: 6px 10px; }
 .navlink { color: var(--accent); font-size: 14px; }
 #mode { margin-left: auto; font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
@@ -156,6 +165,11 @@ header .grow { flex: 1; min-width: 0; }
     <button role="tab" data-page="permissions" aria-selected="false">Permissions</button>
   </nav>
   <section id="page-talk">
+    <form id="project" title="The folder for “run the tests”, “what's my git status?”, “why did CI fail?”">
+      <input type="text" id="project-path" placeholder="Project folder for developer commands" autocomplete="off"
+        dir="ltr" aria-label="Project folder">
+      <button type="submit">Set</button>
+    </form>
     <div id="picker">
       <label for="backend">Brain</label>
       <select id="backend">
@@ -191,6 +205,12 @@ header .grow { flex: 1; min-width: 0; }
   <button class="primary" id="yes">Yes</button>
   <button id="always" title="Yes, and don't ask again for this tool">Always</button>
   <button id="no">No</button>
+</div>
+<div id="reading" role="region" aria-label="Reading aloud">
+  <p id="reading-text" role="status"></p>
+  <button id="pause">Pause</button>
+  <button id="skip" title="Next sentence">Skip</button>
+  <button id="reading-stop">Stop</button>
 </div>
 <aside id="drawer" aria-label="Settings" hidden>
   <h2>Settings <button type="button" id="close-settings" title="Close">✕</button></h2>
@@ -263,7 +283,8 @@ function setState(s) {
 async function post(path, body) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
     body: JSON.stringify(body || {}) });
-  if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
+  if (r.status === 400) { const e = await r.json().catch(() => ({})); add("note err", e.error || "Rafiq refused that."); }
+  else if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
 }
 const LANG = { en: "English", fr: "Français", es: "Español", de: "Deutsch", ar: "العربية", "ar-EG": "مصري" };
 
@@ -277,6 +298,8 @@ function handle(e) {
       + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
     case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
+    case "project": document.getElementById("project-path").value = e.path;
+      add("note", "Project folder: " + e.path); break;
     case "brain": stateEl.dataset.backend = e.backend; break;
     case "spending": showSpending(e); break;
     case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
@@ -297,6 +320,7 @@ function handle(e) {
     case "practice": add("note", e.state === "start"
       ? "Practice started: " + (LANG[e.tag] || e.tag) + ", level " + e.level + (e.topic ? ", " + e.topic : "")
       : "Practice ended.\n" + e.summary); break;
+    case "reading": showReading(e); break;
     case "level": meter.style.width = Math.round(e.level * 100) + "%"; break;
     case "tool_start": nowEl.textContent = "⚙ Using " + e.name + "…"; break;
     case "spend": showSpend(e); break;
@@ -306,10 +330,19 @@ function handle(e) {
     case "muted": add("note", e.muted ? "Muted" : "Listening again");
       muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
     case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;
+    case "notify": add("note", "🔔 " + e.text + (e.spoken ? "" : " (not spoken: muted or quiet hours)")); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
     case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
       if (page === "models") show("models"); break;
   }
+}
+const readingBox = document.getElementById("reading"), pauseBtn = document.getElementById("pause");
+function showReading(e) {
+  readingBox.classList.toggle("on", e.state !== "idle");
+  const where = "sentence " + Math.min(e.index + 1, e.total) + " of " + e.total;
+  document.getElementById("reading-text").textContent = (e.state === "paused" ? "Paused at " : "Reading ") + where;
+  pauseBtn.textContent = e.state === "paused" ? "Resume" : "Pause";
+  pauseBtn.dataset.action = e.state === "paused" ? "resume" : "pause";
 }
 
 // ---------------------------------------------------------------- the other pages
@@ -397,10 +430,18 @@ document.getElementById("form").onsubmit = (ev) => {
   const input = document.getElementById("text"), text = input.value.trim();
   if (text) { post("/api/text", { text }); input.value = ""; }
 };
+document.getElementById("project").onsubmit = (ev) => {
+  ev.preventDefault();
+  const path = document.getElementById("project-path").value.trim();
+  if (path) post("/api/project", { path });
+};
 document.getElementById("talk").onclick = () => post("/api/listen");
 modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });
 document.getElementById("persona").onchange = (ev) => post("/api/persona", { name: ev.target.value });
 document.getElementById("stop").onclick = () => post("/api/stop");
+pauseBtn.onclick = () => post("/api/reading", { action: pauseBtn.dataset.action || "pause" });
+document.getElementById("skip").onclick = () => post("/api/reading", { action: "skip" });
+document.getElementById("reading-stop").onclick = () => post("/api/reading", { action: "stop" });
 muteBtn.onclick = () => post("/api/mute", { muted: muteBtn.getAttribute("aria-pressed") !== "true" });
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
 document.getElementById("always").onclick = () => post("/api/confirm", { yes: true, always: true });

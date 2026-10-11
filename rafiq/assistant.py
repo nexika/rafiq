@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import interpret, kws, lang, modes, overlay, presence, privacy, timing, wake
+from . import interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -34,10 +34,11 @@ from .models import Models
 from .paper_print import MorningPaper
 from .permissions import Approvals
 from .practice import Practice
+from .reader import Reader
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
-from .tools import Tool, brief, load_all, media
+from .tools import Tool, brief, dev, load_all, media
 from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
 
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Context:
-    """What a tool may use: settings, the scheduler, the language of the current request, a way
+    """What a tool may use: settings, the scheduler, the reader, the language of the current request, a way
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
@@ -71,6 +72,7 @@ class Context:
     room: str = ""
     budget: Budget | None = None
     practice: Practice | None = None
+    reader: Reader | None = None
 
 
 @dataclass
@@ -141,6 +143,7 @@ class Assistant:
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
         self.practice = Practice(config_mod.data_dir() / "practice.json", on_event=self.events.publish)
+        self.reader = Reader(interrupt=self.speaker.stop)
         # Hand gestures: the camera tracker posts to the panel, so `rafiq run` sets the url once it serves.
         self.gestures = GestureControl(SystemDesktop(), self.speaker.stop, self.events.publish,
                                        options=gesture_settings(self.cfg))
@@ -154,7 +157,7 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
-                           practice=self.practice)
+                           practice=self.practice, reader=self.reader)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
@@ -181,6 +184,14 @@ class Assistant:
         self.stt = SpeechToText.from_config(self.cfg)   # activate_whisper set speech.whisper_model
 
     # ------------------------------------------------------------------ state shown in the panel
+
+    def set_project(self, path: str) -> str:
+        """The project folder for the developer tools, chosen in the panel."""
+        folder = dev.set_project(path)
+        if not folder.startswith("error"):
+            self.cfg["dev"]["project"] = folder
+            self.events.publish("project", {"path": folder})
+        return folder
 
     def set_state(self, state: str) -> None:
         if state == "idle" and self.muted:
@@ -330,6 +341,16 @@ class Assistant:
             self.speaker.rate = self.practice.rate()     # slower for beginners while practising
             self.speaker.say(text, tag)
 
+    def notify(self, text: str, event: str, tag: str | None, now: datetime | None = None) -> None:
+        """A long job ended (`rafiq notify`): say so in the conversation's language, unless muted or
+        in quiet hours, when the panel shows it only."""
+        tag = tag or self.tag
+        sentence = notify.message(text, event, tag)
+        spoken = notify.should_speak(self.cfg, self.muted, now)
+        self.events.publish("notify", {"text": sentence, "event": event, "spoken": spoken})
+        if spoken:
+            self.speaker.say(sentence, lang.script_language(sentence, tag))
+
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
         panel's yes and no buttons answer too, and its Always button ("always": yes, and don't ask
@@ -435,7 +456,20 @@ class Assistant:
                 self.speech.close()
             self.speech = None
         self.publish_spending(tag)
+        if self.reader.active:            # read_aloud or "resume reading" loaded something
+            self.read()
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    def read(self) -> None:
+        """Read aloud what the reader holds, until the end, a pause or a stop (from the panel)."""
+        def say(text: str, tag: str) -> None:
+            if not self.speaker.say(text, tag):      # no voice works: don't notify sentence after sentence
+                self.reader.stop()
+
+        self.reader.run(say, on_progress=lambda i, n: self.events.publish("reading", {"index": i, "total": n,
+                                                                                    "state": "reading"}))
+        self.events.publish("reading", {"index": self.reader.index, "total": len(self.reader.segments),
+                                        "state": self.reader.state})
 
     def interpret(self, pair: interpret.Pair) -> None:
         """Interpreter mode: say what each person says in the other's language until one says stop."""
@@ -491,6 +525,8 @@ class Assistant:
                     self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag))
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
+                elif kind == "notify":
+                    self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
                 elif kind == "result":
@@ -508,6 +544,8 @@ class Assistant:
                     self.play_scene(scene, self.tag)
                 elif kind == "mode":
                     self.set_mode(data["mode"])
+                elif kind == "read":
+                    self.read()
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("idle")

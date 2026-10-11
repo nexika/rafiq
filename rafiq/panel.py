@@ -1,7 +1,7 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
-a text box, yes/no buttons for confirmations, the mode switch, the choice of style and a model picker. A settings
-drawer switches the brain's mode and model and the voices; only the allowlist in config.py can be written, and keys
-never reach the page.
+a text box, yes/no buttons for confirmations, the mode switch, the choice of style, a model picker and the controls
+of a reading aloud. A settings drawer switches the brain's mode and model and the voices; only the allowlist in
+config.py can be written, and keys never reach the page.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
 the random token embedded in that page, and the Host header must be the panel's own address (so a
@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import lang, modes, permissions, persona, status, subscriptions
+from . import lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
 
 MAX_BODY = 10_000
@@ -165,6 +165,14 @@ def make_handler(assistant, token: str, port: int):
                 assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put("always" if data["yes"] and data.get("always") is True else data["yes"])
+            elif path == "/api/project" and isinstance(data.get("path"), str):
+                folder = assistant.set_project(data["path"][:1000])
+                if folder.startswith("error"):
+                    return self._send(400, json.dumps({"error": folder}).encode())
+            elif (path == "/api/notify" and isinstance(data.get("text"), str) and data["text"].strip()
+                  and data.get("event", "") in notify.EVENTS and data.get("lang") in (None, *lang.TAGS)):
+                assistant.submit("notify", text=data["text"][:500], event=data.get("event", ""),
+                                 lang=data.get("lang"))
             elif path == "/api/show":
                 assistant.submit("show_again")
             elif path == "/api/paper":
@@ -175,7 +183,13 @@ def make_handler(assistant, token: str, port: int):
                 persona.choose(data["name"])
                 assistant.events.publish("persona", {"persona": data["name"]})
             elif path == "/api/stop":
+                assistant.reader.stop()
                 assistant.speaker.stop()
+            elif path == "/api/reading" and data.get("action") in ("pause", "skip", "stop"):
+                getattr(assistant.reader, data["action"])()
+            elif path == "/api/reading" and data.get("action") == "resume":
+                if assistant.reader.resume():
+                    assistant.submit("read")
             elif path == "/api/voice-test" and data.get("tag") in lang.TAGS:
                 assistant.submit("say", text=lang.phrase("voice_test", data["tag"]), tag=data["tag"])
             elif path == "/api/settings" and isinstance(data.get("changes"), dict):
@@ -207,6 +221,10 @@ def make_handler(assistant, token: str, port: int):
                     return self._send(400, json.dumps({"error": str(exc)}).encode())
             else:
                 return self._send(400, b'{"error":"unknown request"}')
+            if path in ("/api/stop", "/api/reading"):
+                reader = assistant.reader
+                assistant.events.publish("reading", {"index": reader.index, "total": len(reader.segments),
+                                                     "state": reader.state})
             return self._send(200, b'{"ok":true}')
 
         def _subscriptions(self, data: dict) -> None:
