@@ -279,6 +279,12 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assert assistant.jobs == [("text", {"text": "what time is it"})]
 
 
+def test_the_dictate_button_and_shortcut_are_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/dictate", {})[0] == 200
+    assert assistant.jobs == [("dictate", {})]
+
+
 def test_the_project_folder_is_set_from_the_panel(panel):
     assistant, port = panel
     assert request(port, "/api/project", {"path": "/home/me/code"})[0] == 200

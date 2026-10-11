@@ -165,6 +165,8 @@ def make_handler(assistant, token: str, port: int):
                 assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put("always" if data["yes"] and data.get("always") is True else data["yes"])
+            elif path == "/api/dictate":
+                assistant.submit("dictate")
             elif path == "/api/project" and isinstance(data.get("path"), str):
                 folder = assistant.set_project(data["path"][:1000])
                 if folder.startswith("error"):

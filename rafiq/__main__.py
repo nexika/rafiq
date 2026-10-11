@@ -1,5 +1,5 @@
-"""rafiq run | ask | say | notify | hooks | show | paper | agent | agent-token | satellite | gestures | doctor |
-status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
+"""rafiq run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite | gestures |
+doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
 install-service | uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
@@ -336,6 +336,11 @@ def cmd_doctor(_args) -> int:
     print(f"Rafiq settings: {config.home() / 'config.toml'}")
     _check_microphone(cfg)
     _check("audio player (ffplay)", bool(shutil.which("ffplay")))
+    from .dictation import Keyboard
+
+    typing = ("wtype", "ydotool", "wl-copy") if Keyboard().wayland else ("xdotool", "xclip")
+    found = [t for t in typing if shutil.which(t)]
+    _check("dictation (typing into windows)", bool(found), ", ".join(found) or "install " + " or ".join(typing))
     print("Integrations:")
     for check in doctor.integrations(cfg):
         _check(check.label, check.ok, check.detail, check.fix, check.optional)
@@ -451,6 +456,11 @@ def cmd_toolcheck(_args) -> int:
         total, tool_ok, lang_ok = toolcheck.score(results)
         print(f"{label} ({len(subset)}): right tool {tool_ok}/{total}, right language {lang_ok}/{total}")
     return 0
+
+
+def cmd_dictate(_args) -> int:
+    """Start typing what you say into the focused window, or stop: bind this to a keyboard shortcut."""
+    return _ask_running("/api/dictate", {})
 
 
 def _ask_running(path: str, body: dict) -> int:
@@ -773,6 +783,8 @@ def main(argv=None) -> int:
     token.set_defaults(fn=cmd_agent_token)
     sub.add_parser("listen", help="make the running Rafiq listen now (for a keyboard shortcut)").set_defaults(
         fn=cmd_listen)
+    sub.add_parser("dictate", help="start or stop typing what you say (for a keyboard shortcut)").set_defaults(
+        fn=cmd_dictate)
     score = sub.add_parser("stt-score", help="score speech-to-text on your recordings (name.wav + name.txt)")
     score.add_argument("folder")
     score.add_argument("--models", nargs="+", default=["small", "medium"], help="default: small medium")

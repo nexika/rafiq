@@ -99,7 +99,7 @@ def bare_assistant():
     a = Assistant.__new__(Assistant)
     a.practice = Practice(Path("practice.json"))   # no session running
     a.events, a.jobs, a.speaker, a.state = Events(), queue.Queue(), FakeSpeaker(), "idle"
-    a.silent, a.muted = False, False
+    a.silent, a.muted, a.dictating = False, False, False
     return a
 
 

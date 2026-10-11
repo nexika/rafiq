@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
+from . import dictation, interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -163,6 +163,8 @@ class Assistant:
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
             self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
         self.models = Models(self.cfg, on_event=self.events.publish, on_whisper=self._use_whisper)
+        self.keyboard = dictation.Keyboard()
+        self.dictating = False
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -422,6 +424,9 @@ class Assistant:
             tag = self.practice.tag
         self.tag = tag
         self.ctx.tag = tag
+        if dictation.wants_dictation(text):
+            self.dictate(tag)
+            return
         scene = scenes_mod.match(text, scenes_mod.scenes_from(self.cfg))
         if scene is not None:                            # "film mode": no need to think about it
             self.play_scene(scene, tag)
@@ -459,6 +464,36 @@ class Assistant:
         if self.reader.active:            # read_aloud or "resume reading" loaded something
             self.read()
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+
+    # ------------------------------------------------------------------ dictation
+
+    def dictate(self, tag: str) -> None:
+        """Type what is said into the focused window, one utterance at a time, until "stop dictating"
+        (or the shortcut again). The panel shows the "dictating" state the whole time, so text never
+        goes into a window unannounced."""
+        session = dictation.Session()
+        self.dictating = True
+        self.events.publish("dictation", {"on": True, "tag": tag})
+        self.say(lang.phrase("dictating", tag), tag)
+        self.set_state("dictating")
+        try:
+            while self.dictating and not self._stop.is_set():
+                audio = self.next_utterance(timeout=0.5)
+                if audio is None or not self.dictating:
+                    continue
+                heard = self.transcribe(audio, hint=tag)
+                stopped, text = session.add(heard.text, heard.lang)
+                if text:
+                    self.keyboard.type(text)
+                    self.events.publish("dictated", {"text": text, "tag": heard.lang})
+                if stopped:
+                    break
+        except dictation.TypingFailed as exc:
+            self.events.publish("error", {"error": str(exc)})
+        finally:
+            self.dictating = False
+            self.events.publish("dictation", {"on": False, "tag": tag})
+        self.say(lang.phrase("dictation_stopped", tag), tag)
 
     def read(self) -> None:
         """Read aloud what the reader holds, until the end, a pause or a stop (from the panel)."""
@@ -544,11 +579,16 @@ class Assistant:
                     self.play_scene(scene, self.tag)
                 elif kind == "mode":
                     self.set_mode(data["mode"])
+                elif kind == "dictate":               # the shortcut: start, or stop when dictating
+                    if self.dictating:
+                        self.dictating = False
+                        continue
+                    self.dictate(self.tag)
                 elif kind == "read":
                     self.read()
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
-            self.set_state("idle")
+            self.set_state("dictating" if self.dictating else "idle")
 
     def offer_paper(self) -> None:
         """The timer's offer: ask, and print on a yes. Silent when there is nothing to print."""

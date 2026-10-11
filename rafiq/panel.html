@@ -32,6 +32,11 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .orb[data-state="offline"], .orb[data-state="muted"] { background: var(--line); }
 .orb[data-state="offline"]::after, .orb[data-state="muted"]::after { background: var(--muted); }
 #mute[aria-pressed="true"] { background: var(--warn-soft); border-color: var(--warn); }
+/* Dictating types into another window: it must not look like any other state. */
+.orb[data-state="dictating"] { background: var(--warn-soft); }
+.orb[data-state="dictating"]::after { background: var(--warn); opacity: 1; animation: pulse 1.2s ease-in-out infinite; }
+#state[data-state="dictating"] { color: var(--warn); font-weight: 600; }
+button.dictating { background: var(--warn); border-color: var(--warn); color: var(--bg); font-weight: 600; }
 @keyframes pulse { 50% { transform: scale(1.35); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes talk { to { transform: scaleY(1.4); } }
@@ -242,6 +247,7 @@ header .grow { flex: 1; min-width: 0; }
     <button type="button" class="primary" id="talk" title="Speak without saying the name">🎙 Talk</button>
     <input type="text" id="text" placeholder="Type to Rafiq…" autocomplete="off" dir="auto" aria-label="Message">
     <button type="submit">Send</button>
+    <button type="button" id="dictate" title="Type what you say into the focused window">Dictate</button>
     <button type="button" id="stop" title="Stop speaking">■</button>
     <button type="button" id="mute" aria-pressed="false" title="Stop listening (rafiq mute)">Mute</button>
   </form>
@@ -249,7 +255,8 @@ header .grow { flex: 1; min-width: 0; }
 <script>
 const TOKEN = "__TOKEN__";
 const STATES = { idle: "Waiting for “Rafiq”", listening: "Listening…", thinking: "Thinking…",
-  speaking: "Speaking", muted: "Muted: not listening for “Rafiq”", starting: "Starting…",
+  speaking: "Speaking", dictating: "Dictating into the focused window: say “stop dictating” to finish",
+  muted: "Muted: not listening for “Rafiq”", starting: "Starting…",
   calibrating: "Listening to the room, a moment of quiet…", offline: "Not connected: is Rafiq running?" };
 const log = document.getElementById("log"), orb = document.getElementById("orb");
 const stateEl = document.getElementById("state"), confirmBox = document.getElementById("confirm");
@@ -274,7 +281,10 @@ function showSpending(e) {
 }
 const muteBtn = document.getElementById("mute");
 function setState(s) {
-  orb.dataset.state = s; stateEl.textContent = STATES[s] || s;
+  orb.dataset.state = s; stateEl.dataset.state = s; stateEl.textContent = STATES[s] || s;
+  const button = document.getElementById("dictate");
+  button.classList.toggle("dictating", s === "dictating");
+  button.textContent = s === "dictating" ? "Stop dictating" : "Dictate";
   if (s === "muted" || s === "idle") {
     muteBtn.setAttribute("aria-pressed", String(s === "muted"));
     muteBtn.textContent = s === "muted" ? "Unmute" : "Mute";
@@ -293,6 +303,7 @@ function handle(e) {
     case "state": setState(e.state); break;
     case "heard": add("msg you", e.text || "…", "You · " + (LANG[e.tag] || e.tag)); break;
     case "typed": add("msg you", e.text, "You (typed)"); break;
+    case "dictated": add("note", "Typed: " + e.text); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
     case "interpret": add("note", (e.on ? "Interpreting: " : "Stopped interpreting: ")
       + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
@@ -436,6 +447,7 @@ document.getElementById("project").onsubmit = (ev) => {
   if (path) post("/api/project", { path });
 };
 document.getElementById("talk").onclick = () => post("/api/listen");
+document.getElementById("dictate").onclick = () => post("/api/dictate");
 modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });
 document.getElementById("persona").onchange = (ev) => post("/api/persona", { name: ev.target.value });
 document.getElementById("stop").onclick = () => post("/api/stop");
