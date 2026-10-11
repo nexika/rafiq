@@ -51,7 +51,7 @@ git clone https://github.com/nexika/rafiq.git && cd rafiq
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/pip install --no-deps openwakeword   # optional, for a trained wake word later
 .venv/bin/pip install -e ".[nvidia]"            # optional, GPU figures on an NVIDIA card (AMD needs nothing)
-.venv/bin/rafiq doctor
+.venv/bin/rafiq doctor       # checks every integration and suggests models for this machine
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
