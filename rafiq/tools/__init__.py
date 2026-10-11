@@ -96,12 +96,24 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google only when it is set up."""
-    from . import everyday, memory, pc, screen, style, web  # noqa: F401  (registers the tools)
+    """Import every skill module; Google, Home Assistant and Hue only when they are set up."""
+    from . import background, everyday, memory, pc, screen, style, web  # noqa: F401  (registers the tools)
 
+    off = set()
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
-    return dict(REGISTRY)
+    else:
+        off.add(f"{__name__}.google")
+    if cfg.get("home_assistant", {}).get("url") and cfg.get("home_assistant", {}).get("token"):
+        from . import home  # noqa: F401
+    else:
+        off.add(f"{__name__}.home")
+    if cfg.get("hue", {}).get("enabled"):
+        from . import hue  # noqa: F401
+    else:
+        off.add(f"{__name__}.hue")
+    # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
+    return {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
 
 
 # What a small local model gets by default. Every extra tool is one more wrong choice for a 7B model,
@@ -109,7 +121,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
 # Left out: list_apps, lock_screen, open_in_browser, read_page, list_timers, cancel_timer, calendar_add,
 # email_read and email_send. [brain] ollama_tools = "all" sends everything, or a list names the set.
 LOCAL_TOOLS = ("get_time", "set_timer", "set_reminder", "weather", "calculate", "convert_units", "web_search",
-               "open_app", "volume", "media", "system_status", "power", "calendar_events", "email_list",
+               "open_app", "volume", "system_status", "power", "calendar_events", "email_list",
                "remember", "recall", "forget")
 
 
@@ -129,3 +141,7 @@ def claude_schemas(tools: dict[str, Tool]) -> list[dict]:
 def ollama_schemas(tools: dict[str, Tool]) -> list[dict]:
     return [{"type": "function", "function": {"name": t.name, "description": t.description,
                                               "parameters": t.schema()}} for t in tools.values()]
+
+
+# OpenAI's chat completions take tools in the same shape as Ollama.
+openai_schemas = ollama_schemas

@@ -103,9 +103,16 @@ def _get_json(url: str, params: dict) -> dict:
     return resp.json()
 
 
+# Said while the forecast is fetched.
+CHECKING_WEATHER = {"en": "Let me check the weather.", "fr": "Je regarde la météo.", "es": "Miro el tiempo.",
+                    "de": "Ich schaue mir das Wetter an.", "ar": "دعني أتحقق من الطقس.",
+                    "ar-EG": "ثواني أشوفلك الجو."}
+
+
 @tool("weather", "Current weather and the forecast for the next days.",
       {"city": {"type": "string", "description": "city name; empty for the user's own city"},
-       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}}, level="safe", expose=True, card="facts")
+       "days": {"type": "integer", "description": "days of forecast, 1 to 7"}},
+      level="safe", slow=True, waiting_phrase=CHECKING_WEATHER, expose=True, card="facts")
 def weather(city: str = "", days: int = 2, ctx=None, get=_get_json) -> str:
     city = city or (ctx.cfg.get("place", {}).get("city") if ctx else "") or ""
     if not city:

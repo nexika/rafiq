@@ -19,15 +19,16 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, wake
+from . import kws, lang, modes, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
 from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
+from .tasks import ClaudeAgent, Task, Tasks
 from .tools import load_all
-from .tts import Speaker
+from .tts import Speaker, SpeechStream
 
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
@@ -38,13 +39,14 @@ CONFIRM_SECONDS = 10.0
 class Context:
     """What a tool may use: settings, the scheduler, the language of the current request, a way
     to say something later (a countdown) from another thread, who to tell when the mode changes
-    (the panel shows it), and the long-term memory."""
+    (the panel shows it), the long-term memory, and the background tasks (None without Claude)."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
     say: Callable[[str, str], None] | None = None
     on_mode: Callable[[str], None] | None = None
     facts: Facts | None = None
+    tasks: Tasks | None = None
 
 
 @dataclass
@@ -101,6 +103,8 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts)
         self.tools = load_all(self.cfg)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
+        if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
+            self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
         self.tag = "en"                      # the language of the conversation so far
         self.follow_up_until = 0.0
         self.pending_answer: queue.Queue = queue.Queue()   # a yes or no clicked in the panel
@@ -108,6 +112,7 @@ class Assistant:
         self.muted = False                   # `rafiq mute`: the name and follow-ups are not listened for
         self.interrupted = threading.Event()                # "stop" said over Rafiq's last sentence
         self.state = "starting"
+        self.speech: SpeechStream | None = None       # the answer being spoken while it is written
         self._stop = threading.Event()
         # Your own recordings of the name (`rafiq enroll`), if any; else a small Whisper model listens.
         self.spotter = kws.Spotter.load()
@@ -226,10 +231,11 @@ class Assistant:
 
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
-        if modes.offline(self.cfg):          # offline mode: nothing leaves the computer
-            heard = self.stt.local.transcribe(audio)
-        else:
-            heard = self.stt.transcribe(audio, hint=self.tag)
+        with timing.Timer("stt", model=getattr(self.stt.local, "size", "")):
+            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
+                heard = self.stt.local.transcribe(audio)
+            else:
+                heard = self.stt.transcribe(audio, hint=self.tag)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
@@ -245,6 +251,8 @@ class Assistant:
         panel's yes and no buttons answer too."""
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
+        if self.speech:                      # finish what was being said before asking
+            self.speech.wait()
         self.events.publish("confirm", {"action": action, "tag": tag})
         self.confirming = True
         try:
@@ -287,7 +295,8 @@ class Assistant:
         return False
 
     def respond(self, text: str, tag: str) -> None:
-        """Think about one request and say the answer."""
+        """Think about one request and say the answer, starting with its first sentence while the
+        rest is still being written."""
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
@@ -297,8 +306,13 @@ class Assistant:
         self.tag = tag
         self.ctx.tag = tag
         self.set_state("thinking")
-        answer = self.brain.think(text, tag, self.ctx)
-        self.say(answer, lang.script_language(answer, tag))
+        self.speech = self.speaker.stream()
+        try:
+            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)
+            self.events.publish("said", {"text": answer, "tag": lang.script_language(answer, tag)})
+        finally:
+            self.speech.close()
+            self.speech = None
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
     # ------------------------------------------------------------------ jobs from other threads
@@ -330,6 +344,14 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def _task_done(self, task: Task) -> None:
+        """Said on this thread, between requests, like an alarm."""
+        if task.state == "done":
+            text = lang.phrase("task_done", task.tag, result=task.result)
+        else:
+            text = lang.phrase("task_failed", task.tag, goal=task.goal)
+        self.submit("say", text=text, tag=lang.script_language(text, task.tag))
 
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:

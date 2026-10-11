@@ -1,5 +1,6 @@
-"""This computer: open apps, volume, media, how it is doing, lock it, power off. Linux with PipeWire (wpctl),
-playerctl and a desktop that reads .desktop files (GNOME, KDE, ...).
+"""This computer: open apps, volume, media, how it is doing, lock it, power off, and wake other computers
+on the network (Wake-on-LAN). Linux with PipeWire (wpctl), playerctl and a desktop that reads .desktop
+files (GNOME, KDE, ...).
 
 Commands run as argument lists, never through a shell: no word the user says can become a command.
 """
@@ -10,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -395,7 +397,7 @@ def audio_output(name: str = "", ctx=None) -> str:
 
 # ---------------------------------------------------------------------- status
 
-@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime.",
+@tool("system_status", "How the computer is doing: CPU, memory, disk, battery, temperature, uptime, GPU.",
       level="safe", expose=True, card="facts")
 def system_status() -> str:
     import psutil
@@ -415,7 +417,99 @@ def system_status() -> str:
         parts.append(f"hottest sensor {hottest:.0f}°C")
     up = int(time.time() - psutil.boot_time())
     parts.append(f"up {up // 3600} h {up % 3600 // 60} min")
+    parts += [describe_gpu(g) for g in gpus()]
     return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------- graphics card
+
+DRM = Path("/sys/class/drm")
+AMD = "0x1002"
+
+
+@dataclass
+class Gpu:
+    name: str
+    load: float | None = None  # percent busy
+    temperature: float | None = None  # °C
+    memory_used: int | None = None  # bytes of video memory
+    memory_total: int | None = None
+
+
+def _read_number(path: Path) -> float | None:
+    try:
+        return float(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def amd_gpus(drm: Path = DRM) -> list[Gpu]:
+    """AMD cards through the amdgpu driver's files: no extra tool needed. card1-eDP-1 and the like are
+    screens, not cards, so only cardN is read."""
+    found = []
+    for card in sorted(drm.glob("card[0-9]*")):
+        device = card / "device"
+        try:
+            if "-" in card.name or (device / "vendor").read_text().strip() != AMD:
+                continue
+        except OSError:
+            continue
+        temp = next((t for t in map(_read_number, sorted(device.glob("hwmon/*/temp1_input"))) if t is not None),
+                    None)
+        used, total = _read_number(device / "mem_info_vram_used"), _read_number(device / "mem_info_vram_total")
+        found.append(Gpu("AMD GPU", load=_read_number(device / "gpu_busy_percent"),
+                         temperature=temp / 1000 if temp is not None else None,
+                         memory_used=int(used) if used is not None else None,
+                         memory_total=int(total) if total is not None else None))
+    return found
+
+
+def nvidia_gpus(nvml=None) -> list[Gpu]:
+    """NVIDIA cards through NVML (pip install nvidia-ml-py). Without it or without the driver: none."""
+    if nvml is None:
+        try:
+            import pynvml as nvml
+        except ImportError:
+            return []
+    try:
+        nvml.nvmlInit()
+    except nvml.NVMLError:
+        return []
+    found = []
+    try:
+        for i in range(nvml.nvmlDeviceGetCount()):
+            handle = nvml.nvmlDeviceGetHandleByIndex(i)
+            name = nvml.nvmlDeviceGetName(handle)
+            memory = nvml.nvmlDeviceGetMemoryInfo(handle)
+            found.append(Gpu(name.decode() if isinstance(name, bytes) else name,
+                             load=nvml.nvmlDeviceGetUtilizationRates(handle).gpu,
+                             temperature=nvml.nvmlDeviceGetTemperature(handle, nvml.NVML_TEMPERATURE_GPU),
+                             memory_used=memory.used, memory_total=memory.total))
+    except nvml.NVMLError:
+        pass  # keep the cards read so far
+    finally:
+        nvml.nvmlShutdown()
+    return found
+
+
+def gpus() -> list[Gpu]:
+    return nvidia_gpus() + amd_gpus()
+
+
+def describe_gpu(gpu: Gpu) -> str:
+    figures = []
+    if gpu.load is not None:
+        figures.append(f"{gpu.load:.0f}% busy")
+    if gpu.temperature is not None:
+        figures.append(f"{gpu.temperature:.0f}°C")
+    if gpu.memory_used is not None and gpu.memory_total:
+        figures.append(f"video memory {gpu.memory_used / 2**30:.1f} of {gpu.memory_total / 2**30:.1f} GB used")
+    return f"{gpu.name} " + ", ".join(figures) if figures else f"{gpu.name}: no figures"
+
+
+@tool("gpu_status", "How the graphics card is doing: load, temperature, video memory.", level="safe")
+def gpu_status() -> str:
+    return ", ".join(describe_gpu(g) for g in gpus()) or "no graphics card figures available"
 
 
 # ---------------------------------------------------------------------- lock and power
@@ -507,6 +601,66 @@ def power(action: str, ctx=None) -> str:
         return f"shutting down in {delay} seconds; the user can say 'cancel the shutdown' to stop it"
     result = _run(POWER[action][0])
     return "done" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
+
+
+# ---------------------------------------------------------------------- wake-on-LAN
+
+def magic_packet(mac: str) -> bytes:
+    """Six 0xFF bytes, then the network card's address sixteen times. Takes aa:bb:.., aa-bb-.., aabb.ccdd..
+    or plain hex."""
+    digits = re.sub(r"[:.-]", "", mac.strip())
+    if not re.fullmatch(r"[0-9a-fA-F]{12}", digits):
+        raise ValueError(f"not a network card address: {mac!r}")
+    return b"\xff" * 6 + bytes.fromhex(digits) * 16
+
+
+def _words(text: str) -> str:
+    return " ".join(w for w in text.lower().split() if w != "the")
+
+
+def find_machine(query: str, machines: dict) -> str | None:
+    """The configured machine a spoken name means: the exact name, then a name containing it or contained
+    in it ("gaming" or "my gaming pc" for "gaming pc")."""
+    q = _words(query)
+    if not q:
+        return None
+    for test in (lambda n: _words(n) == q, lambda n: q in _words(n) or _words(n) in q):
+        matches = [n for n in machines if test(n)]
+        if matches:
+            return min(matches, key=len)
+    return None
+
+
+def _broadcast(packet: bytes, address: str, port: int) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(packet, (address, port))
+
+
+@tool("wake_computer", "Wake a computer on the local network (Wake-on-LAN), by its name in the config. "
+      "Rafiq asks the user first.",
+      {"name": {"type": "string", "description": "the computer's name, e.g. 'gaming PC'"}}, required=("name",),
+      confirm=lambda args: f"wake {args.get('name') or 'a computer'}", level="critical")
+def wake_computer(name: str, ctx=None, send=_broadcast) -> str:
+    wol = ctx.cfg.get("wake_on_lan", {}) if ctx else {}
+    machines = wol.get("machines") or {}
+    if not machines:
+        return "error: no computers to wake are set in the config (wake_on_lan.machines)"
+    found = find_machine(name, machines)
+    if found is None:
+        return f"error: no computer called {name!r}; known: {', '.join(machines)}"
+    entry = machines[found] if isinstance(machines[found], dict) else {"mac": machines[found]}
+    try:
+        packet = magic_packet(str(entry.get("mac", "")))
+    except ValueError as exc:
+        return f"error: {found}: {exc}"
+    address = entry.get("broadcast") or wol.get("broadcast", "255.255.255.255")
+    port = int(entry.get("port") or wol.get("port", 9))
+    try:
+        send(packet, address, port)
+    except OSError as exc:
+        return f"error: could not send to {address}: {exc}"
+    return f"sent the wake-up packet to {found}"
 
 
 @tool("cancel_shutdown", "Stop a shutdown that is counting down (\"cancel the shutdown\", \"annule "

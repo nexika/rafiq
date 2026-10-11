@@ -21,6 +21,23 @@ class FakeClaude:
         block = SimpleNamespace(type="text", text="Hi.", model_dump=lambda: {"type": "text", "text": "Hi."})
         return SimpleNamespace(content=[block])
 
+    def stream(self, model, **_kwargs):
+        """Streamed like a real reply: the text, then the whole message."""
+        message = self.create(model)
+
+        class Stream:
+            text_stream = ["Hi."]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def get_final_message(self):
+                return message
+        return Stream()
+
 
 def claude_brain(mode: str):
     cfg = config.load()

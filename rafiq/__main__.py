@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | mcp | toolcheck | google-setup | install-service | uninstall-service"""
+"""rafiq run | ask | say | doctor | mcp | toolcheck | google-setup | hue-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -72,10 +72,14 @@ def cmd_ask(args) -> int:
     scheduler = Scheduler(config.data_dir() / "alarms.json", say_alarm)
     facts = Facts(config.data_dir() / "memory.json")
     brain = Brain(cfg, load_all(cfg), _terminal_confirm, on_event=show, facts=facts)
-    answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts))
-    print(answer)
-    if args.speak:
-        Speaker(cfg).say(answer, lang.script_language(answer, tag))
+    stream = Speaker(cfg).stream() if args.speak else None
+    try:
+        answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts=facts),
+                             on_speech=stream.put if stream else None)
+        print(answer)
+    finally:
+        if stream:
+            stream.close()
     return 0
 
 
@@ -129,6 +133,8 @@ def cmd_doctor(_args) -> int:
     brain = cfg["brain"]
     _check("Claude API key", bool(cfg.get("anthropic_api_key")),
            brain["claude_model"] if cfg.get("anthropic_api_key") else "set ANTHROPIC_API_KEY to use Claude")
+    _check("OpenAI API key", bool(cfg.get("openai_api_key")),
+           brain["openai_model"] if cfg.get("openai_api_key") else "set OPENAI_API_KEY to use OpenAI")
     try:
         tags = httpx.get(f"{brain['ollama_url']}/api/tags", timeout=3).json().get("models", [])
         names = [m["name"] for m in tags]
@@ -153,6 +159,12 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    home_assistant = cfg["home_assistant"]
+    _check("Home Assistant (Nest, Hue, plugs)", bool(home_assistant.get("url") and home_assistant.get("token")),
+           home_assistant.get("url") or "set home_assistant.url and HOME_ASSISTANT_TOKEN")
+    hue = config.home() / "hue.json"
+    _check("Philips Hue", hue.is_file() and cfg["hue"].get("enabled", False),
+           "paired" if hue.is_file() else "run: rafiq hue-setup")
     print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
@@ -166,13 +178,12 @@ def cmd_doctor(_args) -> int:
         print("  speech to text by language: "
               + ", ".join(f"{k} {v}" for k, v in speech["stt_by_language"].items()))
     print(f"  voice engines in order: {', '.join(speaker.engines())}")
-    if modes.offline(cfg):
-        order = ["ollama"]
-    elif brain["mode"] == "auto":
-        order = (["claude"] if cfg.get("anthropic_api_key") else []) + ["ollama"]
-    else:
-        order = [brain["mode"]]
-    print(f"  brain in order: {', '.join(order)}")
+    from .brain import Brain
+
+    print(f"  brain in order: {', '.join(Brain(cfg, {}, lambda action, tag: False).backends())}")
+    from . import timing
+
+    print(f"  latency: {timing.line()}")
     return 0
 
 
@@ -254,6 +265,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_hue_setup(args) -> int:
+    from .tools import hue
+
+    print(hue.setup(args.host or ""))
+    print("Then set [hue] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def cmd_install_service(_args) -> int:
     """Start Rafiq at every login, as a systemd user service."""
     from . import service
@@ -286,13 +305,13 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
-    run.add_argument("--brain", choices=("auto", "claude", "ollama"))
+    run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
     run.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
     ask.add_argument("--lang", choices=lang.TAGS)
-    ask.add_argument("--brain", choices=("auto", "claude", "ollama"))
+    ask.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
     ask.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
@@ -317,6 +336,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    hue = sub.add_parser("hue-setup", help="pair with the Philips Hue bridge (press its link button)")
+    hue.add_argument("--host", help="the bridge's address on your network (default: look for it)")
+    hue.set_defaults(fn=cmd_hue_setup)
     sub.add_parser("install-service", help="start Rafiq at every login (systemd user service)").set_defaults(
         fn=cmd_install_service)
     sub.add_parser("uninstall-service", help="stop starting Rafiq at login").set_defaults(fn=cmd_uninstall_service)
