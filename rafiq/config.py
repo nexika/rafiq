@@ -98,6 +98,25 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "presence": {
+        "phone_ip": "",                  # the phone's fixed IP on the home Wi-Fi; empty: presence is off
+        "phone_mac": "",                 # optional: only this MAC counts (turn off the phone's private MAC)
+        "away_minutes": 10,              # off the Wi-Fi this long before the away scene
+        "check_seconds": 30,
+        "away_command": [],              # the away scene: a command as an argument list
+        "home_command": [],              # the welcome-home scene
+        "welcome": True,                 # also say "welcome home"
+    },
+    # Scenes: names (in any language) and the tool calls they run; see rafiq/tools/scenes.py.
+    # "Turn everything off" ends by offering to shut down; add your lights and music steps before it.
+    "scenes": {
+        "all_off": {
+            "names": ["turn everything off", "everything off", "éteins tout", "apaga todo", "alles aus",
+                      "mach alles aus", "أطفئ كل شيء", "اقفل كل حاجة", "طفي كل حاجة"],
+            "steps": [{"tool": "power", "args": {"action": "shutdown"}}],
+        },
+    },
+    "day_start": {"scene": ""},          # a scene to run at the first start of each day
     # Home Assistant, for Nest, Hue, plugs and the rest: its address and a long-lived access token.
     "home_assistant": {"url": "", "token": ""},
     # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.

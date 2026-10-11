@@ -103,6 +103,31 @@ port = 9
 # [apps.RetroArch]
 # command = ["retroarch", "--fullscreen"]
 
+# Scenes: say a name (in any language you list) and Rafiq runs the steps, each a tool call. Steps that
+# change something (power) are asked about first; a step whose tool is missing is skipped.
+[scenes.film]
+names = ["film mode", "mode film", "modo película", "Filmmodus", "وضع الفيلم", "مود الفيلم"]
+steps = [
+    { tool = "volume", args = { level = 40 } },
+]
+
+# Built in: "turn everything off" (and the same in the other languages) offers to shut down.
+# Put your music and lights steps before the power step (tool names depend on what is set up):
+# [scenes.all_off]
+# steps = [{ tool = "music_pause" }, { tool = "lights", args = { on = false } },
+#          { tool = "power", args = { action = "shutdown" } }]
+
+# [scenes.morning]
+# names = ["good morning", "bonjour"]
+# steps = [
+#     { tool = "open_app", args = { name = "Spotify" } },
+#     { tool = "volume", args = { level = 30 }, hours = [5, 12] },   # only from 05:00 to 12:00
+#     { tool = "daily_brief", speak = true },                          # read its answer aloud
+# ]
+
+[day_start]
+scene = ""                      # e.g. "morning": runs at the first start of each day
+
 [hue]
 enabled = false                 # true after `rafiq hue-setup`
 
@@ -116,3 +141,11 @@ enabled = false                 # true after `rafiq hue-setup`
 # kind = "shelly"               # shelly (Gen2 and later), shelly-gen1, tasmota or home-assistant
 # host = "192.168.1.40"
 # ask_before_off = true         # confirm out loud before turning it off
+
+[presence]                      # react when your phone leaves or comes home (see the README)
+phone_ip = ""                   # the phone's fixed IP, e.g. "192.168.1.20"; empty: off
+phone_mac = ""                  # optional; only this MAC counts
+away_minutes = 10               # off the Wi-Fi this long before the away scene
+away_command = []               # the away scene, e.g. ["/home/you/bin/lights", "off"]
+home_command = []               # the welcome-home scene
+welcome = true                  # also say "welcome home"
