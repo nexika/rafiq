@@ -23,7 +23,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
-| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late" (asks first) |
+| Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first) |
 
 It answers Egyptian Arabic in Egyptian Arabic: "الساعة كام دلوقتي؟" gets a reply an Egyptian friend
 would say, not formal فصحى. Timers and reminders are spoken in the language they were set in.
@@ -250,6 +250,9 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 Rafiq reads every calendar in your list, subscribed ones too, and adds or deletes events (after asking)
 in your primary calendar only. A token made before Rafiq read the calendar list only sees the primary
 calendar: run `rafiq google-setup` again to give it the others.
+
+Replying and moving mail to the trash need the `gmail.modify` permission. If you connected Google
+before Rafiq had them, run `rafiq google-setup` again.
 
 ## Home devices (Nest, Hue, plugs)
 

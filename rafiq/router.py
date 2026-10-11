@@ -37,7 +37,7 @@ DOMAINS: dict[str, tuple[tuple[str, ...], set[str]]] = {
         "kalender", "termin", "termine", "besprechung",
         "تقويم", "موعد", "مواعيد", "اجتماع", "اجندة",
     }),
-    "email": (("email_list", "email_read", "email_send"), {
+    "email": (("email_list", "email_read", "email_send", "email_reply", "email_trash"), {
         "email", "emails", "mail", "mails", "inbox", "gmail",
         "courriel", "courriels",
         "correo", "correos",

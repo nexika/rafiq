@@ -42,7 +42,8 @@ def test_only_critical_tools_ask_first_and_every_critical_tool_does():
         assert (t.confirm is not None) == (t.level == "critical"), t.name
     assert {n for n, t in REGISTRY.items() if t.level == "critical"} == {"power", "email_send", "calendar_add",
                                                                         "calendar_delete", "add_app", "wake_computer",
-                                                                        "home_switch", "look_at_screen"}
+                                                                        "home_switch", "look_at_screen", "email_reply",
+                                                                        "email_trash"}
 
 
 def test_only_safe_tools_are_exposed_over_mcp():
