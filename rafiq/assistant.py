@@ -20,11 +20,13 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, presence, timing, wake
+from . import kws, lang, modes, overlay, presence, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
 from .facts import Facts
+from .gestures import GestureControl, SystemDesktop
+from .gestures import settings as gesture_settings
 from .paper_print import MorningPaper
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
@@ -44,7 +46,7 @@ class Context:
     to say something later (a countdown) from another thread, who to tell when the mode changes
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
-    that changes something."""
+    that changes something; the hand gestures; and, for a request from a satellite, its room."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -55,13 +57,17 @@ class Context:
     presence: presence.Presence | None = None
     confirm: Callable[[str, str], bool] | None = None
     tools: dict[str, Tool] | None = None
+    gestures: GestureControl | None = None
+    room: str = ""
 
 
 @dataclass
 class Events:
-    """What happened, for the panel: the last 100 events, and a queue per open panel."""
+    """What happened, for the panel: the last 100 events, and a queue per open panel. Watchers are
+    called with each event as it happens (the answer overlay is one)."""
     history: deque = field(default_factory=lambda: deque(maxlen=100))
     listeners: list = field(default_factory=list)
+    watchers: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def publish(self, kind: str, data: dict) -> None:
@@ -73,6 +79,11 @@ class Events:
                     q.put_nowait(event)
                 except queue.Full:
                     pass
+        for watch in list(self.watchers):
+            try:
+                watch(kind, data)
+            except Exception:            # a broken watcher must not stop Rafiq from answering
+                pass
 
     def subscribe(self) -> queue.Queue:
         q: queue.Queue = queue.Queue(maxsize=200)
@@ -91,6 +102,9 @@ class Assistant:
         self.cfg = cfg or config_mod.load()
         speech = self.cfg["speech"]
         self.events = Events()
+        self.overlay = overlay.Overlay(overlay.pick_backend(self.cfg))
+        self.events.watchers.append(self.overlay.feed)
+        self.silent = bool(self.cfg["overlay"].get("silent"))   # answers on screen only
         self.jobs: queue.Queue = queue.Queue()
         self.mic = Microphone.from_config(self.cfg)
         if self.mic.device is None:          # no microphone chosen: the echo-cancelled one, if loaded
@@ -101,11 +115,15 @@ class Assistant:
                                      max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
+        self.stt_lock = threading.Lock()     # satellites' requests use the same model from other threads
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
         barge = self.cfg["interruption"]
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
+        # Hand gestures: the camera tracker posts to the panel, so `rafiq run` sets the url once it serves.
+        self.gestures = GestureControl(SystemDesktop(), self.speaker.stop, self.events.publish,
+                                       options=gesture_settings(self.cfg))
         self.presence = self._make_presence()
         self.facts = Facts(config_mod.data_dir() / "memory.json")
         self.tools = load_all(self.cfg)
@@ -113,7 +131,7 @@ class Assistant:
         self.paper = MorningPaper(self.cfg)
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
-                           confirm=self.confirm, tools=self.tools)
+                           confirm=self.confirm, tools=self.tools, gestures=self.gestures)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
             self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
@@ -244,19 +262,23 @@ class Assistant:
     def hear(self, audio: np.ndarray):
         self.set_state("thinking")
         with timing.Timer("stt", model=getattr(self.stt.local, "size", "")):
-            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
-                heard = self.stt.local.transcribe(audio)
-            else:
-                heard = self.stt.transcribe(audio, hint=self.tag)
+            heard = self.transcribe(audio, hint=self.tag)
         tag = lang.dialect(heard.lang, heard.text, self.tag)
         self.events.publish("heard", {"text": heard.text, "tag": tag})
         return heard.text, tag
 
+    def transcribe(self, audio: np.ndarray, hint: str | None = None):
+        with self.stt_lock:
+            if modes.offline(self.cfg):      # offline mode: nothing leaves the computer
+                return self.stt.local.transcribe(audio)
+            return self.stt.transcribe(audio, hint=hint)
+
     # ------------------------------------------------------------------ talking
 
-    def say(self, text: str, tag: str) -> None:
-        self.events.publish("said", {"text": text, "tag": tag})
-        self.speaker.say(text, tag)
+    def say(self, text: str, tag: str, cards: list[dict] | None = None) -> None:
+        self.events.publish("said", {"text": text, "tag": tag, **({"cards": cards} if cards else {})})
+        if not self.silent:
+            self.speaker.say(text, tag)
 
     def confirm(self, action: str, tag: str) -> bool:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The
@@ -312,6 +334,10 @@ class Assistant:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
+        if lang.is_show_again(text):
+            if not self.overlay.show_again():
+                self.say(lang.phrase("nothing_to_show", tag), tag)
+            return
         if lang.is_sleep(text):
             self.go_to_sleep()
             return
@@ -328,12 +354,13 @@ class Assistant:
             self.say(direct, lang.script_language(direct, tag))
             self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
             return
-        self.speech = self.speaker.stream()
+        self.speech = None if self.silent else self.speaker.stream()   # silent: on screen only
         try:
-            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)
+            answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put if self.speech else None)
             self.events.publish("said", {"text": answer, "tag": lang.script_language(answer, tag)})
         finally:
-            self.speech.close()
+            if self.speech:
+                self.speech.close()
             self.speech = None
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
@@ -372,7 +399,9 @@ class Assistant:
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "say":
-                    self.say(data["text"], data["tag"])
+                    self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "show_again":
+                    self.overlay.show_again()
                 elif kind == "paper":
                     self.offer_paper()
                 elif kind == "brief":
@@ -399,7 +428,8 @@ class Assistant:
 
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
-        self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+        self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag,
+                    cards=[{"kind": "timer", "text": alarm.label}])
 
     def start_of_day(self) -> None:
         """Queue the daily brief, if it is turned on and has not been said yet today."""
@@ -503,6 +533,10 @@ class Assistant:
         if self.cfg["audio"]["auto_calibration"]:
             self.set_state("calibrating")
             self.calibrate()
+        if self.cfg["gestures"].get("enabled"):
+            started = self.gestures.start()
+            if started.startswith("error"):
+                self.events.publish("error", {"error": started})
         self.set_state("idle")
         self.start_of_day()
         try:
@@ -516,6 +550,7 @@ class Assistant:
                     self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
                 self.set_state("idle")
         finally:
+            self.gestures.stop()
             self.mic.stop()
             self.scheduler.stop()
             if self.presence:

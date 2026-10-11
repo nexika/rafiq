@@ -603,6 +603,19 @@ def power(action: str, ctx=None) -> str:
     return "done" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
 
 
+# ---------------------------------------------------------------------- hand gestures
+
+@tool("hand_gestures", "Turn webcam hand gestures on or off (open palm pauses, thumbs-up plays, a fist stops "
+      "Rafiq talking, one or two fingers then a swipe change the tab or the volume, two hands zoom).",
+      {"on": {"type": "boolean", "description": "true to turn them on, false to turn them off"}}, required=("on",),
+      level="act")
+def hand_gestures(on: bool, ctx=None) -> str:
+    gestures = getattr(ctx, "gestures", None)
+    if gestures is None:
+        return "error: hand gestures are not available here"
+    return gestures.start() if on else gestures.stop()
+
+
 # ---------------------------------------------------------------------- wake-on-LAN
 
 def magic_packet(mac: str) -> bytes:
