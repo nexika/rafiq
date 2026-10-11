@@ -35,7 +35,9 @@ def tools_with(log):
         return "Saturday 10 October 2026, 15:40"
 
     return {"power": Tool("power", "power off", shutdown, confirm="shut down the computer"),
-            "get_time": Tool("get_time", "time", clock)}
+            "get_time": Tool("get_time", "time", clock, card="facts"),
+            "web_search": Tool("web_search", "search", lambda: "results", slow=True,
+                               waiting_phrase={"en": "Let me look.", "fr": "Je cherche."})}
 
 
 @pytest.fixture
@@ -76,6 +78,22 @@ def test_a_declined_confirmation_does_not_run_the_action(ollama):
     brain = make_brain(confirm=lambda action, tag: asked.append((action, tag)) or False, log=log)
     brain.think("shut down", "ar-EG")
     assert asked == [("shut down the computer", "ar-EG")] and log == []
+
+
+def test_a_slow_tool_announces_a_waiting_phrase_and_each_result_carries_its_card(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "web_search", "arguments": {}}},
+                                                    {"function": {"name": "get_time", "arguments": {}}}]},
+               {"role": "assistant", "content": "Done."}]
+    brain = make_brain()
+    brain.cfg["brain"]["routing"] = False      # "cherche" alone would offer only the web tools
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("cherche", "fr")
+    waits = [d for k, d in events if k == "waiting"]
+    assert waits == [{"name": "web_search", "text": "Je cherche.", "tag": "fr"}]
+    cards = {d["name"]: d["card"] for k, d in events if k == "tool"}
+    assert cards == {"web_search": "text", "get_time": "facts"}
 
 
 def test_an_unknown_tool_is_reported_to_the_model_not_run(ollama):
@@ -120,6 +138,84 @@ def test_when_every_backend_fails_rafiq_says_so_in_the_users_language(monkeypatc
     assert make_brain().think("bonjour", "fr") == "Je n'arrive pas à réfléchir pour le moment."
 
 
+def calls_to(name, count=1):
+    return {"role": "assistant", "tool_calls": [{"function": {"name": name, "arguments": {}}}] * count}
+
+
+def test_the_defaults_match_jarvis_six_rounds_twelve_calls_two_minutes():
+    assert config.load()["brain"]["limits"] == {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120}
+
+
+def test_too_many_rounds_stops_with_a_message_in_the_users_language(ollama):
+    script, requests = ollama
+    script += [calls_to("get_time")] * 3
+    brain = make_brain()
+    brain.cfg["brain"]["limits"]["max_rounds"] = 2
+    assert brain.think("quelle heure", "fr") == brain_mod.lang_mod.phrase("limit", "fr")
+    assert len(requests) == 2
+
+
+def test_too_many_tool_calls_stops_before_running_the_extra_ones(ollama):
+    script, requests = ollama
+    log = []
+    script += [calls_to("get_time", 2), calls_to("power", 2)]
+    brain = make_brain(log=log)
+    brain.cfg["brain"]["limits"]["max_tool_calls"] = 3
+    assert brain.think("shut down twice", "ar-EG") == brain_mod.lang_mod.phrase("limit", "ar-EG")
+    assert log == []            # the batch that would pass the cap is not run at all
+    assert len(requests) == 2
+
+
+def test_running_out_of_time_stops_the_request(ollama):
+    script, requests = ollama
+    now = [1000.0]
+
+    def slow_time():
+        now[0] += 50
+        return "Saturday 10 October 2026, 15:40"
+
+    script += [calls_to("get_time")] * 4
+    cfg = config.load()
+    cfg["brain"]["mode"] = "ollama"
+    cfg["brain"]["limits"]["max_seconds"] = 120
+    brain = Brain(cfg, {"get_time": Tool("get_time", "time", slow_time)}, lambda a, t: True, clock=lambda: now[0])
+    assert brain.think("what time is it", "en") == brain_mod.lang_mod.phrase("limit", "en")
+    assert len(requests) == 3   # at 0 s, 50 s and 100 s; at 150 s the time is up
+
+
+def test_the_model_request_never_waits_past_the_time_left(monkeypatch):
+    now, timeouts = [1000.0], []
+
+    def post(url, json=None, timeout=None):
+        timeouts.append(timeout)
+        now[0] += 90
+        return FakeResponse({"message": calls_to("get_time")})
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", post)
+    cfg = config.load()
+    cfg["brain"]["mode"] = "ollama"
+    brain = Brain(cfg, tools_with([]), lambda a, t: True, clock=lambda: now[0])
+    brain.think("what time is it", "en")
+    assert timeouts == [120, 30]
+
+
+def test_a_limit_does_not_fall_back_to_the_other_backend(ollama, monkeypatch):
+    """Claude already spent the request's budget looping; starting over on Ollama would double it."""
+    script, requests = ollama
+    brain = make_brain()
+    brain.cfg["brain"]["mode"] = "auto"
+    brain.cfg["anthropic_api_key"] = "sk-test"
+
+    def looping(*args):
+        raise brain_mod.LimitReached("too many tool rounds")
+
+    monkeypatch.setattr(brain, "_claude_turn", looping)
+    assert brain.think("hello", "en") == brain_mod.lang_mod.phrase("limit", "en")
+    assert requests == []
+
+
 def test_system_prompt_has_no_time_or_language():
     text = brain_mod.system_prompt(config.load())
     assert "2026" not in text and "{" not in text
@@ -129,7 +225,7 @@ def test_system_prompt_has_no_time_or_language():
 
 class FakeAssistant:
     def __init__(self):
-        self.events, self.jobs, self.state = Events(), [], "idle"
+        self.events, self.jobs, self.state, self.mode = Events(), [], "idle", "everyday"
         import queue
 
         self.pending_answer = queue.Queue()
@@ -138,6 +234,9 @@ class FakeAssistant:
 
     def submit(self, kind, **data):
         self.jobs.append((kind, data))
+
+    def set_muted(self, muted=None):
+        self.jobs.append(("mute", {"muted": muted}))
 
 
 @pytest.fixture
@@ -177,6 +276,20 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assert assistant.jobs == [("text", {"text": "what time is it"})]
 
 
+def test_the_morning_paper_timers_offer_reaches_the_running_rafiq(panel):
+    assistant, port = panel
+    assert request(port, "/api/paper", {})[0] == 200
+    assert assistant.jobs == [("paper", {})]
+
+
+def test_the_mute_button_and_rafiq_mute_reach_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/mute", {})[0] == 200
+    assert request(port, "/api/mute", {"muted": False})[0] == 200
+    assert request(port, "/api/mute", {"muted": "yes"})[0] == 400
+    assert assistant.jobs == [("mute", {"muted": None}), ("mute", {"muted": False})]
+
+
 def test_a_request_without_the_token_is_refused(panel):
     assistant, port = panel
     assert request(port, "/api/text", {"text": "shut down"}, token=None)[0] == 403
@@ -214,3 +327,22 @@ def test_an_unknown_reading_action_is_refused(panel):
 def test_the_panel_will_not_listen_beyond_this_computer():
     with pytest.raises(ValueError):
         serve(FakeAssistant(), "0.0.0.0", 0, "t" * 40)
+
+
+def test_show_again_is_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/show", {})[0] == 200
+    assert assistant.jobs == [("show_again", {})]
+
+
+def test_a_mode_chosen_in_the_panel_is_queued_for_the_assistant(panel):
+    assistant, port = panel
+    assert request(port, "/api/mode", {"mode": "offline"})[0] == 200
+    assert assistant.jobs == [("mode", {"mode": "offline"})]
+
+
+@pytest.mark.parametrize("body", [{"mode": "turbo"}, {"mode": 3}, {}])
+def test_an_unknown_mode_from_the_panel_is_refused(panel, body):
+    assistant, port = panel
+    assert request(port, "/api/mode", body)[0] == 400
+    assert assistant.jobs == []

@@ -17,7 +17,7 @@ SOURCES = ("selection", "clipboard", "page", "pdf")
       {"source": {"type": "string", "enum": list(SOURCES)},
        "url": {"type": "string", "description": "the page's address, for source 'page'"},
        "path": {"type": "string", "description": "the PDF's path, for source 'pdf'"}},
-      required=("source",))
+      required=("source",), level="private")
 def read_aloud(source: str, url: str = "", path: str = "", ctx=None) -> str:
     if source == "page" and not url:
         return "error: reading a page needs its address"
@@ -45,7 +45,8 @@ def read_aloud(source: str, url: str = "", path: str = "", ctx=None) -> str:
 
 
 @tool("reading", "Control the reading aloud: pause, resume, skip the sentence, or stop.",
-      {"action": {"type": "string", "enum": ["pause", "resume", "skip", "stop"]}}, required=("action",))
+      {"action": {"type": "string", "enum": ["pause", "resume", "skip", "stop"]}}, required=("action",),
+      level="act")
 def reading(action: str, ctx=None) -> str:
     r = ctx.reader
     if action == "stop":
