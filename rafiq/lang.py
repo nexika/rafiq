@@ -24,6 +24,7 @@ EGYPTIAN = {
     "زي", "عشان", "علشان", "ازيك", "إزيك", "إزيكم", "مفيش", "فيه", "معلش", "لسه", "هو", "قوي", "يلا", "ياريت",
     "اهو", "أهو", "برضه", "برضو", "تعالى", "هات", "بص", "شغل", "شغّل", "اقفل", "افتح", "استنى", "عاملين",
     "احسبلي", "قولي", "قوللي", "اعملي", "اعملّي", "شوفلي", "دورلي", "فكرني", "فكّرني", "كام", "بكام", "ازاى",
+    "افتحلي", "بتاعتي", "بتاعتك", "ابعت", "ابعتلي", "شغّلي", "شغلي",
 }
 # Words shared with standard Arabic or other dialects: they count only next to a distinctive one.
 _WEAK = {"يعني", "هو", "فيه", "شغل", "افتح", "يلا", "طب", "حاجة", "حاجه", "اللي", "ليه"}
@@ -62,6 +63,76 @@ def dialect(lang: str, text: str, previous: str | None = None) -> str:
     if score == 0 and previous == "ar-EG" and len(words(text)) <= 4:
         return "ar-EG"
     return "ar"
+
+
+# English words that Egyptians say inside Arabic sentences, as Whisper writes them in Arabic script
+# (spelled as normalize_arabic leaves them). Tools and the model want the English name.
+LOANWORDS = {
+    "settings": ["سيتنجز", "ستنجز", "سيتينجز", "سيتنج", "سيتينج"],
+    "playlist": ["بلاي ليست", "بلايليست", "بلاليست"],
+    "email": ["ايميل", "اميل"],
+    "Wi-Fi": ["واي فاي", "وايفاي"],
+    "Bluetooth": ["بلوتوث", "بلوتوز", "بلو توث"],
+    "volume": ["فوليوم"],
+    "Spotify": ["سبوتيفاي", "سبوتفاي"],
+    "YouTube": ["يوتيوب"],
+    "Google Chrome": ["جوجل كروم"],
+    "Chrome": ["كروم"],
+    "Firefox": ["فايرفوكس", "فيرفوكس"],
+    "Google": ["جوجل"],
+    "WhatsApp": ["واتساب", "واتس اب"],
+    "Telegram": ["تيليجرام", "تليجرام", "تلجرام"],
+    "screenshot": ["سكرين شوت", "سكرينشوت"],
+    "folder": ["فولدر"],
+    "terminal": ["ترمينال", "تيرمينال"],
+    "dark mode": ["دارك مود"],
+    "mute": ["ميوت"],
+    "brightness": ["برايتنس"],
+    "notifications": ["نوتيفيكيشنز", "نوتيفيكيشن"],
+}
+# Prefixes glued to a loanword ("السيتنجز", "والبلوتوث"), longest first, and how they are written
+# before the Latin word: "الـ settings", as Egyptians write it.
+_PREFIXES = ("وبال", "وال", "بال", "لل", "ال", "و", "ب")
+_PREFIX_OUT = {"و": "و ", "ب": "بـ "}
+_ARABIC_WORD = re.compile(r"[؀-ۿ]+")
+
+
+def _loanword(first: str, second: str | None) -> tuple[str, str, bool] | None:
+    """The prefix and English word for one or two Arabic-script words, and whether both were used."""
+    for prefix in ("",) + _PREFIXES:
+        if prefix and not first.startswith(prefix):
+            continue
+        stem = first[len(prefix):]
+        for key, used_both in (((f"{stem} {second}", True),) if second else ()) + ((stem, False),):
+            if key in _LOANWORDS:
+                return prefix, _LOANWORDS[key], used_both
+    return None
+
+
+def latinize(text: str) -> str:
+    """English words that speech-to-text wrote in Arabic script, back in Latin letters:
+    "افتحلي السيتنجز" becomes "افتحلي الـ settings". Everything else is left as it was."""
+    found = list(_ARABIC_WORD.finditer(text))
+    out, end, i = [], 0, 0
+    while i < len(found):
+        match = found[i]
+        first = normalize_arabic(match.group())
+        nxt = found[i + 1] if i + 1 < len(found) else None
+        second = (normalize_arabic(nxt.group())
+                  if nxt and text[match.end():nxt.start()].isspace() else None)
+        hit = _loanword(first, second)
+        if first == "ال" and hit is None:
+            # "ال settings": the article split from an English word
+            out += [text[end:match.start()], "الـ"]
+            end = match.end()
+        elif hit:
+            prefix, english, used_both = hit
+            last = nxt if used_both else match
+            out += [text[end:match.start()], _PREFIX_OUT.get(prefix, f"{prefix}ـ " if prefix else ""), english]
+            end = last.end()
+            i += used_both
+        i += 1
+    return "".join(out) + text[end:]
 
 
 STOPWORDS = {
@@ -119,7 +190,58 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+# "Show it again": bring back the last answer on screen instead of asking the brain.
+SHOW_AGAIN = (
+    "show it again", "show that again", "show me again", "show me that again", "show the answer again",
+    "montre-le encore", "montre le encore", "montre-moi encore", "remontre", "réaffiche",
+    "muéstralo otra vez", "muestralo otra vez", "muéstramelo otra vez", "enséñamelo otra vez",
+    "zeig es nochmal", "zeig das nochmal", "zeig es noch mal", "zeig das noch mal", "nochmal zeigen",
+    "اعرضها مرة أخرى", "اعرضه مرة أخرى", "اعرضها مرة ثانية", "أعد العرض", "وريني تاني", "وريهالي تاني",
+    "اعرضها تاني", "اعرضه تاني",
+)
+SHOW_AGAIN_MAX_WORDS = 7
+
+
+def is_show_again(text: str) -> bool:
+    """True when a short request asks to see the last answer again ("show it again", "وريني تاني")."""
+    said = " ".join(words(text))
+    if len(said.split()) > SHOW_AGAIN_MAX_WORDS:
+        return False
+    return any(" ".join(words(p)) in said for p in SHOW_AGAIN)
+
+
+SLEEP = {"go to sleep", "sleep", "mets toi en veille", "en veille", "va dormir", "dors", "vete a dormir",
+         "a dormir", "duérmete", "duermete", "geh schlafen", "schlaf", "نام", "نم", "روح نام", "اذهب للنوم",
+         "اذهب إلى النوم"}
+# Said around the phrase without changing it ("go to sleep please", "نام يا رفيق").
+_SLEEP_FILLER = {"please", "now", "thanks", "rafiq", "rafik", "s'il", "te", "plait", "plaît", "merci",
+                 "maintenant", "por", "favor", "ya", "bitte", "jetzt", "يا", "رفيق", "خلاص", "دلوقتي", "شكرا"}
+
+
+def is_sleep(text: str) -> bool:
+    """True when the whole request is "go to sleep" (or "نام", "mets-toi en veille"...); a request that
+    only mentions sleep ("set a sleep timer") is not."""
+    return " ".join(w for w in words(text) if w not in _SLEEP_FILLER_N) in _SLEEP_N
+
+
+# What stops Rafiq while it speaks. Said over its voice, so only a short utterance counts: a long one is
+# more likely Rafiq's own sentence leaking past the echo check than you.
+STOP = {"stop", "wait", "enough", "attends", "arrête", "arrete", "espera", "para", "basta", "warte",
+        "stopp", "halt", "genug", "توقف", "قف", "استنى", "كفاية", "خلاص", "اسكت"}
+STOP_MAX_WORDS = 4
+
+
+def is_stop(text: str) -> bool:
+    """True for a short "stop" in any of Rafiq's languages ("Rafiq, stop", "attends", "استنى")."""
+    found = words(text)
+    return 0 < len(found) <= STOP_MAX_WORDS and any(w in _STOP for w in found)
+
+
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_LOANWORDS = {normalize_arabic(spelling): english for english, spellings in LOANWORDS.items() for spelling in spellings}
+_SLEEP_N = frozenset(" ".join(words(p)) for p in SLEEP)
+_SLEEP_FILLER_N = _norm(_SLEEP_FILLER)
+_STOP = _norm(STOP)
 
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},
@@ -142,9 +264,96 @@ PHRASES = {
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "voice_test": {"en": "Hello, this is how I sound.", "fr": "Bonjour, voici ma voix.",
+                   "es": "Hola, así suena mi voz.", "de": "Hallo, so klinge ich.", "ar": "مرحبًا، هكذا يبدو صوتي.",
+                   "ar-EG": "أهلاً، ده صوتي."},
+    "nothing_to_show": {"en": "There's nothing to show yet.", "fr": "Il n'y a encore rien à montrer.",
+                        "es": "Todavía no hay nada que mostrar.", "de": "Es gibt noch nichts zu zeigen.",
+                        "ar": "لا يوجد شيء لعرضه بعد.", "ar-EG": "لسه مفيش حاجة أوريهالك."},
+    "paper_printed": {"en": "Your morning paper is printing.", "fr": "Ton journal du matin est en cours d'impression.",
+                      "es": "Tu periódico de la mañana se está imprimiendo.",
+                      "de": "Deine Morgenzeitung wird gedruckt.", "ar": "جريدتك الصباحية قيد الطباعة.",
+                      "ar-EG": "جرنال الصبح بيتطبع دلوقتي."},
+    "paper_failed": {"en": "I couldn't print the morning paper.", "fr": "Je n'ai pas pu imprimer le journal du matin.",
+                     "es": "No he podido imprimir el periódico de la mañana.",
+                     "de": "Ich konnte die Morgenzeitung nicht drucken.", "ar": "لم أتمكن من طباعة الجريدة الصباحية.",
+                     "ar-EG": "معرفتش أطبع جرنال الصبح."},
+    "welcome_home": {"en": "Welcome home.", "fr": "Bon retour à la maison.", "es": "Bienvenido a casa.",
+                     "de": "Willkommen zu Hause.", "ar": "أهلًا بعودتك إلى البيت.", "ar-EG": "حمد الله على السلامة."},
+    "scene_done": {"en": "Done.", "fr": "C'est fait.", "es": "Hecho.", "de": "Erledigt.", "ar": "تم.",
+                   "ar-EG": "تمام، خلصت."},
+    "task_done": {"en": "Your task is done. {result}", "fr": "Ta tâche est terminée. {result}",
+                  "es": "Tu tarea está lista. {result}", "de": "Deine Aufgabe ist fertig. {result}",
+                  "ar": "انتهت مهمتك. {result}", "ar-EG": "المهمة خلصت. {result}"},
+    "task_failed": {"en": "I couldn't finish the task: {goal}", "fr": "Je n'ai pas pu finir la tâche : {goal}",
+                    "es": "No he podido terminar la tarea: {goal}",
+                    "de": "Ich konnte die Aufgabe nicht abschließen: {goal}",
+                    "ar": "لم أستطع إنهاء المهمة: {goal}", "ar-EG": "مقدرتش أخلّص المهمة: {goal}"},
+    "shutdown_soon": {"en": "Shutting down in {seconds} seconds. Say cancel the shutdown to stop it.",
+                      "fr": "Extinction dans {seconds} secondes. Dis « annule l'extinction » pour l'arrêter.",
+                      "es": "Me apago en {seconds} segundos. Di «cancela el apagado» para pararlo.",
+                      "de": "Ich fahre in {seconds} Sekunden herunter. "
+                            "Sag „Herunterfahren abbrechen“, um es zu stoppen.",
+                      "ar": "سأطفئ الجهاز بعد {seconds} ثوانٍ. قل «ألغِ إيقاف التشغيل» لإيقافه.",
+                      "ar-EG": "هقفل الجهاز كمان {seconds} ثواني. قول «إلغي القفل» لو عايز توقفه."},
+    "shutdown_failed": {"en": "I couldn't shut the computer down.",
+                        "fr": "Je n'ai pas pu éteindre l'ordinateur.", "es": "No he podido apagar el ordenador.",
+                        "de": "Ich konnte den Computer nicht herunterfahren.",
+                        "ar": "لم أستطع إطفاء الجهاز.", "ar-EG": "معرفتش أقفل الجهاز."},
+    "job_done": {"en": "Finished: {label}", "fr": "Terminé : {label}", "es": "Terminado: {label}",
+                 "de": "Fertig: {label}", "ar": "انتهى: {label}", "ar-EG": "خلص: {label}"},
+    "job_failed": {"en": "Failed: {label}", "fr": "Échec : {label}", "es": "Falló: {label}",
+                   "de": "Fehlgeschlagen: {label}", "ar": "فشل: {label}", "ar-EG": "فشل: {label}"},
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "dictating": {"en": "Dictating. Say “stop dictating” to finish.",
+                  "fr": "Je tape ce que tu dis. Dis « arrête la dictée » pour finir.",
+                  "es": "Escribo lo que dices. Di «deja de dictar» para terminar.",
+                  "de": "Ich schreibe mit. Sag „Diktat beenden“, um aufzuhören.",
+                  "ar": "أكتب ما تقول. قل «أوقف الإملاء» للانتهاء.",
+                  "ar-EG": "بكتب اللي بتقوله. قول «بطل إملاء» لما تخلص."},
+    "dictation_stopped": {"en": "Dictation stopped.", "fr": "Dictée terminée.", "es": "Dictado terminado.",
+                          "de": "Diktat beendet.", "ar": "توقف الإملاء.", "ar-EG": "خلصنا الإملاء."},
+    "interpret_start": {"en": "I'll interpret. Speak in turns; say stop to finish.",
+                        "fr": "Je fais l'interprète. Parlez chacun votre tour ; dites stop pour finir.",
+                        "es": "Voy a interpretar. Hablad por turnos; decid basta para terminar.",
+                        "de": "Ich dolmetsche. Sprecht abwechselnd; sagt Stopp zum Beenden.",
+                        "ar": "سأترجم بينكما. تحدثا بالتناوب، وقولا توقف للإنهاء.",
+                        "ar-EG": "هترجم بينكم. اتكلموا واحد واحد، وقولوا كفاية لما تخلصوا."},
+    "interpret_end": {"en": "Interpreting finished.", "fr": "Fin de l'interprétation.",
+                      "es": "Fin de la interpretación.", "de": "Dolmetschen beendet.", "ar": "انتهت الترجمة.",
+                      "ar-EG": "خلصنا الترجمة."},
+    "budget_warning": {"en": "Heads up: you have used eighty percent of your spending cap.",
+                       "fr": "Attention : tu as utilisé quatre-vingts pour cent de ton plafond de dépenses.",
+                       "es": "Aviso: has usado el ochenta por ciento de tu límite de gasto.",
+                       "de": "Achtung: Du hast achtzig Prozent deines Ausgabenlimits verbraucht.",
+                       "ar": "تنبيه: لقد استهلكت ثمانين بالمئة من حد الإنفاق.",
+                       "ar-EG": "خد بالك: صرفت تمانين في المية من الحد بتاعك."},
+    "budget_capped": {"en": "Your spending cap is reached, so I'm switching to offline mode until it resets.",
+                      "fr": "Ton plafond de dépenses est atteint : je passe hors ligne jusqu'à sa remise à zéro.",
+                      "es": "Has llegado a tu límite de gasto, así que paso al modo sin conexión hasta que se renueve.",
+                      "de": "Dein Ausgabenlimit ist erreicht, ich arbeite offline, bis es zurückgesetzt wird.",
+                      "ar": "تم بلوغ حد الإنفاق، لذا سأعمل دون اتصال حتى يتجدد.",
+                      "ar-EG": "وصلت للحد بتاعك، فهشتغل أوفلاين لحد ما يتجدد."},
+    "media_opened": {"en": "Opening {query} on {service}.", "fr": "J'ouvre {query} sur {service}.",
+                     "es": "Abro {query} en {service}.", "de": "Ich öffne {query} auf {service}.",
+                     "ar": "أفتح {query} على {service}.", "ar-EG": "حاضر، بفتحلك {query} على {service}."},
+    "at_home": {"en": "I can't do that from your phone; do that at home by voice.",
+                "fr": "Je ne peux pas le faire depuis ton téléphone ; fais-le à la maison, à voix haute.",
+                "es": "No puedo hacerlo desde tu móvil; hazlo en casa, de viva voz.",
+                "de": "Das geht nicht vom Handy aus; mach das zu Hause per Sprache.",
+                "ar": "لا أستطيع فعل ذلك من هاتفك؛ اطلبه مني في البيت بصوتك.",
+                "ar-EG": "مش هقدر أعمل كده من الموبايل؛ اطلبها مني في البيت بصوتك."},
+    # Said before a slow tool that has no waiting phrase of its own (see Tool.waiting_phrase).
+    "wait": {"en": "One moment.", "fr": "Un instant.", "es": "Un momento.", "de": "Einen Moment.",
+             "ar": "لحظة من فضلك.", "ar-EG": "ثانية واحدة."},
+    "limit": {"en": "That was taking too long, so I stopped. Try asking in a simpler way.",
+              "fr": "Ça prenait trop de temps, alors j'ai arrêté. Essaie de demander plus simplement.",
+              "es": "Estaba tardando demasiado, así que paré. Prueba a pedirlo de forma más sencilla.",
+              "de": "Das hat zu lange gedauert, also habe ich aufgehört. Frag es bitte einfacher.",
+              "ar": "استغرق ذلك وقتًا طويلًا فتوقفت. جرّب أن تسأل بطريقة أبسط.",
+              "ar-EG": "ده كان واخد وقت كتير فوقفت. جرّب تسأل بطريقة أبسط."},
 }
 
 

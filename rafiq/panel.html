@@ -29,8 +29,14 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .orb[data-state="listening"]::after { opacity: 1; animation: pulse 1.2s ease-in-out infinite; }
 .orb[data-state="thinking"]::after { opacity: .9; animation: spin 1s linear infinite; border-radius: 30%; }
 .orb[data-state="speaking"]::after { opacity: 1; animation: talk .5s ease-in-out infinite alternate; }
-.orb[data-state="offline"] { background: var(--line); }
-.orb[data-state="offline"]::after { background: var(--muted); }
+.orb[data-state="offline"], .orb[data-state="muted"] { background: var(--line); }
+.orb[data-state="offline"]::after, .orb[data-state="muted"]::after { background: var(--muted); }
+#mute[aria-pressed="true"] { background: var(--warn-soft); border-color: var(--warn); }
+/* Dictating types into another window: it must not look like any other state. */
+.orb[data-state="dictating"] { background: var(--warn-soft); }
+.orb[data-state="dictating"]::after { background: var(--warn); opacity: 1; animation: pulse 1.2s ease-in-out infinite; }
+#state[data-state="dictating"] { color: var(--warn); font-weight: 600; }
+button.dictating { background: var(--warn); border-color: var(--warn); color: var(--bg); font-weight: 600; }
 @keyframes pulse { 50% { transform: scale(1.35); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes talk { to { transform: scaleY(1.4); } }
@@ -38,14 +44,23 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 h1 { font-size: 22px; margin: 0; letter-spacing: .01em; }
 h1 span { color: var(--muted); font-weight: 400; }
 #state { color: var(--muted); font-size: 14px; }
+.spending { color: var(--muted); font-size: 12px; }
+.spending[data-status="warning"] { color: var(--warn); }
+.spending[data-status="capped"] { color: var(--err); }
+header label { margin-left: auto; font-size: 14px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 8px; }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #log { display: flex; flex-direction: column; gap: 10px; }
 .msg { padding: 10px 14px; border-radius: 14px; max-width: 85%; border: 1px solid var(--line);
   white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.you { background: var(--you); align-self: flex-end; border-bottom-right-radius: 4px; }
 .msg.rafiq { background: var(--rafiq); align-self: flex-start; border-bottom-left-radius: 4px; }
 .msg .meta { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
-.note { font-size: 13px; color: var(--muted); align-self: center; text-align: center; max-width: 95%; }
+.note { font-size: 13px; color: var(--muted); align-self: center; text-align: center; max-width: 95%;
+  white-space: pre-wrap; }
 .note.err { color: var(--err); }
+.note.fix { color: var(--ink); }
 .tool { font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); align-self: flex-start;
   border-left: 3px solid var(--accent-soft); padding: 2px 10px; max-width: 95%; overflow-wrap: anywhere; }
 #confirm { display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px;
@@ -53,6 +68,12 @@ h1 span { color: var(--muted); font-weight: 400; }
   border: 1px solid var(--warn); border-radius: 14px; padding: 12px 14px; gap: 10px; align-items: center; }
 #confirm.on { display: flex; }
 #confirm p { margin: 0; flex: 1; }
+#reading { display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px;
+  width: min(728px, calc(100% - 32px)); background: var(--accent-soft); color: var(--ink);
+  border: 1px solid var(--accent); border-radius: 14px; padding: 8px 14px; gap: 8px; align-items: center; }
+#reading.on { display: flex; }
+#reading p { margin: 0; flex: 1; }
+#reading button { padding: 6px 12px; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--line); }
 footer form { max-width: 760px; margin: 0 auto; padding: 14px 16px; display: flex; gap: 8px; }
 input[type=text] { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 12px;
@@ -62,41 +83,184 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
   color: var(--ink); padding: 10px 14px; cursor: pointer; white-space: nowrap; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#project { display: flex; gap: 8px; margin: -8px 0 20px; }
+#project input { font-size: 14px; padding: 6px 10px; }
+#project button { font-size: 14px; padding: 6px 10px; }
+.navlink { color: var(--accent); font-size: 14px; }
+#mode { margin-left: auto; font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+#mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .empty { color: var(--muted); text-align: center; margin-top: 48px; }
+nav { display: flex; gap: 4px; margin: -8px 0 20px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted);
+  padding: 8px 12px; }
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+body:not([data-page="talk"]) footer { display: none; }
+section[hidden] { display: none; }
+section h2 { font-size: 17px; margin: 24px 0 8px; }
+section .hint { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.row .name { font-weight: 600; overflow-wrap: anywhere; }
+.row .info { color: var(--muted); font-size: 14px; flex: 1; min-width: 160px; }
+.row button { padding: 6px 10px; font-size: 14px; }
+.badge { font-size: 12px; border-radius: 999px; padding: 2px 8px; background: var(--line); color: var(--ink); }
+.badge.on { background: var(--accent-soft); }
+.badge.warn { background: var(--warn-soft); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.dot.up { background: var(--accent); }
+.dot.down { background: var(--err); }
+header .grow { flex: 1; min-width: 0; }
+#meter { width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 6px; }
+#meter div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+#now { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+#drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100%); background: var(--panel);
+  border-left: 1px solid var(--line); padding: 20px 16px; overflow-y: auto; transform: translateX(100%);
+  transition: transform .2s; z-index: 10; }
+#drawer.on { transform: none; }
+@media (prefers-reduced-motion: reduce) { #drawer { transition: none; } }
+#drawer h2 { font-size: 18px; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
+#drawer h3 { font-size: 14px; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
+#drawer label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+#drawer select, #drawer input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+#drawer .row { display: flex; gap: 8px; align-items: center; }
+#drawer .row select { flex: 1; }
+#drawer ul { margin: 0; padding-left: 18px; font-size: 14px; }
+#saved { font-size: 13px; color: var(--muted); min-height: 1.5em; margin-top: 8px; }
+#picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -8px 0 20px; font-size: 14px; }
+#picker select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); max-width: 100%; }
+#picker button { padding: 6px 12px; }
+#picker-note { color: var(--muted); }
+#picker-note.err { color: var(--err); }
 </style>
 </head>
-<body>
+<body data-page="talk">
 <main>
   <header>
     <div class="orb" id="orb" data-state="offline" aria-hidden="true"></div>
-    <div>
+    <div class="grow">
       <h1>Rafiq <span>رفيق</span></h1>
       <div id="state" role="status">connecting…</div>
+      <div id="spending" class="spending"></div>
+      <div id="meter" title="Microphone level" aria-hidden="true"><div></div></div>
+      <div id="now"></div>
     </div>
+    <button type="button" id="open-settings" title="Settings" aria-controls="drawer" aria-expanded="false">⚙</button>
+    <select id="mode" aria-label="Mode" title="Everyday: fast. Quality: the strongest model. Offline: nothing leaves this computer.">
+      <option value="everyday">Everyday</option>
+      <option value="quality">Quality</option>
+      <option value="offline">Offline</option>
+    </select>
+    <label>Style
+      <select id="persona">
+        <option value="neutral">Neutral</option>
+        <option value="concise">Concise</option>
+        <option value="butler">Witty butler</option>
+      </select>
+    </label>
+    <a href="/subscriptions" class="navlink">Subscriptions</a>
   </header>
-  <div id="log" aria-live="polite">
-    <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
-  </div>
+  <nav role="tablist">
+    <button role="tab" data-page="talk" aria-selected="true">Talk</button>
+    <button role="tab" data-page="models" aria-selected="false">Models</button>
+    <button role="tab" data-page="status" aria-selected="false">Status</button>
+    <button role="tab" data-page="permissions" aria-selected="false">Permissions</button>
+  </nav>
+  <section id="page-talk">
+    <form id="project" title="The folder for “run the tests”, “what's my git status?”, “why did CI fail?”">
+      <input type="text" id="project-path" placeholder="Project folder for developer commands" autocomplete="off"
+        dir="ltr" aria-label="Project folder">
+      <button type="submit">Set</button>
+    </form>
+    <div id="picker">
+      <label for="backend">Brain</label>
+      <select id="backend">
+        <option value="auto">Auto</option><option value="claude">Claude</option>
+        <option value="openai">OpenAI</option><option value="ollama">Ollama</option>
+      </select>
+      <select id="model" aria-label="Model" hidden></select>
+      <button type="button" id="use" hidden>Use</button>
+      <span id="picker-note" role="status"></span>
+    </div>
+    <div id="log" aria-live="polite">
+      <p class="empty" id="empty">Say “Rafiq”, press Talk, or type below.<br>English · Français · Español · Deutsch · العربية · مصري</p>
+    </div>
+  </section>
+  <section id="page-models" hidden>
+    <h2>Thinking (Ollama)</h2>
+    <p class="hint" id="ollama-hint"></p>
+    <div class="rows" id="ollama"></div>
+    <h2>Hearing (Whisper)</h2>
+    <p class="hint">Bigger models understand more, Arabic especially, and answer more slowly. A model downloads the first time it is used.</p>
+    <div class="rows" id="whisper"></div>
+  </section>
+  <section id="page-status" hidden>
+    <div class="rows" id="parts"></div>
+  </section>
+  <section id="page-permissions" hidden>
+    <p class="hint">Tools that change something ask before they run. Press “Always” when Rafiq asks to stop it asking for that tool; Revoke makes it ask again.</p>
+    <div class="rows" id="tools"></div>
+  </section>
 </main>
 <div id="confirm" role="alertdialog" aria-labelledby="confirm-text">
   <p id="confirm-text"></p>
   <button class="primary" id="yes">Yes</button>
+  <button id="always" title="Yes, and don't ask again for this tool">Always</button>
   <button id="no">No</button>
 </div>
+<div id="reading" role="region" aria-label="Reading aloud">
+  <p id="reading-text" role="status"></p>
+  <button id="pause">Pause</button>
+  <button id="skip" title="Next sentence">Skip</button>
+  <button id="reading-stop">Stop</button>
+</div>
+<aside id="drawer" aria-label="Settings" hidden>
+  <h2>Settings <button type="button" id="close-settings" title="Close">✕</button></h2>
+  <label for="s-mode">Brain</label>
+  <select id="s-mode" data-name="brain.mode"></select>
+  <label for="s-claude">Claude model</label>
+  <input id="s-claude" data-name="brain.claude_model" autocomplete="off">
+  <label for="s-ollama">Ollama model</label>
+  <input id="s-ollama" data-name="brain.ollama_model" autocomplete="off">
+  <label for="s-engine">Voice engine</label>
+  <select id="s-engine" data-name="voice.engine"></select>
+  <label for="s-rate">Speed (for example +10% or -10%)</label>
+  <input id="s-rate" data-name="voice.rate" autocomplete="off">
+  <label for="s-tag">Voice for</label>
+  <div class="row">
+    <select id="s-tag"></select>
+    <button type="button" id="test-voice" title="Say a line in this voice">▶ Test</button>
+  </div>
+  <input id="s-voice" aria-label="Voice name" autocomplete="off">
+  <button type="button" class="primary" id="save" style="margin-top:14px">Save</button>
+  <div id="saved" role="status"></div>
+  <h3>Spend since Rafiq started</h3>
+  <div id="spend">–</div>
+  <h3>Timers and reminders</h3>
+  <ul id="tasks"></ul>
+</aside>
 <footer>
   <form id="form">
     <button type="button" class="primary" id="talk" title="Speak without saying the name">🎙 Talk</button>
     <input type="text" id="text" placeholder="Type to Rafiq…" autocomplete="off" dir="auto" aria-label="Message">
     <button type="submit">Send</button>
+    <button type="button" id="dictate" title="Type what you say into the focused window">Dictate</button>
     <button type="button" id="stop" title="Stop speaking">■</button>
+    <button type="button" id="mute" aria-pressed="false" title="Stop listening (rafiq mute)">Mute</button>
   </form>
 </footer>
 <script>
 const TOKEN = "__TOKEN__";
 const STATES = { idle: "Waiting for “Rafiq”", listening: "Listening…", thinking: "Thinking…",
-  speaking: "Speaking", starting: "Starting…", offline: "Not connected: is Rafiq running?" };
+  speaking: "Speaking", dictating: "Dictating into the focused window: say “stop dictating” to finish",
+  muted: "Muted: not listening for “Rafiq”", starting: "Starting…",
+  calibrating: "Listening to the room, a moment of quiet…", offline: "Not connected: is Rafiq running?" };
 const log = document.getElementById("log"), orb = document.getElementById("orb");
 const stateEl = document.getElementById("state"), confirmBox = document.getElementById("confirm");
+const modeEl = document.getElementById("mode");
 
 function add(cls, text, meta) {
   document.getElementById("empty")?.remove();
@@ -108,11 +272,29 @@ function add(cls, text, meta) {
   log.append(el);
   el.scrollIntoView({ block: "end", behavior: "smooth" });
 }
-function setState(s) { orb.dataset.state = s; stateEl.textContent = STATES[s] || s; }
+function showSpending(e) {
+  const el = document.getElementById("spending"), money = (n) => n.toFixed(2) + " " + e.currency;
+  el.textContent = "Spent today " + money(e.today) + (e.daily_cap ? " of " + money(e.daily_cap) : "")
+    + " · this month " + money(e.month) + (e.monthly_cap ? " of " + money(e.monthly_cap) : "")
+    + (e.status === "capped" ? " · offline until the cap resets" : "");
+  el.dataset.status = e.status;
+}
+const muteBtn = document.getElementById("mute");
+function setState(s) {
+  orb.dataset.state = s; stateEl.dataset.state = s; stateEl.textContent = STATES[s] || s;
+  const button = document.getElementById("dictate");
+  button.classList.toggle("dictating", s === "dictating");
+  button.textContent = s === "dictating" ? "Stop dictating" : "Dictate";
+  if (s === "muted" || s === "idle") {
+    muteBtn.setAttribute("aria-pressed", String(s === "muted"));
+    muteBtn.textContent = s === "muted" ? "Unmute" : "Mute";
+  }
+}
 async function post(path, body) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
     body: JSON.stringify(body || {}) });
-  if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
+  if (r.status === 400) { const e = await r.json().catch(() => ({})); add("note err", e.error || "Rafiq refused that."); }
+  else if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
 }
 const LANG = { en: "English", fr: "Français", es: "Español", de: "Deutsch", ar: "العربية", "ar-EG": "مصري" };
 
@@ -121,19 +303,136 @@ function handle(e) {
     case "state": setState(e.state); break;
     case "heard": add("msg you", e.text || "…", "You · " + (LANG[e.tag] || e.tag)); break;
     case "typed": add("msg you", e.text, "You (typed)"); break;
+    case "dictated": add("note", "Typed: " + e.text); break;
     case "said": add("msg rafiq", e.text, "Rafiq · " + (LANG[e.tag] || e.tag)); break;
-    case "tool": add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
+    case "interpret": add("note", (e.on ? "Interpreting: " : "Stopped interpreting: ")
+      + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
+    case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
+    case "persona": document.getElementById("persona").value = e.persona; break;
+    case "project": document.getElementById("project-path").value = e.path;
+      add("note", "Project folder: " + e.path); break;
     case "brain": stateEl.dataset.backend = e.backend; break;
+    case "spending": showSpending(e); break;
+    case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
+    case "task": add(e.state === "failed" ? "note err" : "note", "Background task “" + e.goal + "”: " + e.state
+      + (e.state === "running" ? "" : " (" + (e.cost == null ? "cost unknown" : "$" + e.cost.toFixed(4)) + ")\n"
+      + e.result)); break;
+    case "calibrated": add("note", "Listened to the room: speech above " + e.threshold + ", "
+      + e.end_seconds + " s of silence ends a request (microphone at " + e.rate + " Hz)"); break;
+    case "mode": modeEl.value = e.mode; break;
     case "wake": if (e.score !== undefined) add("note", "Heard the name (match " + e.score + ", wakes below "
       + e.threshold + ")"); break;
     case "voice": add("note", (e.match ? "Your voice" : "Not sure it was your voice") + " (similarity " + e.score
       + ", needs " + e.threshold + ")"); break;
     case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
+    case "interrupted": add("note", "Stopped: you said stop"); break;
     case "confirmed": confirmBox.classList.remove("on"); break;
+    case "correction": add("note fix", e.said + "  →  " + e.correct + (e.note ? "\n" + e.note : ""),
+      "Correction · " + (LANG[e.tag] || e.tag)); break;
+    case "practice": add("note", e.state === "start"
+      ? "Practice started: " + (LANG[e.tag] || e.tag) + ", level " + e.level + (e.topic ? ", " + e.topic : "")
+      : "Practice ended.\n" + e.summary); break;
+    case "reading": showReading(e); break;
+    case "level": meter.style.width = Math.round(e.level * 100) + "%"; break;
+    case "tool_start": nowEl.textContent = "⚙ Using " + e.name + "…"; break;
+    case "spend": showSpend(e); break;
+    case "settings": settings = e.settings; fillDrawer(); break;
+    case "gesture": add("note", "✋ " + e.gesture + " → " + e.action); break;
+    case "gestures": add("note", "Hand gestures " + (e.on ? "on" : "off")); break;
+    case "muted": add("note", e.muted ? "Muted" : "Listening again");
+      muteBtn.setAttribute("aria-pressed", String(e.muted)); muteBtn.textContent = e.muted ? "Unmute" : "Mute"; break;
+    case "sleep": add("note", "Gone to sleep: say “Rafiq” to wake it"); break;
+    case "notify": add("note", "🔔 " + e.text + (e.spoken ? "" : " (not spoken: muted or quiet hours)")); break;
     case "error": add("note err", "Problem: " + (e.error || JSON.stringify(e.brain))); break;
+    case "model": add(e.ok ? "note" : "note err", "Model " + e.name + ": " + e.action + " · " + e.result);
+      if (page === "models") show("models"); break;
   }
 }
+const readingBox = document.getElementById("reading"), pauseBtn = document.getElementById("pause");
+function showReading(e) {
+  readingBox.classList.toggle("on", e.state !== "idle");
+  const where = "sentence " + Math.min(e.index + 1, e.total) + " of " + e.total;
+  document.getElementById("reading-text").textContent = (e.state === "paused" ? "Paused at " : "Reading ") + where;
+  pauseBtn.textContent = e.state === "paused" ? "Resume" : "Pause";
+  pauseBtn.dataset.action = e.state === "paused" ? "resume" : "pause";
+}
+
+// ---------------------------------------------------------------- the other pages
+let page = "talk";
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function button(label, path, name, ask) {
+  const b = el("button", "", label);
+  b.onclick = async () => {
+    if (ask && !confirm(ask)) return;
+    b.disabled = true;
+    const r = await fetch(path, { method: "POST", body: JSON.stringify({ name }),
+      headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN } });
+    if (!r.ok) alert((await r.json().catch(() => ({}))).error || "Refused (" + r.status + ")");
+    show(page);
+  };
+  return b;
+}
+function row(name, info, badges, buttons) {
+  const r = el("div", "row");
+  r.append(el("span", "name", name));
+  for (const [text, cls] of badges) r.append(el("span", "badge " + (cls || ""), text));
+  r.append(el("span", "info", info));
+  r.append(...buttons);
+  return r;
+}
+const RENDER = {
+  models(d) {
+    const o = d.ollama, list = document.getElementById("ollama");
+    document.getElementById("ollama-hint").textContent = o.reachable
+      ? "This computer has " + o.ram_gb + " GB of memory. Installing downloads the model in the background."
+      : "Ollama is not answering: start it to install or change models.";
+    list.replaceChildren(...o.models.map((m) => row(m.name,
+      [m.size_gb ? m.size_gb + " GB" : "", m.note, m.tokens_per_second != null ? m.tokens_per_second + " tokens/s" : ""]
+        .filter(Boolean).join(" · "),
+      [m.active && ["active", "on"], m.installed && !m.active && ["installed"], !m.fits && ["too big", "warn"]]
+        .filter(Boolean),
+      !o.reachable ? [] : m.installed ? [
+        button("Benchmark", "/api/models/benchmark", m.name),
+        ...(m.active ? [] : [button("Activate", "/api/models/activate", m.name),
+          button("Delete", "/api/models/delete", m.name, "Delete " + m.name + "?")])]
+      : [button("Install", "/api/models/install", m.name,
+          m.fits ? null : m.name + " may not fit in this computer's memory. Install anyway?")])));
+    document.getElementById("whisper").replaceChildren(...d.whisper.models.map((m) => row(m.name,
+      m.size_gb + " GB", [m.active && ["active", "on"], m.downloaded && !m.active && ["downloaded"]].filter(Boolean),
+      m.active ? [] : [button("Use", "/api/whisper/activate", m.name)])));
+  },
+  status(d) {
+    document.getElementById("parts").replaceChildren(...d.parts.map((p) => {
+      const r = row(p.part, p.detail, [[p.up === true ? "up" : p.up === false ? "down" : "not used",
+        p.up === true ? "on" : p.up === false ? "warn" : ""]], []);
+      const dot = el("span", "dot " + (p.up === true ? "up" : p.up === false ? "down" : ""));
+      r.prepend(dot);
+      return r;
+    }));
+  },
+  permissions(d) {
+    const LEVEL = { free: "runs freely", asks: "asks first", remembered: "approved: always" };
+    document.getElementById("tools").replaceChildren(...d.tools.map((t) => row(t.name, t.description,
+      [[LEVEL[t.level], t.level === "remembered" ? "warn" : t.level === "asks" ? "on" : ""]],
+      t.level === "remembered" ? [button("Revoke", "/api/permissions/revoke", t.name)] : [])));
+  },
+};
+async function show(name) {
+  page = name;
+  document.body.dataset.page = name;
+  for (const t of document.querySelectorAll("nav button")) t.setAttribute("aria-selected", t.dataset.page === name);
+  for (const s of document.querySelectorAll("main section")) s.hidden = s.id !== "page-" + name;
+  if (!RENDER[name]) return;
+  const r = await fetch("/api/" + name, { headers: { "X-Rafiq-Token": TOKEN } });
+  if (r.ok) RENDER[name](await r.json());
+}
+for (const t of document.querySelectorAll("nav button")) t.onclick = () => show(t.dataset.page);
 function connect() {
   const es = new EventSource("/events?token=" + encodeURIComponent(TOKEN));
   es.onmessage = (m) => handle(JSON.parse(m.data));
@@ -144,10 +443,126 @@ document.getElementById("form").onsubmit = (ev) => {
   const input = document.getElementById("text"), text = input.value.trim();
   if (text) { post("/api/text", { text }); input.value = ""; }
 };
+document.getElementById("project").onsubmit = (ev) => {
+  ev.preventDefault();
+  const path = document.getElementById("project-path").value.trim();
+  if (path) post("/api/project", { path });
+};
 document.getElementById("talk").onclick = () => post("/api/listen");
+document.getElementById("dictate").onclick = () => post("/api/dictate");
+modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });
+document.getElementById("persona").onchange = (ev) => post("/api/persona", { name: ev.target.value });
 document.getElementById("stop").onclick = () => post("/api/stop");
+pauseBtn.onclick = () => post("/api/reading", { action: pauseBtn.dataset.action || "pause" });
+document.getElementById("skip").onclick = () => post("/api/reading", { action: "skip" });
+document.getElementById("reading-stop").onclick = () => post("/api/reading", { action: "stop" });
+muteBtn.onclick = () => post("/api/mute", { muted: muteBtn.getAttribute("aria-pressed") !== "true" });
 document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
+document.getElementById("always").onclick = () => post("/api/confirm", { yes: true, always: true });
 document.getElementById("no").onclick = () => post("/api/confirm", { yes: false });
+
+// ---------------------------------------------------------------- the settings drawer
+const drawer = document.getElementById("drawer"), meter = document.querySelector("#meter div");
+const nowEl = document.getElementById("now"), savedEl = document.getElementById("saved");
+const voiceTag = document.getElementById("s-tag"), voiceName = document.getElementById("s-voice");
+let settings = {}, voiceEdits = {};
+for (const [tag, name] of Object.entries(LANG)) voiceTag.append(new Option(name, tag));
+
+function showSpend(s) {
+  const tokens = s.input_tokens.toLocaleString() + " in · " + s.output_tokens.toLocaleString() + " out (Claude tokens)";
+  document.getElementById("spend").textContent = s.dollars === null ? tokens + "; set brain.prices for dollars"
+    : "$" + s.dollars.toFixed(4) + " · " + tokens;
+}
+function fillDrawer() {
+  for (const el of drawer.querySelectorAll("[data-name]")) el.value = settings[el.dataset.name] ?? "";
+  voiceEdits = {};
+  voiceName.value = settings["voice.voices." + voiceTag.value] ?? "";
+}
+async function openDrawer() {
+  const r = await fetch("/api/settings", { headers: { "X-Rafiq-Token": TOKEN } });
+  if (!r.ok) return add("note err", "The panel could not reach Rafiq (" + r.status + ").");
+  const s = await r.json();
+  settings = s.settings;
+  for (const [name, options] of Object.entries(s.choices)) {
+    const el = drawer.querySelector('[data-name="' + name + '"]');
+    el.replaceChildren(...options.map((o) => new Option(o, o)));
+  }
+  fillDrawer();
+  showSpend(s.spend);
+  document.getElementById("tasks").replaceChildren(...(s.tasks.length ? s.tasks : [null]).map((t) => {
+    const li = document.createElement("li");
+    li.textContent = t ? t.label + " · " + new Date(t.due * 1000).toLocaleString() : "None waiting";
+    return li;
+  }));
+  savedEl.textContent = "";
+  drawer.hidden = false;
+  requestAnimationFrame(() => drawer.classList.add("on"));
+  document.getElementById("open-settings").setAttribute("aria-expanded", "true");
+  document.getElementById("s-mode").focus();
+}
+function closeDrawer() {
+  drawer.classList.remove("on");
+  setTimeout(() => { drawer.hidden = true; }, 200);
+  document.getElementById("open-settings").setAttribute("aria-expanded", "false");
+  document.getElementById("open-settings").focus();
+}
+voiceTag.onchange = () => { voiceName.value = voiceEdits[voiceTag.value] ?? settings["voice.voices." + voiceTag.value] ?? ""; };
+voiceName.oninput = () => { voiceEdits[voiceTag.value] = voiceName.value.trim(); };
+document.getElementById("open-settings").onclick = () => drawer.hidden ? openDrawer() : closeDrawer();
+document.getElementById("close-settings").onclick = closeDrawer;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !drawer.hidden) closeDrawer(); });
+document.getElementById("test-voice").onclick = () => post("/api/voice-test", { tag: voiceTag.value });
+document.getElementById("save").onclick = async () => {
+  const changes = {};
+  for (const el of drawer.querySelectorAll("[data-name]")) {
+    const v = el.value.trim();
+    if (v !== String(settings[el.dataset.name] ?? "")) changes[el.dataset.name] = v;
+  }
+  for (const [tag, v] of Object.entries(voiceEdits))
+    if (v !== (settings["voice.voices." + tag] ?? "")) changes["voice.voices." + tag] = v;
+  if (!Object.keys(changes).length) { savedEl.textContent = "Nothing changed."; return; }
+  const r = await fetch("/api/settings", { method: "POST", body: JSON.stringify({ changes }),
+    headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN } });
+  const body = await r.json().catch(() => ({}));
+  savedEl.textContent = r.ok ? "Saved to config.toml." : "Not saved: " + (body.error || r.status);
+};
+// The model picker: the list comes from the provider itself, and Rafiq asks it again before switching.
+const backendEl = document.getElementById("backend"), modelEl = document.getElementById("model");
+const useEl = document.getElementById("use"), pickerNote = document.getElementById("picker-note");
+let brain = null;
+async function ask(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
+    body: JSON.stringify(body || {}) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "error " + r.status);
+  return data;
+}
+function note(text, err) { pickerNote.textContent = text; pickerNote.className = err ? "err" : ""; }
+async function loadBrain() {
+  try { brain = await ask("/api/brain"); } catch (e) { return note(e.message, true); }
+  backendEl.value = brain.mode;
+  note(brain.mode === "auto" ? "Claude, then OpenAI, then Ollama" : brain.models[brain.mode]);
+}
+backendEl.onchange = async () => {
+  const backend = backendEl.value;
+  modelEl.hidden = useEl.hidden = true;
+  if (backend === "auto") { useEl.hidden = false; return note("Claude, then OpenAI, then Ollama"); }
+  note("Asking " + backend + " which models this key can use…");
+  try {
+    const { models } = await ask("/api/models", { backend });
+    modelEl.replaceChildren(...models.map((m) => new Option(m, m, false, brain && m === brain.models[backend])));
+    modelEl.hidden = useEl.hidden = !models.length;
+    note(models.length ? "" : "No models available.", !models.length);
+  } catch (e) { note(e.message, true); }
+};
+useEl.onclick = async () => {
+  note("Checking…");
+  try { await ask("/api/model", { backend: backendEl.value, model: modelEl.value || "" }); }
+  catch (e) { return note(e.message, true); }
+  modelEl.hidden = useEl.hidden = true;
+  loadBrain();
+};
+loadBrain();
 connect();
 </script>
 </body>
