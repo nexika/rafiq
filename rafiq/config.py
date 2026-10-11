@@ -33,6 +33,7 @@ DEFAULTS: dict = {
         "languages": ["en", "fr", "es", "de", "ar"],
         "follow_up_seconds": 6,          # after an answer, listen this long without the name
         "max_utterance_seconds": 20,
+        "end_silence_seconds": 0.7,      # this much silence ends what you say (a noisy room adds a little)
         # Speech to text. auto: Whisper on this computer; a cloud service only for the languages in
         # stt_by_language, or when Whisper can't run. local: never the cloud. azure or openai: every language.
         "stt_engine": "auto",
@@ -41,6 +42,14 @@ DEFAULTS: dict = {
         "openai_model": "gpt-4o-mini-transcribe",
         "openai_key": "",                # or OPENAI_API_KEY
         "offline": False,                # true: what you say never leaves this computer
+    },
+    "audio": {
+        "device": "",                    # index or part of the name (see `rafiq doctor`); "": the system default
+        "rate": 0,                       # the sample rate to try first; 0: 16 kHz, then whatever the device takes
+        "auto_calibration": True,        # listen to the room for a moment at start-up and fit the thresholds
+        "calibration_seconds": 1.0,
+        # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
+        "outputs": {},
     },
     "voice": {
         # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, then ElevenLabs when
@@ -61,10 +70,6 @@ DEFAULTS: dict = {
             "ar-EG": "ar-EG-ShakirNeural",
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
-    },
-    "audio": {
-        # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
-        "outputs": {},
     },
     "interruption": {
         # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.

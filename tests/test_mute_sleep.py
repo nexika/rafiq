@@ -12,7 +12,11 @@ from rafiq.__main__ import main
 
 class FakeMic:
     def __init__(self, **_kwargs):
-        self.frames, self.muted = queue.Queue(), False
+        self.frames, self.muted, self.device = queue.Queue(), False, None
+
+    @classmethod
+    def from_config(cls, cfg):
+        return cls()
 
     def read(self, timeout=0.5):
         try:

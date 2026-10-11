@@ -39,6 +39,11 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev,google,offline-voice]"
 .venv/bin/rafiq enroll       # record "Rafiq" in your voice (about two minutes)
 ```
 
+`rafiq doctor` lists your microphones; pick one with `[audio] device` in the settings. A microphone
+that refuses 16 kHz is opened at a rate it takes and resampled. At start-up Rafiq listens to the room
+for a second and fits its speech thresholds to the noise, so stay quiet for a moment
+(`[audio] auto_calibration = false` turns this off).
+
 The first start downloads the Whisper models (about 550 MB). Offline voices go in
 `~/.config/rafiq/data/piper/` (see below).
 

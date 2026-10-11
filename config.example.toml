@@ -19,6 +19,7 @@ max_seconds = 120               # from the request to the answer
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+end_silence_seconds = 0.7       # this much silence ends what you say; a noisy room adds a little
 stt_engine = "auto"             # auto: Whisper here, the cloud only for stt_by_language or when Whisper can't run
                                 # local: never the cloud; azure or openai: every language
 offline = false                 # true: what you say never leaves this computer
@@ -29,6 +30,11 @@ openai_model = "gpt-4o-mini-transcribe"   # needs OPENAI_API_KEY
 
 [speech.azure_locales]
 ar = "ar-EG"                    # or ar-SA for Modern Standard Arabic
+
+[audio]
+device = ""                     # a microphone by index or part of its name (`rafiq doctor` lists them)
+rate = 0                        # the sample rate to try first; 0: 16 kHz, else whatever the device takes
+auto_calibration = true         # listen to the room for a second at start-up and fit the speech thresholds
 
 [voice]
 engine = "auto"                 # auto: Azure, ElevenLabs, Kokoro, then Piper, each when it is set up

@@ -90,18 +90,39 @@ def _check(label: str, ok: bool, detail: str = "") -> bool:
     return ok
 
 
+def _check_microphone(cfg: dict) -> None:
+    """The microphone Rafiq will use, the sample rate it opens it at, and the others to choose from."""
+    from .audio import RATE, describe_inputs, pick_rate, rate_supported, resolve_device
+
+    try:
+        import sounddevice as sd
+
+        devices = list(sd.query_devices())
+        setting = cfg["audio"].get("device")
+        try:
+            index = resolve_device(setting, devices)
+        except ValueError as exc:
+            _check("microphone", False, f"{exc} (set [audio] device)")
+            index = None
+        else:
+            if index is None:
+                index = sd.default.device[0] if sd.default.device[0] >= 0 else None
+            rate = pick_rate(lambda r: rate_supported(sd, index, r), preferred=int(cfg["audio"].get("rate") or 0))
+            name = devices[index]["name"] if index is not None else "system default"
+            _check("microphone", True, f"{name} at {rate} Hz" + ("" if rate == RATE else ", resampled to 16 kHz"))
+        print("  microphones (choose one with [audio] device = <number or part of the name>):")
+        for line in describe_inputs(devices, index):
+            print(f"    {line}")
+    except Exception as exc:
+        _check("microphone", False, type(exc).__name__)
+
+
 def cmd_doctor(_args) -> int:
     import httpx
 
     cfg = config.load()
     print(f"Rafiq settings: {config.home() / 'config.toml'}")
-    try:
-        import sounddevice as sd
-
-        device = sd.query_devices(kind="input")
-        _check("microphone", True, device["name"])
-    except Exception as exc:
-        _check("microphone", False, type(exc).__name__)
+    _check_microphone(cfg)
     _check("audio player (ffplay)", bool(shutil.which("ffplay")))
     brain = cfg["brain"]
     _check("Claude API key", bool(cfg.get("anthropic_api_key")),

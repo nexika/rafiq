@@ -20,7 +20,7 @@ import numpy as np
 
 from . import config as config_mod
 from . import kws, lang, modes, wake
-from .audio import RATE, Endpointer, Microphone, SileroVAD, echo_cancel_source
+from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
 from .scheduler import Alarm, Scheduler
@@ -80,9 +80,13 @@ class Assistant:
         speech = self.cfg["speech"]
         self.events = Events()
         self.jobs: queue.Queue = queue.Queue()
-        self.mic = Microphone(device=self._echo_cancelled_device())
+        self.mic = Microphone.from_config(self.cfg)
+        if self.mic.device is None:          # no microphone chosen: the echo-cancelled one, if loaded
+            self.mic.device = self._echo_cancelled_device()
+            self.mic.fallback = self.mic.device is not None
         self.vad = SileroVAD()
-        self.endpointer = Endpointer(max_seconds=speech["max_utterance_seconds"])
+        self.endpointer = Endpointer(end_seconds=speech["end_silence_seconds"],
+                                     max_seconds=speech["max_utterance_seconds"])
         self.wake_stt = Transcriber(speech["wake_model"], speech["languages"])
         self.stt = SpeechToText.from_config(self.cfg)   # the name is always heard on this computer
         self.speaker = Speaker(self.cfg, on_start=self._mute, on_end=self._unmute)
@@ -188,6 +192,15 @@ class Assistant:
         self.events.publish("interrupted", {})
 
     # ------------------------------------------------------------------ hearing
+
+    def calibrate(self) -> None:
+        """Listen to the room for a moment and fit the speech thresholds to its noise."""
+        speech = self.cfg["speech"]
+        frames, probs = measure_noise(self.mic, self.vad, float(self.cfg["audio"]["calibration_seconds"]))
+        cal = calibrate(frames, probs, threshold=0.5, end_seconds=speech["end_silence_seconds"])
+        self.endpointer.apply(cal)
+        self.events.publish("calibrated", {"threshold": cal.threshold, "end_seconds": cal.end_seconds,
+                                           "noise_rms": round(cal.noise_rms, 4), "rate": self.mic.rate})
 
     def next_utterance(self, timeout: float | None, idle: bool = False) -> np.ndarray | None:
         """The next thing said, or None when nothing starts before the timeout (None: wait forever).
@@ -370,6 +383,9 @@ class Assistant:
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
+        if self.cfg["audio"]["auto_calibration"]:
+            self.set_state("calibrating")
+            self.calibrate()
         self.set_state("idle")
         try:
             while not self._stop.is_set():
