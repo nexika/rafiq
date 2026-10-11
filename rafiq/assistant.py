@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import dictation, interpret, kws, lang, modes, notify, overlay, presence, privacy, timing, wake
+from . import dictation, interpret, kws, lang, modes, notify, nudges, overlay, presence, privacy, timing, wake
 from . import history as history_mod
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
 from .bargein import BargeIn
@@ -32,6 +32,7 @@ from .facts import Facts
 from .gestures import GestureControl, SystemDesktop
 from .gestures import settings as gesture_settings
 from .models import Models
+from .nudges import Nudge, Nudger, OpenRouteService
 from .paper_print import MorningPaper
 from .permissions import Approvals
 from .practice import Practice
@@ -136,6 +137,7 @@ class Events:
 
 class Assistant:
     history: history_mod.History | None = None   # what was heard and answered, set in __init__
+    nudger: Nudger | None = None             # calendar nudges, when turned on
 
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or config_mod.load()
@@ -177,6 +179,7 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
                            practice=self.practice, reader=self.reader)
+        self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
@@ -451,6 +454,8 @@ class Assistant:
             tag = self.practice.tag
         self.tag = tag
         self.ctx.tag = tag
+        if self.nudger:                      # a nudge with no language of its own is said in yours
+            self.nudger.user_tag = tag
         if dictation.wants_dictation(text):
             self.dictate(tag)
             return
@@ -688,6 +693,22 @@ class Assistant:
             text = lang.phrase("task_failed", task.tag, goal=task.goal)
         self.submit("say", text=text, tag=lang.script_language(text, task.tag))
 
+    def _nudger(self) -> Nudger | None:
+        """Calendar nudges, when turned on and everything they need is set up."""
+        if not nudges.settings(self.cfg)["enabled"]:
+            return None
+        why = nudges.missing(self.cfg)
+        if why:
+            self.events.publish("error", {"error": f"calendar nudges are off: {why}"})
+            return None
+        from .tools import google
+
+        opts = nudges.settings(self.cfg)
+        return Nudger(opts, google.upcoming, OpenRouteService(opts["routing_key"]), user_tag=self.tag)
+
+    def _nudge_due(self, nudge: Nudge) -> None:
+        self.submit("say", text=nudge.text, tag=nudge.tag)
+
     def _listen_for_request(self, greet: bool = True) -> None:
         if greet:
             self.say(lang.phrase("listening", self.tag), self.tag)
@@ -741,6 +762,8 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        if self.nudger:
+            self.nudger.start(self._nudge_due)
         if self.presence:
             self.presence.start(every=float(self.cfg["presence"]["check_seconds"]))
         self.start_the_day()
@@ -770,6 +793,8 @@ class Assistant:
             self.gestures.stop()
             self.mic.stop()
             self.scheduler.stop()
+            if self.nudger:
+                self.nudger.stop()
             if self.presence:
                 self.presence.stop()
 

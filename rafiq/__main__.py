@@ -1,6 +1,6 @@
-"""rafiq run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite | gestures |
-doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup |
-install-service | uninstall-service | wake-pc | backup | stt-score"""
+"""rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
+gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup |
+hue-setup | install-service | uninstall-service | wake-pc | backup | stt-score"""
 
 from __future__ import annotations
 
@@ -374,6 +374,11 @@ def cmd_doctor(_args) -> int:
     hue = config.home() / "hue.json"
     _check("Philips Hue", hue.is_file() and cfg["hue"].get("enabled", False),
            "paired" if hue.is_file() else "run: rafiq hue-setup")
+    from . import nudges
+
+    if nudges.settings(cfg)["enabled"]:
+        why = nudges.missing(cfg)
+        _check("calendar nudges", why is None, why or f"from {nudges.settings(cfg)['origin']}")
     print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
@@ -524,6 +529,12 @@ def cmd_enroll(args) -> int:
         print(f"Rafiq now wakes below {report['threshold']:.2f} (sensitivity {args.sensitivity}).")
         return 0
     return enroll.run(forms=args.forms or None, takes=args.takes)
+
+
+def cmd_setup(args) -> int:
+    from . import setup
+
+    return setup.run(enroll=not args.no_enroll)
 
 
 def cmd_stt_score(args) -> int:
@@ -727,6 +738,9 @@ def cmd_uninstall_service(_args) -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
+    wizard = sub.add_parser("setup", help="first-run wizard: keys, voices, models, microphone, wake word")
+    wizard.add_argument("--no-enroll", action="store_true", help="skip recording the wake word")
+    wizard.set_defaults(fn=cmd_setup)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
     run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
