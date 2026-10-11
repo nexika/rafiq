@@ -15,7 +15,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude or Ollama + 
 
 | Skill | Examples |
 |---|---|
-| This computer | "open Firefox", "volume to 30", "mute", "switch to the headphones", "how's the battery?", "lock the screen", "shut down" (asks first) |
+| This computer | "open Firefox", "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "lock the screen", "shut down" (asks first) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
