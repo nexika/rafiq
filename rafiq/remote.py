@@ -24,7 +24,7 @@ import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -203,7 +203,7 @@ class RemoteTool(Tool):
 
 
 def remote_tools(tools: dict[str, Tool], hub: Hub) -> dict[str, Tool]:
-    return {name: RemoteTool(t.name, t.description, t.fn, t.params, t.required, t.confirm, hub=hub)
+    return {name: RemoteTool(**{f.name: getattr(t, f.name) for f in fields(Tool)}, hub=hub)
             if name in ACTIONS else t for name, t in tools.items()}
 
 

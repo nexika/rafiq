@@ -5,6 +5,7 @@ import pytest
 def rafiq_home(tmp_path, monkeypatch):
     """Every test gets its own settings folder and no real keys."""
     monkeypatch.setenv("RAFIQ_HOME", str(tmp_path / "rafiq"))
-    for key in ("ANTHROPIC_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "RAFIQ_AGENT_TOKEN"):
+    for key in ("ANTHROPIC_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "ELEVENLABS_API_KEY",
+                "OPENAI_API_KEY", "HOME_ASSISTANT_TOKEN", "RAFIQ_AGENT_TOKEN"):
         monkeypatch.delenv(key, raising=False)
     return tmp_path / "rafiq"

@@ -184,7 +184,7 @@ def test_brain_confirms_on_the_agent_before_a_pc_action(monkeypatch):
     tools = remote.remote_tools({"power": Tool("power", "power", lambda action: "local!", {"action": {}},
                                                ("action",), confirm="shut down the computer")}, hub)
     brain = Brain(cfg, tools, remote.agent_confirm(hub))
-    assert brain._run_tool("power", {"action": "shutdown"}, "en", None).startswith("The user said no")
+    assert brain._run_tool("power", {"action": "shutdown"}, "en", None, tools).startswith("The user said no")
     assert sent == [("confirm", {"question": "Should I shut down the computer? Say yes or no.", "tag": "en"})]
 
 
