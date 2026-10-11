@@ -1,6 +1,6 @@
-"""The thinking part: Claude or a local Ollama model, with Rafiq's tools.
+"""The thinking part: Claude, OpenAI or a local Ollama model, with Rafiq's tools.
 
-Both backends get the same system prompt and the same tools. A turn loops: the model asks for tools,
+Every backend gets the same system prompt and the same tools. A turn loops: the model asks for tools,
 Rafiq runs them (asking the user first for any that change something), the model answers in words.
 Before that, the router picks the tools a request needs, so a simple request reaches the model with
 a short list, or none for small talk.
@@ -20,11 +20,14 @@ from datetime import datetime
 from . import lang as lang_mod
 from . import modes, persona, router, timing
 from .facts import Facts
-from .tools import Tool, claude_schemas, local_tools, ollama_schemas
+from .tools import Tool, claude_schemas, local_tools, ollama_schemas, openai_schemas
 from .tts import Sentences
 
 HISTORY_TURNS = 10
 HISTORY_IDLE_SECONDS = 300
+BACKENDS = ("claude", "openai", "ollama")
+KEYS = {"claude": "anthropic_api_key", "openai": "openai_api_key"}
+ANTHROPIC_URL = "https://api.anthropic.com/v1"
 
 SYSTEM = """You are Rafiq (رفيق, "companion"), a voice assistant on {user}'s Linux computer. {place}
 Each request starts with a note in brackets: the current time, the language to answer in, and sometimes
@@ -208,19 +211,17 @@ class Brain:
         if modes.offline(self.cfg):
             return ["ollama"]
         mode = self.cfg["brain"].get("mode", "auto")
-        if mode == "claude":
-            return ["claude"]
-        if mode == "ollama":
-            return ["ollama"]
-        return (["claude"] if self.cfg.get("anthropic_api_key") else []) + ["ollama"]
+        if mode in BACKENDS:
+            return [mode]
+        return [b for b, key in KEYS.items() if self.cfg.get(key)] + ["ollama"]
 
     def claude_model(self) -> str:
         brain = self.cfg["brain"]
         return brain["quality_model"] if modes.current(self.cfg) == "quality" else brain["claude_model"]
 
     def think(self, text: str, tag: str, ctx=None, on_speech: Callable[[str, str], None] | None = None) -> str:
-        """Answer one thing the user said. Tries Claude, then Ollama in auto mode. With on_speech, every
-        word of the answer also goes to on_speech, sentence by sentence, as soon as it is known."""
+        """Answer one thing the user said. In auto mode, tries Claude, OpenAI, then Ollama. With on_speech,
+        every word of the answer also goes to on_speech, sentence by sentence, as soon as it is known."""
         history = self.memory.recent(self.clock(), tag)
         if self.cfg["brain"].get("routing", True):
             route = router.route(text, self.tools)
@@ -232,7 +233,7 @@ class Brain:
         voice = Voice(on_speech, tag)
         for backend in self.backends():
             try:
-                run = self._claude_turn if backend == "claude" else self._ollama_turn
+                run = {"claude": self._claude_turn, "openai": self._openai_turn, "ollama": self._ollama_turn}[backend]
                 # A local model gets its smaller set when the router kept every tool.
                 tools = self.local_tools() if backend == "ollama" and route.name == "all" else route.tools
                 answer = run(history, text, tag, ctx, tools, Budget(limits, self.clock, deadline), voice)
@@ -260,6 +261,68 @@ class Brain:
         voice.text(text)
         voice.end()
         return text
+
+    # ------------------------------------------------------------------ choosing a model
+
+    def status(self) -> dict:
+        """The mode, each backend's model, and which backends have what they need (a key)."""
+        brain = self.cfg["brain"]
+        return {"mode": brain.get("mode", "auto"),
+                "models": {b: brain[self._model_key(b)] for b in BACKENDS},
+                "ready": {b: bool(self.cfg.get(KEYS[b])) if b in KEYS else True for b in BACKENDS}}
+
+    def _catalogue(self, backend: str) -> tuple[str, dict, str, str]:
+        """Where a backend lists its models: the URL, the headers, the list's field and the name's field."""
+        brain = self.cfg["brain"]
+        if backend == "ollama":
+            return f"{brain['ollama_url']}/api/tags", {}, "models", "name"
+        if backend not in KEYS:
+            raise BrainError(f"unknown backend {backend}")
+        key = self.cfg.get(KEYS[backend])
+        if not key:
+            raise BrainError(f"no API key for {backend}: set {KEYS[backend].upper()}")
+        if backend == "claude":
+            return (f"{ANTHROPIC_URL}/models?limit=1000", {"x-api-key": key, "anthropic-version": "2023-06-01"},
+                    "data", "id")
+        return f"{brain['openai_url'].rstrip('/')}/models", {"Authorization": f"Bearer {key}"}, "data", "id"
+
+    def models(self, backend: str) -> list[str]:
+        """The models this backend's key may use (for Ollama, the models it has), asked of the
+        provider itself, so a model on the list really answers."""
+        import httpx
+
+        url, headers, listed, name = self._catalogue(backend)
+        try:
+            resp = httpx.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            found = resp.json().get(listed) or []
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            raise BrainError(f"{backend} refused the key ({code})" if code in (401, 403)
+                             else f"{backend} answered {code}") from exc
+        except (httpx.HTTPError, ValueError, AttributeError) as exc:
+            raise BrainError(f"{backend} is not reachable ({type(exc).__name__})") from exc
+        return sorted(m[name] for m in found if isinstance(m, dict) and isinstance(m.get(name), str))
+
+    def choose(self, backend: str, model: str) -> None:
+        """Use this backend and model from now on, once its provider confirms the key can use the
+        model. It lasts until Rafiq stops; the config file is not changed. "auto" goes back to
+        trying each backend in turn, with the models already set."""
+        if backend == "auto":
+            self.cfg["brain"]["mode"] = "auto"
+            return
+        if backend not in BACKENDS:
+            raise BrainError(f"unknown backend {backend}")
+        if model not in self.models(backend):
+            raise BrainError(f"{model} is not available to {backend} with this key")
+        self.cfg["brain"][self._model_key(backend)] = model
+        self.cfg["brain"]["mode"] = backend
+
+    def _model_key(self, backend: str) -> str:
+        """The setting that holds the model a backend uses now: in quality mode, Claude's is quality_model."""
+        if backend == "claude" and modes.current(self.cfg) == "quality":
+            return "quality_model"
+        return f"{backend}_model"
 
     def _note(self, text: str, tag: str) -> str:
         facts = [f.text for f in self.facts.for_note(text)] if self.facts else None
@@ -349,6 +412,50 @@ class Brain:
                 {"type": "tool_result", "tool_use_id": c.id,
                  "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools, voice)}
                 for c in calls]})
+
+    # ------------------------------------------------------------------ OpenAI
+
+    def _openai_turn(self, history: list[Turn], text: str, tag: str, ctx, tools: dict[str, Tool],
+                     budget: Budget, voice: Voice) -> str:
+        """OpenAI's chat completions, which DeepSeek, Gemini and local servers also speak. Not streamed;
+        the answer is still spoken sentence by sentence."""
+        import httpx
+
+        brain = self.cfg["brain"]
+        messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
+                    + [{"role": t.role, "content": t.content} for t in history]
+                    + [{"role": "user", "content": self._note(text, tag)}])
+        # The API refuses an empty tools list, so a request without tools sends none.
+        extra = {"tools": openai_schemas(tools)} if tools else {}
+        headers = {"Authorization": f"Bearer {self.cfg.get('openai_api_key', '')}"}
+        while True:
+            wait = budget.next_round(60)
+            try:
+                with timing.Timer("model", backend="openai"):
+                    resp = httpx.post(f"{brain['openai_url'].rstrip('/')}/chat/completions", headers=headers,
+                                      timeout=wait, json={"model": brain["openai_model"], "messages": messages,
+                                                          "max_completion_tokens": brain["max_tokens"], **extra})
+                    resp.raise_for_status()
+                message = (resp.json().get("choices") or [{}])[0].get("message") or {}
+            except (httpx.HTTPError, ValueError, AttributeError) as exc:
+                raise BrainError(type(exc).__name__) from exc
+            messages.append(message)
+            calls = message.get("tool_calls") or []
+            if not calls:
+                answer = (message.get("content") or "").strip()
+                voice.text(answer)
+                return answer
+            budget.tool_calls(len(calls))
+            for call in calls:
+                fn = call.get("function") or {}
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                except ValueError:
+                    args = {}
+                if not isinstance(args, dict):
+                    args = {}
+                messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, tools, voice)})
 
     # ------------------------------------------------------------------ Ollama
 

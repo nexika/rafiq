@@ -126,3 +126,7 @@ def claude_schemas(tools: dict[str, Tool]) -> list[dict]:
 def ollama_schemas(tools: dict[str, Tool]) -> list[dict]:
     return [{"type": "function", "function": {"name": t.name, "description": t.description,
                                               "parameters": t.schema()}} for t in tools.values()]
+
+
+# OpenAI's chat completions take tools in the same shape as Ollama.
+openai_schemas = ollama_schemas
