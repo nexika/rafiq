@@ -192,6 +192,6 @@ def _confirm(args: dict, ctx=None) -> str | None:
       "asks the user before it goes to the cloud.",
       {"question": {"type": "string", "description": "what the user wants to know about the screen, "
                                                      "e.g. 'what does this error mean?'"}},
-      required=("question",), confirm=_confirm)
+      required=("question",), confirm=_confirm, level="critical")
 def look_at_screen(question: str, ctx=None) -> str:
     return look(ctx.cfg, question, ctx.tag)
