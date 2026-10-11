@@ -191,7 +191,8 @@ def color_state(color: str) -> dict:
                                                  "empty or 'all' for every light"},
        "on": {"type": "boolean", "description": "true to turn on, false to turn off"},
        "brightness": {"type": "integer", "description": "percent, 0 to 100 (0 turns it off)"},
-       "color": {"type": "string", "description": "a colour name such as blue, or warm white, or #rrggbb"}})
+       "color": {"type": "string", "description": "a colour name such as blue, or warm white, or #rrggbb"}},
+      level="act")
 def lights(room: str = "", on: bool | None = None, brightness: int | None = None, color: str = "",
            ctx=None, bridge: Bridge | None = None) -> str:
     bridge = bridge or load_bridge()

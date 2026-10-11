@@ -15,10 +15,20 @@ DEFAULTS: dict = {
     "brain": {
         # "auto": Claude when an API key is set and the network answers, else Ollama.
         "mode": "auto",
+        # everyday: claude_model, fast and cheap; quality: quality_model; offline: Ollama and Piper only.
+        "profile": "everyday",
         "claude_model": "claude-haiku-5-5",
+        "quality_model": "claude-opus-5-5",
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
+        "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names
         "max_tokens": 600,
+        # Offer the model only the tools a request needs (none for small talk); off: every tool, always.
+        "routing": True,
+        # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
+        # model rounds, tool calls in all, and seconds from the request to the answer.
+        "limits": {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120},
+        "persona": "neutral",            # neutral, concise or butler; changing it by voice or in the panel wins
     },
     "speech": {
         "whisper_model": "small",       # tiny, base, small, medium; medium is better for Arabic but slower
@@ -26,12 +36,33 @@ DEFAULTS: dict = {
         "languages": ["en", "fr", "es", "de", "ar"],
         "follow_up_seconds": 6,          # after an answer, listen this long without the name
         "max_utterance_seconds": 20,
+        "end_silence_seconds": 0.7,      # this much silence ends what you say (a noisy room adds a little)
+        # Speech to text. auto: Whisper on this computer; a cloud service only for the languages in
+        # stt_by_language, or when Whisper can't run. local: never the cloud. azure or openai: every language.
+        "stt_engine": "auto",
+        "stt_by_language": {},           # language -> "azure", "openai" or "local", e.g. {"ar": "azure"}
+        "azure_locales": {"ar": "ar-EG"},  # the Azure recogniser per language (AZURE_SPEECH_KEY, as for the voice)
+        "openai_model": "gpt-4o-mini-transcribe",
+        "openai_key": "",                # or OPENAI_API_KEY
+        "offline": False,                # true: what you say never leaves this computer
+    },
+    "audio": {
+        "device": "",                    # index or part of the name (see `rafiq doctor`); "": the system default
+        "rate": 0,                       # the sample rate to try first; 0: 16 kHz, then whatever the device takes
+        "auto_calibration": True,        # listen to the room for a moment at start-up and fit the thresholds
+        "calibration_seconds": 1.0,
+        # what the user calls an output -> part of its name in `wpctl status`, e.g. headphones = "WH-1000XM4"
+        "outputs": {},
     },
     "voice": {
-        # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper (offline).
+        # auto: Azure AI Speech when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, then ElevenLabs when
+        # ELEVENLABS_API_KEY is set, then Kokoro when its files are in data/kokoro/, then Piper (offline).
         "engine": "auto",
         "azure_key": "",
         "azure_region": "",
+        "elevenlabs_key": "",
+        "elevenlabs_model": "eleven_flash_v2_5",
+        "elevenlabs_voices": {},         # language (or "default") -> ElevenLabs voice id
         "rate": "+0%",
         "voices": {
             "en": "en-US-AndrewNeural",
@@ -43,8 +74,17 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "interruption": {
+        # Say "stop" over Rafiq to cut its speech. The microphone then stays open while Rafiq speaks.
+        "enabled": True,
+        "factor": 1.8,                   # how much louder than Rafiq's echo you must be
+        "min_level": 0.01,               # the quietest sound (RMS) that counts
+        "frames": 3,                     # loud 32 ms frames in a row before it listens
+        "echo_cancel": True,             # use PipeWire's echo-cancel microphone when it is loaded
+    },
     "panel": {"host": "127.0.0.1", "port": 8765},
     "place": {"city": "", "units": "metric"},
+    "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
     # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
     "hue": {"enabled": False, "rooms": {}},

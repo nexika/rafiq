@@ -4,17 +4,46 @@ user_name = ""                  # how Rafiq refers to you
 
 [brain]
 mode = "auto"                   # auto: Claude when ANTHROPIC_API_KEY is set, else Ollama
+profile = "everyday"            # the mode at start: everyday, quality or offline (switch by voice or in the panel)
 claude_model = "claude-haiku-5-5"
+quality_model = "claude-opus-5-5"   # quality mode's model
 ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
+ollama_tools = "local"          # the tools Ollama gets: "local" (a smaller set), "all", or a list of names
+persona = "neutral"             # neutral, concise or butler (a dry, witty butler); "be more concise" switches it by voice
+
+[brain.limits]                  # a request that keeps calling tools is stopped, and Rafiq says so
+max_rounds = 6                  # model requests per answer
+max_tool_calls = 12             # tool calls per answer
+max_seconds = 120               # from the request to the answer
 
 [speech]
 whisper_model = "small"         # medium understands Arabic better but is about 3x slower on a CPU
 follow_up_seconds = 6           # after an answer, listen this long for a follow-up without the name
+end_silence_seconds = 0.7       # this much silence ends what you say; a noisy room adds a little
+stt_engine = "auto"             # auto: Whisper here, the cloud only for stt_by_language or when Whisper can't run
+                                # local: never the cloud; azure or openai: every language
+offline = false                 # true: what you say never leaves this computer
+openai_model = "gpt-4o-mini-transcribe"   # needs OPENAI_API_KEY
+
+[speech.stt_by_language]        # send a language Whisper hears badly to a cloud service
+# ar = "azure"                  # Azure's Egyptian recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
+
+[speech.azure_locales]
+ar = "ar-EG"                    # or ar-SA for Modern Standard Arabic
+
+[audio]
+device = ""                     # a microphone by index or part of its name (`rafiq doctor` lists them)
+rate = 0                        # the sample rate to try first; 0: 16 kHz, else whatever the device takes
+auto_calibration = true         # listen to the room for a second at start-up and fit the speech thresholds
 
 [voice]
-engine = "auto"                 # auto: Azure when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are set, else Piper
-rate = "+0%"                    # speak faster ("+10%") or slower ("-10%")
+engine = "auto"                 # auto: Azure, ElevenLabs, Kokoro, then Piper, each when it is set up
+rate = "+0%"                    # speak faster ("+10%") or slower ("-10%"); Azure and Edge only
+
+[voice.elevenlabs_voices]       # ElevenLabs voice ids (set ELEVENLABS_API_KEY); default reads every language
+# default = "JBFqnCBsd6RMkjVDRZzb"
+# ar-EG = "<an Egyptian voice id from the Voice Library>"
 
 [voice.voices]                  # Azure voice names: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
 en = "en-US-AndrewNeural"
@@ -24,8 +53,20 @@ de = "de-DE-ConradNeural"
 ar = "ar-SA-HamedNeural"
 ar-EG = "ar-EG-ShakirNeural"    # or ar-EG-SalmaNeural
 
+[audio.outputs]                 # "switch to the headphones": a name -> part of the output's name in `wpctl status`
+# headphones = "WH-1000XM4"     # headphones, speakers and tv also match "casque", "Lautsprecher", "سماعات"...
+# desk = "USB Audio"
+
+[interruption]                  # say "stop", "attends", "espera", "warte", "توقف" or "استنى" over Rafiq
+enabled = true
+factor = 1.8                    # how much louder than Rafiq's own voice you must be; raise it if it stops itself
+echo_cancel = true              # after `pactl load-module module-echo-cancel`, listen through it
+
 [place]
 city = ""                       # for "what's the weather?" without a city
+
+[pc]
+shutdown_delay = 30             # "shut down" waits this long; "cancel the shutdown" stops it. 0: at once
 
 [panel]
 port = 8765
