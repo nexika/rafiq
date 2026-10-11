@@ -11,7 +11,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import config, lang, modes
+from . import config, lang, modes, privacy
 
 
 def cmd_run(args) -> int:
@@ -21,6 +21,7 @@ def cmd_run(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    privacy.start_logging(config.data_dir() / "logs", int(cfg["privacy"]["log_days"]))
     if args.mode:
         modes.switch(cfg, args.mode)
     if args.server:

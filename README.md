@@ -378,6 +378,9 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+- The log (`~/.config/rafiq/data/logs/rafiq.log`) has email addresses, keys, phone numbers and
+  amounts replaced by a mark, and is deleted after 30 days (`[privacy] log_days`). Results from
+  background tasks are redacted the same way before they are said aloud.
 
 ## Always on
 
