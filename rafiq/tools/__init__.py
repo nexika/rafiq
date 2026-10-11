@@ -118,7 +118,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
 # Left out: list_apps, lock_screen, open_in_browser, read_page, list_timers, cancel_timer, calendar_add,
 # email_read and email_send. [brain] ollama_tools = "all" sends everything, or a list names the set.
 LOCAL_TOOLS = ("get_time", "set_timer", "set_reminder", "weather", "calculate", "convert_units", "web_search",
-               "open_app", "volume", "system_status", "power", "calendar_events", "email_list",
+               "open_app", "volume", "media", "system_status", "power", "calendar_events", "email_list",
                "remember", "recall", "forget")
 
 
