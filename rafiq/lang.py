@@ -119,7 +119,21 @@ def yes_or_no(text: str) -> bool | None:
     return None
 
 
+# What stops Rafiq while it speaks. Said over its voice, so only a short utterance counts: a long one is
+# more likely Rafiq's own sentence leaking past the echo check than you.
+STOP = {"stop", "wait", "enough", "attends", "arrête", "arrete", "espera", "para", "basta", "warte",
+        "stopp", "halt", "genug", "توقف", "قف", "استنى", "كفاية", "خلاص", "اسكت"}
+STOP_MAX_WORDS = 4
+
+
+def is_stop(text: str) -> bool:
+    """True for a short "stop" in any of Rafiq's languages ("Rafiq, stop", "attends", "استنى")."""
+    found = words(text)
+    return 0 < len(found) <= STOP_MAX_WORDS and any(w in _STOP for w in found)
+
+
 _EGYPTIAN, _WEAK_N, _YES, _NO = _norm(EGYPTIAN), _norm(_WEAK), _norm(YES), _norm(NO)
+_STOP = _norm(STOP)
 
 PHRASES = {
     "listening": {"en": "Yes?", "fr": "Oui ?", "es": "¿Sí?", "de": "Ja?", "ar": "نعم؟", "ar-EG": "أيوه؟"},
@@ -136,23 +150,23 @@ PHRASES = {
                    "ar": "انتهى المؤقت: {label}", "ar-EG": "التايمر خلص: {label}"},
     "reminder": {"en": "Reminder: {label}", "fr": "Rappel : {label}", "es": "Recordatorio: {label}",
                  "de": "Erinnerung: {label}", "ar": "تذكير: {label}", "ar-EG": "فكّرتك: {label}"},
+    "shutdown_soon": {"en": "Shutting down in {seconds} seconds. Say cancel the shutdown to stop it.",
+                      "fr": "Extinction dans {seconds} secondes. Dis « annule l'extinction » pour l'arrêter.",
+                      "es": "Me apago en {seconds} segundos. Di «cancela el apagado» para pararlo.",
+                      "de": "Ich fahre in {seconds} Sekunden herunter. "
+                            "Sag „Herunterfahren abbrechen“, um es zu stoppen.",
+                      "ar": "سأطفئ الجهاز بعد {seconds} ثوانٍ. قل «ألغِ إيقاف التشغيل» لإيقافه.",
+                      "ar-EG": "هقفل الجهاز كمان {seconds} ثواني. قول «إلغي القفل» لو عايز توقفه."},
+    "shutdown_failed": {"en": "I couldn't shut the computer down.",
+                        "fr": "Je n'ai pas pu éteindre l'ordinateur.", "es": "No he podido apagar el ordenador.",
+                        "de": "Ich konnte den Computer nicht herunterfahren.",
+                        "ar": "لم أستطع إطفاء الجهاز.", "ar-EG": "معرفتش أقفل الجهاز."},
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
-    # Said before a slow tool runs, so the user knows Rafiq heard them (see Tool.slow).
+    # Said before a slow tool that has no waiting phrase of its own (see Tool.waiting_phrase).
     "wait": {"en": "One moment.", "fr": "Un instant.", "es": "Un momento.", "de": "Einen Moment.",
              "ar": "لحظة من فضلك.", "ar-EG": "ثانية واحدة."},
-    "wait_web": {"en": "Let me look that up.", "fr": "Je regarde ça.", "es": "Déjame buscarlo.",
-                 "de": "Ich schaue mal nach.", "ar": "دعني أبحث عن ذلك.", "ar-EG": "استنى أدورلك."},
-    "wait_weather": {"en": "Let me check the weather.", "fr": "Je regarde la météo.", "es": "Miro el tiempo.",
-                     "de": "Ich schaue mir das Wetter an.", "ar": "دعني أتحقق من الطقس.",
-                     "ar-EG": "ثواني أشوفلك الجو."},
-    "wait_email": {"en": "Let me check your email.", "fr": "Je regarde tes mails.", "es": "Miro tu correo.",
-                   "de": "Ich schaue in deine E-Mails.", "ar": "دعني أتحقق من بريدك.",
-                   "ar-EG": "ثواني أشوفلك الإيميل."},
-    "wait_calendar": {"en": "Let me check your calendar.", "fr": "Je regarde ton agenda.",
-                      "es": "Miro tu calendario.", "de": "Ich schaue in deinen Kalender.",
-                      "ar": "دعني أتحقق من تقويمك.", "ar-EG": "ثواني أشوفلك المواعيد."},
 }
 
 

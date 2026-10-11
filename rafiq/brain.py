@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
-from . import timing
+from . import persona, timing
 from .tools import Tool, claude_schemas, ollama_schemas
 from .tts import Sentences
 
@@ -25,8 +25,8 @@ HISTORY_TURNS = 10
 HISTORY_IDLE_SECONDS = 300
 
 SYSTEM = """You are Rafiq (رفيق, "companion"), a voice assistant on {user}'s Linux computer. {place}
-Each request starts with a note in brackets: the current time and the language to answer in. The note
-is not part of what the user said.
+Each request starts with a note in brackets: the current time, the language to answer in and sometimes
+a style to answer in. The note is not part of what the user said.
 
 You hear the user through speech-to-text and they hear you through text-to-speech, so:
 - Answer in the language the note names. For Egyptian Arabic, use natural Egyptian colloquial Arabic
@@ -91,11 +91,11 @@ class Voice:
         if rest:
             self._say(rest)
 
-    def wait(self, key: str) -> None:
-        """Announce a slow tool, unless something was already said for this request."""
+    def wait(self, text: str | None) -> None:
+        """Announce a slow tool with its waiting phrase, unless something was already said for this request."""
         if self.on_speech and not self.said_anything:
             self.said_anything = True
-            self.on_speech(lang_mod.phrase(key, self.tag), self.tag)
+            self.on_speech(text or lang_mod.phrase("wait", self.tag), self.tag)
 
     def _say(self, sentence: str) -> None:
         if self.on_speech is None:
@@ -113,12 +113,13 @@ def system_prompt(cfg: dict) -> str:
     return SYSTEM.format(user=cfg.get("user_name") or "the user", place=f"The user is in {city}." if city else "")
 
 
-def with_note(text: str, tag: str, now: datetime | None = None) -> str:
-    """The request with the time and the answer language around it. The language is named again
-    after the request: small local models follow what comes last."""
+def with_note(text: str, tag: str, now: datetime | None = None, style: str = "") -> str:
+    """The request with the time, the answer language and the style around it. The language is named
+    again after the request: small local models follow what comes last."""
     now = now or datetime.now().astimezone()
     name = lang_mod.NAMES.get(tag, "English")
-    return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}; answer in {name}] {text}\n[Answer in {name}.]"
+    style = f". {style}" if style else ""
+    return f"[{now.strftime('%A %d %B %Y, %H:%M %Z')}; answer in {name}{style}] {text}\n[Answer in {name}.]"
 
 
 class Brain:
@@ -165,6 +166,9 @@ class Brain:
         voice.end()
         return down
 
+    def _note(self, text: str, tag: str) -> str:
+        return with_note(text, tag, style=persona.instruction(persona.active(self.cfg)))
+
     # ------------------------------------------------------------------ tools
 
     def _run_tool(self, name: str, args: dict, tag: str, ctx, voice: Voice | None = None) -> str:
@@ -175,14 +179,16 @@ class Brain:
         if action and not self.confirm(action, tag):
             self.on_event("tool", {"name": name, "args": args, "result": "declined"})
             return "The user said no; it was not done. Tell them briefly that you didn't do it."
-        if tool.slow and voice is not None:
-            voice.wait(tool.wait)
+        if tool.slow:
+            self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag})
+            if voice is not None:
+                voice.wait(tool.waiting(tag))
         try:
             with timing.Timer("tool", name=name):
                 result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
-        self.on_event("tool", {"name": name, "args": args, "result": result[:500]})
+        self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
         return result[:8000]
 
     def warm_up(self) -> None:
@@ -217,7 +223,7 @@ class Brain:
         import anthropic
 
         messages = ([{"role": t.role, "content": t.content} for t in history]
-                    + [{"role": "user", "content": with_note(text, tag)}])
+                    + [{"role": "user", "content": self._note(text, tag)}])
         schemas = claude_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:
@@ -250,7 +256,7 @@ class Brain:
         brain = self.cfg["brain"]
         messages = ([{"role": "system", "content": system_prompt(self.cfg)}]
                     + [{"role": t.role, "content": t.content} for t in history]
-                    + [{"role": "user", "content": with_note(text, tag)}])
+                    + [{"role": "user", "content": self._note(text, tag)}])
         schemas = ollama_schemas(self.tools)
         for _ in range(MAX_STEPS):
             try:

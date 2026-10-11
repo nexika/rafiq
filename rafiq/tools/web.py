@@ -14,6 +14,12 @@ from urllib.parse import urlparse
 
 from . import tool
 
+# Said while a search or a page download runs.
+SEARCHING = {"en": "Let me look that up.", "fr": "Je cherche.", "es": "Déjame buscarlo.",
+             "de": "Ich schaue nach.", "ar": "دعني أبحث عن ذلك.", "ar-EG": "ثانية أدورلك."}
+READING = {"en": "Let me read it.", "fr": "Je lis la page.", "es": "Déjame leerla.", "de": "Ich lese es kurz.",
+           "ar": "دعني أقرأ الصفحة.", "ar-EG": "ثانية أقرا الصفحة."}
+
 MAX_BYTES = 3_000_000
 MAX_CHARS = 8000
 
@@ -36,7 +42,7 @@ def public_url(url: str, resolve=socket.getaddrinfo) -> str | None:
 
 @tool("web_search", "Search the web. Returns titles, short extracts and addresses.",
       {"query": {"type": "string"}, "max_results": {"type": "integer", "description": "1 to 8"}},
-      required=("query",), slow=True, wait="wait_web")
+      required=("query",), level="safe", slow=True, waiting_phrase=SEARCHING, expose=True, card="list")
 def web_search(query: str, max_results: int = 5) -> str:
     from ddgs import DDGS
 
@@ -69,7 +75,7 @@ def fetch(url: str) -> tuple[str, str]:
 
 
 @tool("read_page", "Read the main text of a web page, to summarise or translate it.",
-      {"url": {"type": "string"}}, required=("url",), slow=True, wait="wait_web")
+      {"url": {"type": "string"}}, required=("url",), level="safe", slow=True, waiting_phrase=READING, expose=True)
 def read_page(url: str) -> str:
     import trafilatura
 
@@ -85,7 +91,7 @@ def read_page(url: str) -> str:
 
 
 @tool("open_in_browser", "Open a web address in the user's browser.",
-      {"url": {"type": "string"}}, required=("url",))
+      {"url": {"type": "string"}}, required=("url",), level="act")
 def open_in_browser(url: str) -> str:
     if urlparse(url).scheme not in ("http", "https"):
         return "error: only http and https addresses"

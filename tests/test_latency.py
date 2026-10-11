@@ -6,6 +6,7 @@ import pytest
 from rafiq import config, lang, timing
 from rafiq.brain import Brain
 from rafiq.tools import REGISTRY, Tool, load_all
+from rafiq.tools.web import SEARCHING
 from rafiq.tts import Sentences, Speaker
 
 
@@ -42,7 +43,7 @@ def slow_and_fast_tools(log):
         log.append("clock ran")
         return "15:40"
 
-    return {"web_search": Tool("web_search", "search", search, slow=True, wait="wait_web"),
+    return {"web_search": Tool("web_search", "search", search, slow=True, waiting_phrase=SEARCHING),
             "get_time": Tool("get_time", "time", clock)}
 
 
@@ -81,7 +82,7 @@ def test_a_slow_tool_is_announced_before_it_runs_in_the_users_language(ollama):
     ollama += [call("web_search", {"query": "news"}), {"role": "assistant", "content": "Nothing new."}]
     brain = make_brain(log=log)
     brain.think("quoi de neuf", "fr", on_speech=lambda text, tag: heard.append((text, tag, list(log))))
-    assert heard[0] == (lang.phrase("wait_web", "fr"), "fr", [])      # said before the search ran
+    assert heard[0] == (SEARCHING["fr"], "fr", [])      # said before the search ran
     assert heard[-1][0] == "Nothing new."
 
 
@@ -97,19 +98,18 @@ def test_the_waiting_phrase_is_said_once_per_request(ollama):
     ollama += [call("web_search", {"query": "a"}), call("web_search", {"query": "b"}),
                {"role": "assistant", "content": "Done."}]
     make_brain().think("search twice", "en", on_speech=lambda text, tag: heard.append(text))
-    assert heard == [lang.phrase("wait_web", "en"), "Done."]
+    assert heard == [SEARCHING["en"], "Done."]
 
 
-@pytest.mark.parametrize("key", ["wait", "wait_web", "wait_weather", "wait_email", "wait_calendar"])
-def test_every_waiting_phrase_exists_in_the_six_languages(key):
-    assert set(lang.PHRASES[key]) == set(lang.TAGS)
+def test_the_fallback_waiting_phrase_exists_in_the_six_languages():
+    assert set(lang.PHRASES["wait"]) == set(lang.TAGS)
 
 
 def test_slow_tools_are_marked_and_have_a_waiting_phrase():
     load_all({"google": {"enabled": True}})
     for name in ("web_search", "read_page", "weather", "calendar_events", "email_list", "email_read"):
         assert REGISTRY[name].slow, name
-        assert REGISTRY[name].wait in lang.PHRASES, name
+        assert set(REGISTRY[name].waiting_phrase) == set(lang.TAGS), name
     for name in ("get_time", "calculate", "set_timer", "volume"):
         assert not REGISTRY[name].slow, name
 
