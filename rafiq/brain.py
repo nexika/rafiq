@@ -202,19 +202,23 @@ def check_arguments(tool: Tool | None, raw) -> tuple[dict, str | None]:
 class Brain:
     def __init__(self, cfg: dict, tools: dict[str, Tool], confirm: Callable[[str, str], bool],
                  on_event: Callable[[str, dict], None] | None = None, clock=time.time, facts: Facts | None = None,
-                 approvals=None):
+                 budget=None, approvals=None):
         self.cfg, self.tools, self.confirm = cfg, tools, confirm
         self.facts = facts
+        self.budget = budget                 # charged for each Claude response; at its cap, offline only
         # confirm answers True, False, or "always" (yes, and remember it in `approvals`).
         self.approvals = approvals
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
         self._claude = None
+        self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
 
     # ------------------------------------------------------------------ choosing a backend
 
     def backends(self) -> list[str]:
+        if self.budget and not self.budget.allows_paid():
+            return ["ollama"]
         if modes.offline(self.cfg):
             return ["ollama"]
         mode = self.cfg["brain"].get("mode", "auto")
@@ -351,6 +355,7 @@ class Brain:
                 return "The user said no; it was not done. Tell them briefly that you didn't do it."
             if answer == "always" and self.approvals:
                 self.approvals.remember(name)
+        self.on_event("tool_start", {"name": name})
         if tool.slow:
             self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag})
             if voice is not None:
@@ -367,6 +372,22 @@ class Brain:
             self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
         return result[:8000]
 
+    def spend(self) -> dict:
+        """Claude's tokens so far, and their price in dollars when one is set for the model
+        (brain.prices); Ollama runs here and costs nothing."""
+        price = self.cfg["brain"].get("prices", {}).get(self.cfg["brain"]["claude_model"])
+        dollars = None
+        if isinstance(price, dict):
+            dollars = round((self.tokens["input_tokens"] * price.get("input", 0)
+                             + self.tokens["output_tokens"] * price.get("output", 0)) / 1e6, 6)
+        return {**self.tokens, "dollars": dollars}
+
+    def _count(self, usage) -> None:
+        if usage is None:
+            return
+        for name in self.tokens:
+            self.tokens[name] += getattr(usage, name, 0) or 0
+        self.on_event("spend", self.spend())
     def local_tools(self) -> dict[str, Tool]:
         return local_tools(self.tools, self.cfg["brain"].get("ollama_tools", "local"))
 
@@ -417,6 +438,10 @@ class Brain:
                     resp = stream.get_final_message()
             except anthropic.APIError as exc:
                 raise BrainError(type(exc).__name__) from exc
+            usage = getattr(resp, "usage", None)
+            if self.budget and usage:
+                self.budget.charge_tokens(self.claude_model(), usage.input_tokens, usage.output_tokens)
+            self._count(getattr(resp, "usage", None))
             voice.end()
             messages.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
             calls = [b for b in resp.content if b.type == "tool_use"]

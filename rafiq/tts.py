@@ -89,9 +89,10 @@ def ssml(text: str, voice: str, tag: str, rate: str = "+0%") -> str:
 
 
 class Speaker:
-    def __init__(self, cfg: dict, on_start=None, on_end=None):
+    def __init__(self, cfg: dict, on_start=None, on_end=None, budget=None):
         self.settings = cfg                  # shared: offline mode can be switched on while running
         self.cfg = cfg["voice"]
+        self.budget = budget                 # charged for Azure's characters; at its cap, Piper only
         self.on_start, self.on_end = on_start, on_end
         self._proc: subprocess.Popen | None = None
         self._piper: dict = {}
@@ -106,9 +107,13 @@ class Speaker:
             return ["piper"]
         engine = self.cfg.get("engine", "auto")
         if engine != "auto":
-            return [engine, "piper"] if engine != "piper" else ["piper"]
-        return ((["azure"] if self.key and self.region else []) + (["elevenlabs"] if self.eleven_key else [])
+            engines = [engine, "piper"] if engine != "piper" else ["piper"]
+        else:
+            engines = ((["azure"] if self.key and self.region else []) + (["elevenlabs"] if self.eleven_key else [])
                 + (["kokoro"] if self.kokoro_paths() else []) + ["piper"])
+        if self.budget and not self.budget.allows_paid():
+            engines = [e for e in engines if e != "azure"]
+        return engines
 
     def voice(self, tag: str) -> str:
         voices = self.cfg["voices"]
@@ -125,6 +130,8 @@ class Speaker:
                      "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3", "User-Agent": "rafiq"},
             content=ssml(text, self.voice(tag), tag, self.cfg.get("rate", "+0%")).encode(), timeout=20)
         resp.raise_for_status()
+        if self.budget:
+            self.budget.charge_characters("azure", len(text))
         out = out.with_suffix(".mp3")
         out.write_bytes(resp.content)
         return out

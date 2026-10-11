@@ -278,6 +278,7 @@ def test_the_assistant_speaks_the_answer_as_it_comes_and_shows_it_once(ollama):
     assistant.ctx = type("Ctx", (), {"tag": "en"})()
     assistant.speaker = fake_speaker(log)
     assistant.brain = make_brain()
+    assistant.publish_spending = lambda tag: None
     assistant.respond("count", "en")
     assert [e for e in log if e[0] == "play"] == [("play", "say1.wav"), ("play", "say2.wav")]
     said = [e for e in assistant.events.history if e["kind"] == "said"]
