@@ -154,7 +154,8 @@ def _describe(p: Parcel) -> str:
 
 @tool("parcels", "Where the user's parcels are: the latest state of each delivery, from shipping emails "
       "in Gmail.",
-      {"days": {"type": "integer", "description": "how many days back to look, 1 to 30, default 7"}})
+      {"days": {"type": "integer", "description": "how many days back to look, 1 to 30, default 7"}},
+      level="private")
 def parcels(days: int = 7, fetch: Callable[[str, int], list[Mail]] = gmail_fetch) -> str:
     days = max(1, min(int(days or 7), 30))
     found = latest(fetch(search_query(days), 25))
