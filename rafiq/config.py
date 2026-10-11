@@ -104,6 +104,12 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "deadlines": {
+        "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}
+        "cache_minutes": 15,
+        # A title with one of these words is a period away, not a deadline (as is anything longer than a day).
+        "period_words": ["leave", "vacation", "holiday", "day off", "congé", "vacances", "urlaub", "إجازة"],
+    },
     # The daily brief, said once a day at the first start, in this language tag (en, fr, ..., ar-EG).
     "brief": {"at_first_start": False, "language": "en"},
     # A Discord bot token (DISCORD_BOT_TOKEN), never a user token; user_id is your own Discord id.
