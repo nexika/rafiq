@@ -93,14 +93,24 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
 
 
 def load_all(cfg: dict) -> dict[str, Tool]:
-    """Import every skill module; Google and Home Assistant only when they are set up."""
+    """Import every skill module; Google, Home Assistant and Hue only when they are set up."""
     from . import background, everyday, memory, pc, style, web  # noqa: F401  (registers the tools)
 
+    off = set()
     if cfg.get("google", {}).get("enabled"):
         from . import google  # noqa: F401
+    else:
+        off.add(f"{__name__}.google")
     if cfg.get("home_assistant", {}).get("url") and cfg.get("home_assistant", {}).get("token"):
         from . import home  # noqa: F401
-    return dict(REGISTRY)
+    else:
+        off.add(f"{__name__}.home")
+    if cfg.get("hue", {}).get("enabled"):
+        from . import hue  # noqa: F401
+    else:
+        off.add(f"{__name__}.hue")
+    # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
+    return {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
 
 
 # What a small local model gets by default. Every extra tool is one more wrong choice for a 7B model,

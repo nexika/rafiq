@@ -261,6 +261,18 @@ Then ask "which lights are on?" or "turn off the coffee plug" (asks first). Ligh
 fans, thermostats, media players and humidifiers can be switched on and off; locks, alarms and garage
 doors never are.
 
+## Philips Hue lights
+
+"Turn on the living room", "kitchen at 30%", "make the bedroom blue". Rafiq talks to the Hue bridge on
+your network directly; no Hue cloud account is used.
+
+1. Run `rafiq hue-setup` (or `rafiq hue-setup --host 192.168.1.20` if it does not find the bridge) and
+   press the round link button on the bridge.
+2. Set `enabled = true` under `[hue]` in the config.
+
+Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
+Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
 ## Settings
 
 `~/.config/rafiq/config.toml` (`RAFIQ_HOME` moves the folder). See `config.example.toml`; everything is

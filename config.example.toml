@@ -98,3 +98,10 @@ port = 9
 # flatpak = "com.mojang.Minecraft"
 # [apps.RetroArch]
 # command = ["retroarch", "--fullscreen"]
+
+[hue]
+enabled = false                 # true after `rafiq hue-setup`
+
+[hue.rooms]                     # names you say -> the Hue app's room names, for other languages
+# "الصالة" = "Living room"
+# "chambre" = "Bedroom"

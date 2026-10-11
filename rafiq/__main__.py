@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | doctor | mcp | toolcheck | google-setup | install-service | uninstall-service"""
+"""rafiq run | ask | say | doctor | mcp | toolcheck | google-setup | hue-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
 
@@ -162,6 +162,9 @@ def cmd_doctor(_args) -> int:
     home_assistant = cfg["home_assistant"]
     _check("Home Assistant (Nest, Hue, plugs)", bool(home_assistant.get("url") and home_assistant.get("token")),
            home_assistant.get("url") or "set home_assistant.url and HOME_ASSISTANT_TOKEN")
+    hue = config.home() / "hue.json"
+    _check("Philips Hue", hue.is_file() and cfg["hue"].get("enabled", False),
+           "paired" if hue.is_file() else "run: rafiq hue-setup")
     print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
@@ -262,6 +265,14 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_hue_setup(args) -> int:
+    from .tools import hue
+
+    print(hue.setup(args.host or ""))
+    print("Then set [hue] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def cmd_install_service(_args) -> int:
     """Start Rafiq at every login, as a systemd user service."""
     from . import service
@@ -325,6 +336,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    hue = sub.add_parser("hue-setup", help="pair with the Philips Hue bridge (press its link button)")
+    hue.add_argument("--host", help="the bridge's address on your network (default: look for it)")
+    hue.set_defaults(fn=cmd_hue_setup)
     sub.add_parser("install-service", help="start Rafiq at every login (systemd user service)").set_defaults(
         fn=cmd_install_service)
     sub.add_parser("uninstall-service", help="stop starting Rafiq at login").set_defaults(fn=cmd_uninstall_service)
