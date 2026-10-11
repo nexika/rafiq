@@ -28,7 +28,7 @@ from .facts import Facts
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
-from .tools import Tool, load_all
+from .tools import Tool, brief, load_all, media
 from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
 
@@ -319,6 +319,12 @@ class Assistant:
             self.play_scene(scene, tag)
             return
         self.set_state("thinking")
+        # "Put X on Netflix" and the like need no model: the page opens at once.
+        direct = media.direct(text, tag)
+        if direct:
+            self.say(direct, lang.script_language(direct, tag))
+            self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
+            return
         self.speech = self.speaker.stream()
         try:
             answer = self.brain.think(text, tag, self.ctx, on_speech=self.speech.put)
@@ -364,6 +370,8 @@ class Assistant:
                     self._listen_for_request(greet=False)
                 elif kind == "say":
                     self.say(data["text"], data["tag"])
+                elif kind == "brief":
+                    self.play_brief()
                 elif kind == "scene":
                     scene = scenes_mod.scenes_from(self.cfg).get(data["name"])
                     if scene is None:
@@ -378,6 +386,15 @@ class Assistant:
     def _alarm_due(self, alarm: Alarm) -> None:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
+
+    def start_of_day(self) -> None:
+        """Queue the daily brief, if it is turned on and has not been said yet today."""
+        if self.cfg["brief"]["at_first_start"] and brief.claim_today(config_mod.data_dir() / "brief.json",
+                                                                     brief.now().date()):
+            self.submit("brief")
+
+    def play_brief(self) -> None:
+        self.respond(brief.REQUEST, self.cfg["brief"]["language"])
 
     def _make_presence(self) -> presence.Presence | None:
         settings = self.cfg["presence"]
@@ -402,6 +419,7 @@ class Assistant:
             self.events.publish("error", {"error": error})
         if self.cfg["presence"].get("welcome", True):
             self.submit("say", text=lang.phrase("welcome_home", self.tag), tag=self.tag)
+
     def _task_done(self, task: Task) -> None:
         """Said on this thread, between requests, like an alarm."""
         if task.state == "done":
@@ -472,6 +490,7 @@ class Assistant:
             self.set_state("calibrating")
             self.calibrate()
         self.set_state("idle")
+        self.start_of_day()
         try:
             while not self._stop.is_set():
                 audio = self.next_utterance(timeout=None, idle=True)

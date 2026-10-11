@@ -16,7 +16,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Skill | Examples |
 |---|---|
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
-| Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
+| Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "what's the weather?" (where you are), "15% of 240", "5 miles in km" |
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
@@ -26,6 +26,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
+| Daily brief | "brief me", "good morning": the time, weather, today's calendar, new email and what is due today in one answer; `brief.at_first_start = true` says it at the first start of each day |
 | Google | "what's on my calendar today?", "add lunch with Sara on Friday at 1" (asks first), "any new email?", "email Sara that I'm running late", "reply to Sara that I'll be late" (reads the draft back, asks first), "delete that email" (to the trash, asks first), "where are my parcels?" |
 | Instagram | "how are my Instagram accounts doing?", "how many followers did studio gain since yesterday?" |
 | Discord | "anything on Discord?": your mentions from the last 24 hours and today's messages |
@@ -278,11 +279,37 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
   read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
   each request, never as instructions.
+- "What's the weather?" with no city set asks GNOME's location service, at city accuracy. Your IP
+  is sent to a lookup service (ipapi.co) only if you set `ip_lookup = true` under `[place]`.
 - Commands run as argument lists, never through a shell. The calculator only does arithmetic.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
+- The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
+
+## From your phone
+
+Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").
+
+1. Set `enabled = true` under `[phone]` in the config and restart `rafiq run`.
+2. Run `rafiq phone`: it prints the address and the token for the shortcut.
+3. On an iPhone, make a Shortcut with **Dictate Text**, then **Get Contents of URL** (method POST,
+   header `Authorization: Bearer <token>`, JSON body `text` = the dictated text), then **Speak Text**
+   with the reply's `answer`. On Android, do the same with HTTP Shortcuts or Tasker.
+
+The JSON body is `{"text": "..."}` for a command, `{"kind": "note", "list": "shopping", "text": "milk"}`
+for a note (lists: `ideas`, `shopping`, `tasks`; ideas by default), or
+`{"kind": "share", "text": "...", "url": "https://..."}` for a shared link. At home, "what's on my
+shopping list?" reads the notes back.
+
+A command from the phone only runs safe tools: the time, weather, timers and reminders, notes,
+calculations, web search and the computer's status. Anything else (power, apps, volume, email,
+calendar) answers "do that at home by voice", and nothing from the phone is ever confirmed.
+
+The bridge listens on 127.0.0.1 by default, so the phone needs a tunnel or a VPN (Tailscale, for
+example) to reach it. `host = "0.0.0.0"` opens it to your home Wi-Fi, but the token then crosses the
+network in plain HTTP: use that only on a network you trust.
 
 ## Rafiq's tools in other programs (MCP)
 
