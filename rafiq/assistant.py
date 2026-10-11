@@ -20,7 +20,7 @@ from datetime import datetime
 import numpy as np
 
 from . import config as config_mod
-from . import kws, lang, modes, timing, wake
+from . import kws, lang, modes, presence, timing, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, measure_noise
 from .bargein import BargeIn
 from .brain import Brain
@@ -41,8 +41,9 @@ CONFIRM_SECONDS = 10.0
 class Context:
     """What a tool may use: settings, the scheduler, the language of the current request, a way
     to say something later (a countdown) from another thread, who to tell when the mode changes
-    (the panel shows it), the long-term memory, and the background tasks (None without Claude);
-    for a scene, the other tools and a way to ask before one that changes something."""
+    (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
+    phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
+    that changes something."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -50,6 +51,7 @@ class Context:
     on_mode: Callable[[str], None] | None = None
     facts: Facts | None = None
     tasks: Tasks | None = None
+    presence: presence.Presence | None = None
     confirm: Callable[[str, str], bool] | None = None
     tools: dict[str, Tool] | None = None
 
@@ -103,10 +105,12 @@ class Assistant:
         self.barge_in = BargeIn(self._transcribe_stop, self._interrupted, factor=barge["factor"],
                                 min_level=barge["min_level"], frames=barge["frames"]) if barge["enabled"] else None
         self.scheduler = Scheduler(config_mod.data_dir() / "alarms.json", self._alarm_due)
+        self.presence = self._make_presence()
         self.facts = Facts(config_mod.data_dir() / "memory.json")
         self.tools = load_all(self.cfg)
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
-                           on_mode=self._mode_changed, facts=self.facts, confirm=self.confirm, tools=self.tools)
+                           on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
+                           confirm=self.confirm, tools=self.tools)
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts)
         if "claude" in self.brain.backends() and self.cfg.get("anthropic_api_key"):
             self.ctx.tasks = Tasks(ClaudeAgent(self.cfg, self.tools), self._task_done, on_event=self.events.publish)
@@ -375,6 +379,29 @@ class Assistant:
         key = "timer_done" if alarm.kind == "timer" else "reminder"
         self.submit("say", text=lang.phrase(key, alarm.tag, label=alarm.label), tag=alarm.tag)
 
+    def _make_presence(self) -> presence.Presence | None:
+        settings = self.cfg["presence"]
+        if not settings.get("phone_ip"):
+            return None
+        return presence.Presence(
+            config_mod.data_dir() / "presence.json",
+            lambda: presence.phone_seen(settings["phone_ip"], settings.get("phone_mac", "")),
+            on_away=self._phone_left, on_home=self._phone_back,
+            away_after=float(settings["away_minutes"]) * 60)
+
+    def _phone_left(self) -> None:
+        self.events.publish("presence", {"state": "away"})
+        error = presence.run_scene(self.cfg, "away")
+        if error:
+            self.events.publish("error", {"error": error})
+
+    def _phone_back(self) -> None:
+        self.events.publish("presence", {"state": "home"})
+        error = presence.run_scene(self.cfg, "home")
+        if error:
+            self.events.publish("error", {"error": error})
+        if self.cfg["presence"].get("welcome", True):
+            self.submit("say", text=lang.phrase("welcome_home", self.tag), tag=self.tag)
     def _task_done(self, task: Task) -> None:
         """Said on this thread, between requests, like an alarm."""
         if task.state == "done":
@@ -436,6 +463,8 @@ class Assistant:
     def run(self) -> None:
         self.scheduler.start()
         self.scheduler.tick()                            # alarms that came due while Rafiq was off
+        if self.presence:
+            self.presence.start(every=float(self.cfg["presence"]["check_seconds"]))
         self.start_the_day()
         threading.Thread(target=self.brain.warm_up, name="rafiq-warm-up", daemon=True).start()
         self.mic.start()
@@ -456,6 +485,8 @@ class Assistant:
         finally:
             self.mic.stop()
             self.scheduler.stop()
+            if self.presence:
+                self.presence.stop()
 
     def stop(self) -> None:
         self._stop.set()
