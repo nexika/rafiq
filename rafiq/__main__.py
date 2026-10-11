@@ -1,6 +1,6 @@
 """rafiq run | ask | say | show | paper | agent | agent-token | satellite | gestures | doctor | status | update |
 phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup | hue-setup | install-service |
-uninstall-service | wake-pc"""
+uninstall-service | wake-pc | backup"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import config, lang, modes
+from . import config, lang, modes, privacy
 
 
 def cmd_run(args) -> int:
@@ -21,6 +21,7 @@ def cmd_run(args) -> int:
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
+    privacy.start_logging(config.data_dir() / "logs", int(cfg["privacy"]["log_days"]))
     if args.mode:
         modes.switch(cfg, args.mode)
     if args.server:
@@ -210,6 +211,7 @@ def cmd_ask(args) -> int:
     --speak). Useful without a microphone and for testing."""
     from .assistant import Context
     from .brain import Brain
+    from .budget import Budget
     from .facts import Facts
     from .scheduler import Scheduler
     from .tools import load_all
@@ -243,11 +245,12 @@ def cmd_ask(args) -> int:
         watcher = Presence(config.data_dir() / "presence.json", lambda: False, lambda: None, lambda: None)
     facts = Facts(config.data_dir() / "memory.json")
     tools = load_all(cfg)
-    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts)
-    stream = Speaker(cfg).stream() if args.speak else None
+    budget = Budget(cfg)
+    brain = Brain(cfg, tools, _terminal_confirm, on_event=show, facts=facts, budget=budget)
+    stream = Speaker(cfg, budget=budget).stream() if args.speak else None
     try:
         answer = brain.think(text, tag, Context(cfg, scheduler, tag, facts=facts, presence=watcher,
-                                                confirm=_terminal_confirm, tools=tools),
+                                                confirm=_terminal_confirm, tools=tools, budget=budget),
                              on_speech=stream.put if stream else None)
         print(answer)
     finally:
@@ -608,6 +611,19 @@ def cmd_google_setup(_args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    """Save settings, recordings and everything else Rafiq keeps to a private archive on this computer."""
+    from . import maintain
+
+    try:
+        path = maintain.backup(args.to)
+    except (maintain.MaintenanceError, OSError) as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved {path} (readable only by you; it holds your keys, keep it off public places).")
+    return 0
+
+
 def cmd_spotify_setup(_args) -> int:
     from .tools.spotify import setup
 
@@ -739,6 +755,9 @@ def main(argv=None) -> int:
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)
+    backup = sub.add_parser("backup", help="save settings and recordings to a private local archive")
+    backup.add_argument("--to", type=Path, help="the folder for the archive (default: <settings>/backups)")
+    backup.set_defaults(fn=cmd_backup)
     wake = sub.add_parser("wake-pc", help="start a computer that is off, with Wake-on-LAN")
     wake.add_argument("mac", help="its network card address, such as aa:bb:cc:dd:ee:ff")
     wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")

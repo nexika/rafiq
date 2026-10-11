@@ -1,5 +1,8 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
+Choices made in the panel (the active models) are kept in choices.json next to it and win over the
+file, so the panel never rewrites the user's own config.toml.
+
 Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN,
 RAFIQ_AGENT_TOKEN, DISCORD_BOT_TOKEN), then the file, and are never logged.
 """
@@ -7,10 +10,14 @@ RAFIQ_AGENT_TOKEN, DISCORD_BOT_TOKEN), then the file, and are never logged.
 from __future__ import annotations
 
 import copy
+import json
 import os
+import re
 import secrets
 import tomllib
 from pathlib import Path
+
+from .lang import TAGS
 
 DEFAULTS: dict = {
     "brain": {
@@ -27,6 +34,8 @@ DEFAULTS: dict = {
         "ollama_url": "http://127.0.0.1:11434",
         "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names
         "max_tokens": 600,
+        # Dollars per million tokens, by model, to show the spend in the panel: {input = 1.0, output = 5.0}.
+        "prices": {},
         # Offer the model only the tools a request needs (none for small talk); off: every tool, always.
         "routing": True,
         # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
@@ -78,6 +87,18 @@ DEFAULTS: dict = {
         },
         "piper_voices": {},              # language -> a Piper .onnx voice; default: data/piper/<voice>.onnx
     },
+    "budget": {
+        # Caps in `currency` (0: no cap). At warn_at of a cap Rafiq warns once; at the cap it goes
+        # offline (Ollama, Piper) until the next day, or the next month for the monthly cap.
+        "daily_cap": 0.0,
+        "monthly_cap": 0.0,
+        "warn_at": 0.8,
+        "currency": "USD",
+        # Per million tokens (input, output) for each Claude model; check the current price list.
+        "token_prices": {"claude-haiku-5-5": {"input": 1.0, "output": 5.0}},
+        # Per million characters read aloud. Azure's free tier (500,000 a month) is not deducted.
+        "character_prices": {"azure": 15.0},
+    },
     "tasks": {
         # Background research ("research the best e-bike under 2000 euros"); needs Claude.
         "model": "",                     # empty: brain.claude_model
@@ -123,6 +144,7 @@ DEFAULTS: dict = {
               "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "privacy": {"log_days": 30},     # the log (data/logs) is redacted and deleted after this many days
     # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
     "spotify": {"enabled": False, "client_id": "", "port": 8888},
     "paper": {
@@ -217,6 +239,7 @@ def load(path: Path | None = None) -> dict:
     cfg = copy.deepcopy(DEFAULTS)
     if path.is_file():
         cfg = _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
+    cfg = _merge(cfg, _choices())
     for key in ("anthropic_api_key", "openai_api_key"):
         if os.environ.get(key.upper()):
             cfg[key] = os.environ[key.upper()]
@@ -227,6 +250,23 @@ def load(path: Path | None = None) -> dict:
     if os.environ.get("DISCORD_BOT_TOKEN"):
         cfg["discord"]["bot_token"] = os.environ["DISCORD_BOT_TOKEN"]
     return cfg
+
+
+def _choices() -> dict:
+    try:
+        data = json.loads((home() / "choices.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_choice(section: str, key: str, value) -> None:
+    """Keep a setting chosen in the panel for the next start."""
+    choices = _choices()
+    choices.setdefault(section, {})[key] = value
+    path = home() / "choices.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(choices, indent=2), encoding="utf-8")
 
 
 def _token(name: str) -> str:
@@ -242,6 +282,99 @@ def _token(name: str) -> str:
     return token
 
 
+# ---------------------------------------------------------------------- what the panel may change
+
+# The only settings the panel can read or write. Keys, addresses and everything else stay out of the page.
+CHOICES = {"brain.mode": ["auto", "claude", "openai", "ollama"], "voice.engine": ["auto", "azure", "piper", "edge"]}
+_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}")
+PATTERNS = {"brain.claude_model": _NAME, "brain.ollama_model": _NAME, "voice.rate": re.compile(r"[+-]\d{1,3}%"),
+            **{f"voice.voices.{tag}": _NAME for tag in TAGS}}
+
+
+def _get(cfg: dict, name: str):
+    *tables, key = name.split(".")
+    for table in tables:
+        cfg = cfg.get(table, {})
+    return cfg.get(key, "")
+
+
+def settable(cfg: dict) -> dict:
+    """The settings the panel shows, by dotted name."""
+    return {name: _get(cfg, name) for name in [*CHOICES, *PATTERNS]}
+
+
+def check(name: str, value) -> str:
+    if name not in CHOICES and name not in PATTERNS:
+        raise ValueError(f"{name} cannot be changed from the panel")
+    ok = (value in CHOICES[name]) if name in CHOICES else (
+        isinstance(value, str) and PATTERNS[name].fullmatch(value) is not None)
+    if not isinstance(value, str) or not ok:
+        raise ValueError(f"{name}: {value!r} is not allowed")
+    return value
+
+
+def _comment_at(line: str) -> int:
+    """Where a trailing comment starts on a `key = value` line, or -1: the first # after which the
+    rest of the line still reads as TOML (a # inside a string does not)."""
+    for i, char in enumerate(line):
+        if char == "#":
+            try:
+                tomllib.loads(line[:i])
+                return i
+            except tomllib.TOMLDecodeError:
+                continue
+    return -1
+
+
+def _set_line(text: str, name: str, value: str) -> str:
+    """The file's text with one setting changed, its comment and every other line kept."""
+    *tables, key = name.split(".")
+    table, lines = ".".join(tables), text.splitlines()
+    new = f"{key} = {json.dumps(value)}"
+    current, header = "", None
+    for i, line in enumerate(lines):
+        found = re.match(r"\s*\[([^\[\]]+)\]", line)
+        if found:
+            current = re.sub(r"\s", "", found.group(1))
+            header = i if current == table else header
+        elif current == table and re.match(rf"\s*\"?{re.escape(key)}\"?\s*=", line):
+            at = _comment_at(line)
+            lines[i] = new if at < 0 else new.ljust(at) + (" " if len(new) >= at else "") + line[at:]
+            return "\n".join(lines) + "\n"
+    if header is None:
+        lines += ([""] if lines and lines[-1].strip() else []) + [f"[{table}]"]
+        header = len(lines) - 1
+    lines.insert(header + 1, new)
+    return "\n".join(lines) + "\n"
+
+
+def save_settings(changes: dict, cfg: dict, path: Path | None = None) -> None:
+    """Check every change against the allowlist, write them to config.toml and apply them to the
+    running settings. One refused change and nothing is written."""
+    for name, value in changes.items():
+        check(name, value)
+    path = path or home() / "config.toml"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    for name, value in changes.items():
+        text = _set_line(text, name, value)
+    try:
+        saved = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"config.toml could not be updated: {exc}") from exc
+    if any(_get(saved, name) != value for name, value in changes.items()):
+        raise ValueError("config.toml is written in a way the panel cannot update; edit it by hand")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    if path.is_file():   # the file may hold a key: keep its permissions
+        tmp.chmod(path.stat().st_mode & 0o777)
+    tmp.replace(path)
+    for name, value in changes.items():
+        *tables, key = name.split(".")
+        target = cfg
+        for table in tables:
+            target = target.setdefault(table, {})
+        target[key] = value
 def panel_token() -> str:
     """A random token the panel page must send back, so no other web page can drive Rafiq."""
     return _token("panel.token")

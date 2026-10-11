@@ -98,6 +98,7 @@ def bare_assistant(said):
     a.speaker = FakeSpeaker()
     a.speech, a.silent = None, False
     a.set_state = lambda state: None
+    a.publish_spending = lambda tag: None
     return a
 
 

@@ -33,6 +33,14 @@ def rms(frame: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(frame, dtype="float64"))))
 
 
+def level(frame: np.ndarray) -> float:
+    """How loud a frame is, from 0 (silence, or below -60 dBFS) to 1 (full scale), for the panel's meter."""
+    rms = float(np.sqrt(np.mean(np.square(frame, dtype="float64")))) if len(frame) else 0.0
+    if rms <= 0.001:
+        return 0.0
+    return round(min(1.0, 1 + 20 * np.log10(rms) / 60), 3)
+
+
 class SileroVAD:
     """Silero VAD over a live stream: unlike faster-whisper's own wrapper, the model's state is kept
     from one frame to the next. Uses the ONNX model that ships with faster-whisper."""
