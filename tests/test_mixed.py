@@ -40,6 +40,7 @@ def test_word_error_rate():
 class FakeSegment:
     def __init__(self, text):
         self.text, self.no_speech_prob = text, 0.0
+        self.avg_logprob, self.compression_ratio = -0.2, 1.2
 
 
 class FakeModel:
