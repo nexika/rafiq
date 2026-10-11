@@ -165,6 +165,10 @@ def make_handler(assistant, token: str, port: int):
                 assistant.set_muted(data.get("muted"))      # no value: a toggle
             elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
                 assistant.pending_answer.put("always" if data["yes"] and data.get("always") is True else data["yes"])
+            elif path == "/api/project" and isinstance(data.get("path"), str):
+                folder = assistant.set_project(data["path"][:1000])
+                if folder.startswith("error"):
+                    return self._send(400, json.dumps({"error": folder}).encode())
             elif (path == "/api/notify" and isinstance(data.get("text"), str) and data["text"].strip()
                   and data.get("event", "") in notify.EVENTS and data.get("lang") in (None, *lang.TAGS)):
                 assistant.submit("notify", text=data["text"][:500], event=data.get("event", ""),

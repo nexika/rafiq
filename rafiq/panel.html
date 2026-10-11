@@ -70,6 +70,9 @@ button { font: inherit; border-radius: 12px; border: 1px solid var(--line); back
   color: var(--ink); padding: 10px 14px; cursor: pointer; white-space: nowrap; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#project { display: flex; gap: 8px; margin: -8px 0 20px; }
+#project input { font-size: 14px; padding: 6px 10px; }
+#project button { font-size: 14px; padding: 6px 10px; }
 .navlink { color: var(--accent); font-size: 14px; }
 #mode { margin-left: auto; font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
@@ -154,6 +157,11 @@ header .grow { flex: 1; min-width: 0; }
     <button role="tab" data-page="permissions" aria-selected="false">Permissions</button>
   </nav>
   <section id="page-talk">
+    <form id="project" title="The folder for “run the tests”, “what's my git status?”, “why did CI fail?”">
+      <input type="text" id="project-path" placeholder="Project folder for developer commands" autocomplete="off"
+        dir="ltr" aria-label="Project folder">
+      <button type="submit">Set</button>
+    </form>
     <div id="picker">
       <label for="backend">Brain</label>
       <select id="backend">
@@ -261,7 +269,8 @@ function setState(s) {
 async function post(path, body) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
     body: JSON.stringify(body || {}) });
-  if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
+  if (r.status === 400) { const e = await r.json().catch(() => ({})); add("note err", e.error || "Rafiq refused that."); }
+  else if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
 }
 const LANG = { en: "English", fr: "Français", es: "Español", de: "Deutsch", ar: "العربية", "ar-EG": "مصري" };
 
@@ -275,6 +284,8 @@ function handle(e) {
       + e.languages.map((t) => LANG[t] || t).join(" ⇄ ")); break;
     case "tool": nowEl.textContent = ""; add("tool", "⚙ " + e.name + " " + JSON.stringify(e.args) + "\n→ " + e.result); break;
     case "persona": document.getElementById("persona").value = e.persona; break;
+    case "project": document.getElementById("project-path").value = e.path;
+      add("note", "Project folder: " + e.path); break;
     case "brain": stateEl.dataset.backend = e.backend; break;
     case "spending": showSpending(e); break;
     case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
@@ -390,6 +401,11 @@ document.getElementById("form").onsubmit = (ev) => {
   ev.preventDefault();
   const input = document.getElementById("text"), text = input.value.trim();
   if (text) { post("/api/text", { text }); input.value = ""; }
+};
+document.getElementById("project").onsubmit = (ev) => {
+  ev.preventDefault();
+  const path = document.getElementById("project-path").value.trim();
+  if (path) post("/api/project", { path });
 };
 document.getElementById("talk").onclick = () => post("/api/listen");
 modeEl.onchange = () => post("/api/mode", { mode: modeEl.value });

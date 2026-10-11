@@ -233,6 +233,9 @@ class FakeAssistant:
     def submit(self, kind, **data):
         self.jobs.append((kind, data))
 
+    def set_project(self, path):
+        self.jobs.append(("project", {"path": path}))
+        return "error: not a folder" if path == "/nowhere" else path
     def set_muted(self, muted=None):
         self.jobs.append(("mute", {"muted": muted}))
 
@@ -272,6 +275,14 @@ def test_typed_text_is_queued_for_the_assistant(panel):
     assistant, port = panel
     assert request(port, "/api/text", {"text": "what time is it"})[0] == 200
     assert assistant.jobs == [("text", {"text": "what time is it"})]
+
+
+def test_the_project_folder_is_set_from_the_panel(panel):
+    assistant, port = panel
+    assert request(port, "/api/project", {"path": "/home/me/code"})[0] == 200
+    assert request(port, "/api/project", {"path": "/nowhere"})[0] == 400
+    assert request(port, "/api/project", {"path": 3})[0] == 400
+    assert assistant.jobs == [("project", {"path": "/home/me/code"}), ("project", {"path": "/nowhere"})]
 
 
 def test_the_morning_paper_timers_offer_reaches_the_running_rafiq(panel):

@@ -91,6 +91,9 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[dev]
+project = ""                    # the folder for "run the tests", "what's my git status?" (or set it in the panel)
+
 [overlay]
 display = "auto"                # answers on screen as desktop notifications; "off" for none
 seconds = 8                     # how long an answer stays on screen

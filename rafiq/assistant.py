@@ -36,7 +36,7 @@ from .permissions import Approvals
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
-from .tools import Tool, brief, load_all, media
+from .tools import Tool, brief, dev, load_all, media
 from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
 
@@ -177,6 +177,14 @@ class Assistant:
         self.stt = SpeechToText.from_config(self.cfg)   # activate_whisper set speech.whisper_model
 
     # ------------------------------------------------------------------ state shown in the panel
+
+    def set_project(self, path: str) -> str:
+        """The project folder for the developer tools, chosen in the panel."""
+        folder = dev.set_project(path)
+        if not folder.startswith("error"):
+            self.cfg["dev"]["project"] = folder
+            self.events.publish("project", {"path": folder})
+        return folder
 
     def set_state(self, state: str) -> None:
         if state == "idle" and self.muted:
