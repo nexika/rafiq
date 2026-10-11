@@ -223,8 +223,13 @@ class Hub:
         sock.settimeout(None)
         send_json(sock, {"type": "welcome", "room": device.room})
         self.on_event("satellite", {"name": device.name, "room": device.room, "connected": True})
-        brain = self.make_brain(room_tools(self.tools, device), lambda action, tag: self._confirm(sock, action, tag))
-        ctx = Context(self.cfg, self.scheduler, room=device.room)
+        tools = room_tools(self.tools, device)
+
+        def confirm(action, tag):
+            return self._confirm(sock, action, tag)
+
+        brain = self.make_brain(tools, confirm)
+        ctx = Context(self.cfg, self.scheduler, room=device.room, confirm=confirm, tools=tools)
         try:
             while True:
                 frame = recv(sock)
