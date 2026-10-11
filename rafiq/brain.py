@@ -349,7 +349,11 @@ class Brain:
                 result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
-        self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
+        if tool.private:
+            hidden = "error (hidden)" if result.startswith("error") else "(hidden)"
+            self.on_event("tool", {"name": name, "args": "(hidden)", "result": hidden, "card": tool.card})
+        else:
+            self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
         return result[:8000]
 
     def local_tools(self) -> dict[str, Tool]:

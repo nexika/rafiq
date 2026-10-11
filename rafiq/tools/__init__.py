@@ -41,6 +41,8 @@ class Tool:
     waiting_phrase: dict = field(default_factory=dict)
     expose: bool = False             # may be offered to other programs over MCP
     card: str = "text"
+    # True: its arguments and results (amounts, payees) stay out of the event log and the panel.
+    private: bool = False
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -87,10 +89,10 @@ def check(t: Tool) -> None:
 
 def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None, *,
          level: str, slow: bool = False, waiting_phrase: dict | None = None, expose: bool = False,
-         card: str = "text"):
+         card: str = "text", private: bool = False):
     def register(fn: Callable) -> Callable:
         t = Tool(name, description, fn, params or {}, tuple(required), confirm, level, slow,
-                 dict(waiting_phrase or {}), expose, card)
+                 dict(waiting_phrase or {}), expose, card, private)
         check(t)
         REGISTRY[name] = t
         return fn
@@ -104,7 +106,7 @@ OPTIONAL = ("google", "discord", "instagram", "obs", "spotify")
 def load_all(cfg: dict) -> dict[str, Tool]:
     """Import every skill module; the optional ones, Home Assistant, Hue, the smart plugs and presence only
     when they are set up. The scene tool names the scenes in the config, so the brain knows which exist."""
-    from . import background, content, everyday, lists, media, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
+    from . import background, content, everyday, finance, lists, media, memory, notes, pc, scenes, screen, style, web  # noqa: F401  (registers the tools)
 
     off = set()
     for name in OPTIONAL:

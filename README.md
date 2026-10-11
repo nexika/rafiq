@@ -20,6 +20,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Money | "import my bank statement from Downloads", "put Uber under transport", "how much did I spend in September?", "what subscriptions am I paying for?" (all on this computer; amounts and payees stay out of the logs) |
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
