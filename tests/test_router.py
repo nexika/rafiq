@@ -39,6 +39,11 @@ def test_computer_requests_get_only_the_computer_tools(text):
     assert offered(text) == {"volume", "power", "open_app"}
 
 
+def test_waking_a_computer_keeps_the_wake_tool():
+    tools = {**TOOLS, "wake_computer": Tool("wake_computer", "wake_computer", lambda: "ok")}
+    assert "wake_computer" in router.route("wake the gaming pc", tools).tools
+
+
 def test_calendar_and_email_are_their_own_domains():
     assert offered("what's on my calendar tomorrow") == {"calendar_events"}
     assert offered("send an email to Sara") == {"email_send"}
