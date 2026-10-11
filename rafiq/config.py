@@ -1,6 +1,7 @@
 """Settings: ~/.config/rafiq/config.toml (RAFIQ_HOME moves the folder), defaults for everything.
 
-Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY), then the file, and are never logged.
+Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN), then the file,
+and are never logged.
 """
 
 from __future__ import annotations
@@ -97,6 +98,8 @@ DEFAULTS: dict = {
     "place": {"city": "", "units": "metric"},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    # Home Assistant, for Nest, Hue, plugs and the rest: its address and a long-lived access token.
+    "home_assistant": {"url": "", "token": ""},
     # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
     "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     "anthropic_api_key": "",
@@ -132,6 +135,8 @@ def load(path: Path | None = None) -> dict:
     for key in ("anthropic_api_key", "openai_api_key"):
         if os.environ.get(key.upper()):
             cfg[key] = os.environ[key.upper()]
+    if os.environ.get("HOME_ASSISTANT_TOKEN"):
+        cfg["home_assistant"]["token"] = os.environ["HOME_ASSISTANT_TOKEN"]
     return cfg
 
 

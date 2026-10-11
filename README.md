@@ -18,6 +18,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | This computer | "open Firefox", "launch Borderlands", "add an app called RetroArch" (asks first), "volume to 30", "mute", "pause", "next song", "what is playing?", "switch to the headphones", "how's the battery?", "how's the GPU?", "lock the screen", "shut down" (asks first), "wake the gaming PC" (asks first, [setup](docs/wake-on-lan.md)) |
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "15% of 240", "5 miles in km" |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
@@ -245,6 +246,20 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 Rafiq reads every calendar in your list, subscribed ones too, and adds or deletes events (after asking)
 in your primary calendar only. A token made before Rafiq read the calendar list only sees the primary
 calendar: run `rafiq google-setup` again to give it the others.
+
+## Home devices (Nest, Hue, plugs)
+
+Rafiq controls home devices through [Home Assistant](https://www.home-assistant.io/), which already
+knows Google Nest, Philips Hue, smart plugs and many other brands, so there is no Google Device Access
+registration to pay for.
+
+1. In Home Assistant, open your profile and create a **long-lived access token**.
+2. Set `url` under `[home_assistant]` in the config (for example `http://homeassistant.local:8123`), and
+   the token in `HOME_ASSISTANT_TOKEN` (or `token` in the config).
+
+Then ask "which lights are on?" or "turn off the coffee plug" (asks first). Lights, switches and plugs,
+fans, thermostats, media players and humidifiers can be switched on and off; locks, alarms and garage
+doors never are.
 
 ## Settings
 

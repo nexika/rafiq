@@ -78,6 +78,10 @@ port = 8765
 [google]
 enabled = false                 # true after `rafiq google-setup`
 
+[home_assistant]                # Nest, Hue, smart plugs...: profile > long-lived access token in Home Assistant
+url = ""                        # e.g. http://homeassistant.local:8123
+token = ""                      # or set HOME_ASSISTANT_TOKEN
+
 [wake_on_lan]                   # "wake the gaming PC"; see docs/wake-on-lan.md
 broadcast = "255.255.255.255"   # or your network's, e.g. "192.168.1.255"
 port = 9

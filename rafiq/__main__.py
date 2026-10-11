@@ -159,6 +159,9 @@ def cmd_doctor(_args) -> int:
     google = config.home() / "google" / "token.json"
     _check("Google (calendar, email)", google.is_file() and cfg["google"].get("enabled", False),
            "connected" if google.is_file() else "run: rafiq google-setup")
+    home_assistant = cfg["home_assistant"]
+    _check("Home Assistant (Nest, Hue, plugs)", bool(home_assistant.get("url") and home_assistant.get("token")),
+           home_assistant.get("url") or "set home_assistant.url and HOME_ASSISTANT_TOKEN")
     print(f"  mode: {modes.current(cfg)}")
     from .stt import cloud_engines
 
