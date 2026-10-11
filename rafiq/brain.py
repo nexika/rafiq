@@ -84,6 +84,13 @@ class Memory:
         self.turns += [Turn("user", user), Turn("assistant", assistant)]
         self.last, self.tag = now, tag
 
+    def forget(self, user: str, assistant: str) -> None:
+        """Take a request and its answer out of the conversation, when the user deletes them."""
+        for i in range(len(self.turns) - 2, -1, -2):
+            if self.turns[i].content == user and self.turns[i + 1].content == assistant:
+                del self.turns[i:i + 2]
+                return
+
 
 class BrainError(Exception):
     pass

@@ -1,6 +1,7 @@
 """The local panel: a page on 127.0.0.1 that shows what Rafiq heard, said and did, with push-to-talk,
 a text box, yes/no buttons for confirmations, the mode switch, the choice of style, a model picker and the controls
-of a reading aloud. A settings drawer switches the brain's mode and model and the voices; only the allowlist in
+of a reading aloud, the history of requests (searchable, with delete) and whether anything leaves
+this computer. A settings drawer switches the brain's mode and model and the voices; only the allowlist in
 config.py can be written, and keys never reach the page.
 
 Only this computer can reach it, and only the page it serves can drive it: every request must carry
@@ -19,6 +20,7 @@ from __future__ import annotations
 import hmac
 import json
 import queue
+from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
@@ -86,9 +88,14 @@ def make_handler(assistant, token: str, port: int):
             if url.path in pages:
                 page = resources.files("rafiq").joinpath(pages[url.path]).read_text(encoding="utf-8")
                 return self._send(200, page.replace("__TOKEN__", token).encode(), "text/html; charset=utf-8")
-            if url.path in ("/events", "/api/subscriptions"):
-                if not self._token_ok((parse_qs(url.query).get("token") or [None])[0]):
+            query = parse_qs(url.query)
+            if url.path in ("/events", "/api/subscriptions", "/api/history"):
+                if not self._token_ok((query.get("token") or [None])[0]):
                     return self._send(403, b'{"error":"token"}')
+                if url.path == "/api/history":
+                    entries = assistant.history.entries((query.get("q") or [""])[0][:200])
+                    body = {"entries": [asdict(e) for e in entries], "privacy": assistant.privacy()}
+                    return self._send(200, json.dumps(body, ensure_ascii=False).encode())
                 if url.path == "/api/subscriptions":
                     summary = subscriptions.summary(subscriptions.default_store())
                     return self._send(200, json.dumps(summary, ensure_ascii=False).encode())
@@ -115,6 +122,8 @@ def make_handler(assistant, token: str, port: int):
                 for event in list(assistant.events.history):
                     self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
                 self.wfile.write(f"data: {json.dumps({'kind': 'state', 'state': assistant.state})}\n\n".encode())
+                privacy = {"kind": "privacy", **assistant.privacy()}
+                self.wfile.write(f"data: {json.dumps(privacy)}\n\n".encode())
                 self.wfile.write(f"data: {json.dumps({'kind': 'mode', 'mode': assistant.mode})}\n\n".encode())
                 style = persona.active(getattr(assistant, "cfg", {}))
                 self.wfile.write(f"data: {json.dumps({'kind': 'persona', 'persona': style})}\n\n".encode())
@@ -221,6 +230,10 @@ def make_handler(assistant, token: str, port: int):
                     WRITES[path](assistant, data["name"])
                 except ValueError as exc:
                     return self._send(400, json.dumps({"error": str(exc)}).encode())
+            elif path == "/api/history/delete" and isinstance(data.get("id"), str):
+                assistant.forget(assistant.history.delete(data["id"]))
+            elif path == "/api/history/clear":
+                assistant.forget(assistant.history.clear())
             else:
                 return self._send(400, b'{"error":"unknown request"}')
             if path in ("/api/stop", "/api/reading"):

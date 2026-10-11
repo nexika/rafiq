@@ -91,6 +91,8 @@ shutdown_delay = 30             # "shut down" waits this long; "cancel the shutd
 [panel]
 port = 8765
 
+[history]
+retention_days = 7              # what you asked and Rafiq answered, kept on this computer; 0 keeps nothing
 [dev]
 project = ""                    # the folder for "run the tests", "what's my git status?" (or set it in the panel)
 
