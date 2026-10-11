@@ -109,6 +109,15 @@ DEFAULTS: dict = {
               "ip_lookup": False},
     "pc": {"shutdown_delay": 30},            # seconds "shut down" waits; 0 shuts down at once
     "google": {"enabled": False},
+    "paper": {
+        "title": "Rafiq",
+        "languages": [],                 # e.g. ["en", "ar"] for a bilingual paper; empty: the first speech language
+        "feeds": [],                     # RSS or Atom addresses for the news section
+        "tech_feeds": [],
+        "max_articles": 6,               # per section
+        "priorities": [],
+        "deadlines": [],                 # [{title = "Tax return", date = "2026-10-15"}]
+    },
     "deadlines": {
         "feeds": [],                     # iCal addresses: "https://..." or {name = "Loopstr", url = "https://..."}
         "cache_minutes": 15,

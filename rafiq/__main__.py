@@ -1,4 +1,4 @@
-"""rafiq run | ask | say | agent | agent-token | doctor | phone | mcp | toolcheck | google-setup |
+"""rafiq run | ask | say | paper | agent | agent-token | doctor | phone | mcp | toolcheck | google-setup |
 instagram-setup | hue-setup | install-service | uninstall-service"""
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import threading
+from pathlib import Path
 
 from . import config, lang, modes
 
@@ -239,6 +240,31 @@ def cmd_say(args) -> int:
     speaker = Speaker(config.load())
     ok = speaker.say(" ".join(args.text), args.lang)
     return 0 if ok else 1
+
+
+def cmd_paper(args) -> int:
+    """Make today's morning paper: a PDF (or HTML with --html) of the weather, calendar, feeds and more."""
+    from datetime import date
+
+    from . import paper
+
+    cfg = config.load()
+    day = date.today()
+    if args.demo:
+        edition = paper.demo_edition(day, args.lang or None)
+    else:
+        if args.lang:
+            cfg["paper"]["languages"] = args.lang
+        edition = paper.gather(cfg, paper.LiveSources(cfg), day)
+    suffix = ".html" if args.html else ".pdf"
+    out = Path(args.out) if args.out else config.data_dir() / "paper" / f"{day.isoformat()}{suffix}"
+    try:
+        paper.make(edition, out, None if args.html else paper.ChromiumPrinter())
+    except paper.PrintError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(out)
+    return 0
 
 
 def _check(label: str, ok: bool, detail: str = "") -> bool:
@@ -502,6 +528,12 @@ def main(argv=None) -> int:
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")
     enroll.set_defaults(fn=cmd_enroll)
+    news = sub.add_parser("paper", help="make today's morning paper (an A4 PDF)")
+    news.add_argument("--demo", action="store_true", help="made-up data, to see the layout")
+    news.add_argument("--html", action="store_true", help="write HTML instead of printing a PDF")
+    news.add_argument("--out", help="where to save it (default: the data folder, paper/<date>.pdf)")
+    news.add_argument("--lang", nargs="+", choices=lang.TAGS, help="languages, e.g. --lang en ar")
+    news.set_defaults(fn=cmd_paper)
     agent = sub.add_parser("agent", help="lend this PC (screen, speakers, apps) to a `rafiq run --server`")
     agent.add_argument("--server", help="the server's address, e.g. http://100.101.12.3:8766")
     agent.add_argument("--name", help="this agent's name, as given to `rafiq agent-token`")
