@@ -117,3 +117,56 @@ def test_synthetic_voice_wakes_on_the_name_and_not_on_look_alikes():
         assert spotter.score(mel(trim(say(text), vad)[:40000])) <= spotter.threshold, text
     for text in ("He's a terrific guy.", "I was just talking about dinner.", "Remind me later."):
         assert spotter.score(mel(trim(say(text), vad)[:40000])) > spotter.threshold, text
+
+
+# ---------------------------------------------------------------------- the language of the name
+
+
+def test_the_closest_recording_tells_the_language_the_name_was_called_in():
+    arabic, latin = word(), word()
+    spotter = kws.Spotter([arabic, latin], np.zeros(32), np.ones(32), threshold=1.0, tags=["ar", None])
+    assert spotter.best(arabic)[1] == "ar"
+    assert spotter.best(latin)[1] is None
+
+
+def test_the_language_of_each_recording_survives_a_restart(tmp_path):
+    base = word()
+    names = [base + rng.normal(scale=0.1, size=base.shape) for _ in range(3)]
+    spotter, _ = kws.calibrate(names, [word(30)], name_tags=["ar", "ar", None])
+    spotter.save(tmp_path)
+    assert kws.Spotter.load(tmp_path).tags == ["ar", "ar", None]
+
+
+def test_recordings_saved_before_languages_were_kept_still_load(tmp_path):
+    spotter, _ = kws.calibrate([word() for _ in range(3)], [word(30)])
+    spotter.save(tmp_path)
+    (tmp_path / "calibration.json").write_text('{"threshold": 0.5}')
+    again = kws.Spotter.load(tmp_path)
+    assert again.tags == [None, None, None]
+    assert again.best(again.templates[0])[1] is None
+
+
+def wake_with(tag, conversation):
+    from rafiq.assistant import Assistant
+
+    a = object.__new__(Assistant)
+    a.spotter = type("S", (), {"threshold": 1.0, "best": lambda self, frames: (0.2, tag)})()
+    a.mel = lambda audio: audio
+    a.events = type("E", (), {"publish": lambda self, *args: None})()
+    a.name_seconds, a.tag = 0.8, conversation
+    greeted = []
+    a._listen_for_request = lambda greet=True: greeted.append(a.tag)
+    a._spot_with_recordings(np.zeros(16000, dtype="float32"))
+    return greeted[0]
+
+
+def test_the_name_called_in_arabic_is_answered_in_arabic():
+    assert wake_with("ar", "en") == "ar"
+
+
+def test_an_egyptian_conversation_stays_egyptian_when_called_in_arabic():
+    assert wake_with("ar", "ar-EG") == "ar-EG"
+
+
+def test_the_name_said_in_latin_letters_keeps_the_conversation_language():
+    assert wake_with(None, "fr") == "fr"
