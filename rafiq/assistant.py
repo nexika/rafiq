@@ -774,9 +774,11 @@ class Assistant:
     def _spot_with_recordings(self, audio: np.ndarray) -> None:
         """Wake when the start of what was said matches your recordings of the name. Most speech
         that is not the name stops here, after a few hundred milliseconds of arithmetic."""
-        score = self.spotter.score(self.mel(audio[:int(kws.MAX_SECONDS * RATE)]))
+        score, tag = self.spotter.best(self.mel(audio[:int(kws.MAX_SECONDS * RATE)]))
         if score > self.spotter.threshold:
             return
+        if tag and self.tag.split("-")[0] != tag:     # "يا رفيق" is answered in Arabic; Egyptian stays Egyptian
+            self.tag = tag
         self.events.publish("wake", {"score": round(score, 3), "threshold": round(self.spotter.threshold, 3)})
         if len(audio) / RATE > self.name_seconds + 1.3:    # more than the name: the request came with it
             text, tag = self.hear(audio)

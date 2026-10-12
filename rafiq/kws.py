@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -113,28 +113,41 @@ class Spotter:
     mean: np.ndarray
     std: np.ndarray
     threshold: float
+    # The language each recording says the name in ("ar" for "يا رفيق"); None when the form says nothing
+    # about it ("Rafiq" is said the same way in every language), and for recordings made before this.
+    tags: list[str | None] = field(default_factory=list)
+
+    def __post_init__(self):
+        self.tags = list(self.tags) + [None] * (len(self.templates) - len(self.tags))
 
     def normalize(self, frames: np.ndarray) -> np.ndarray:
         return (frames - self.mean) / self.std
 
-    def score(self, frames: np.ndarray) -> float:
+    def best(self, frames: np.ndarray) -> tuple[float, str | None]:
+        """The closest recording's distance and the language it says the name in."""
         seq = self.normalize(frames)
-        return min(sdtw(t, seq) for t in self.templates)
+        return min(((sdtw(t, seq), tag) for t, tag in zip(self.templates, self.tags, strict=True)),
+                   key=lambda pair: pair[0])
+
+    def score(self, frames: np.ndarray) -> float:
+        return self.best(frames)[0]
 
     def save(self, path: Path) -> None:
         np.savez(path / "templates.npz", *self.templates, mean=self.mean, std=self.std)
-        (path / "calibration.json").write_text(json.dumps({"threshold": self.threshold}))
+        (path / "calibration.json").write_text(json.dumps({"threshold": self.threshold, "tags": self.tags}))
 
     @classmethod
     def load(cls, path: Path | None = None) -> Spotter | None:
         path = path or folder()
         try:
             data = np.load(path / "templates.npz")
-            threshold = json.loads((path / "calibration.json").read_text())["threshold"]
+            saved = json.loads((path / "calibration.json").read_text())
+            threshold = saved["threshold"]
         except (OSError, ValueError, KeyError):
             return None
         templates = [data[k] for k in sorted(data.files, key=lambda k: (len(k), k)) if k.startswith("arr_")]
-        return cls(templates, data["mean"], data["std"], float(threshold)) if templates else None
+        tags = saved.get("tags") or []
+        return cls(templates, data["mean"], data["std"], float(threshold), tags[:len(templates)]) if templates else None
 
 
 def name_in_context(name_templates: list[np.ndarray], request: np.ndarray) -> np.ndarray:
@@ -148,9 +161,11 @@ def name_in_context(name_templates: list[np.ndarray], request: np.ndarray) -> np
 
 
 def calibrate(name_frames: list[np.ndarray], other_frames: list[np.ndarray],
-              sensitivity: float = SENSITIVITY, request_frames: list[np.ndarray] = ()) -> tuple[Spotter, dict]:
+              sensitivity: float = SENSITIVITY, request_frames: list[np.ndarray] = (),
+              name_tags: list[str | None] = ()) -> tuple[Spotter, dict]:
     """A spotter from recordings of the name, of the name before a request, and of ordinary speech,
-    all raw mel frames.
+    all raw mel frames. name_tags: the language each name recording says it in (None: unknown); the
+    request recordings can be in any language, so theirs is unknown.
 
     The threshold lies between the name recordings' distance to each other (each one against the rest)
     and the ordinary sentences' distance to the name, at `sensitivity` of the way."""
@@ -161,7 +176,7 @@ def calibrate(name_frames: list[np.ndarray], other_frames: list[np.ndarray],
     templates = [(f - mean) / std for f in name_frames]
     templates += [name_in_context(templates, (r - mean) / std) for r in request_frames]
     same = [min(sdtw(t, templates[i]) for k, t in enumerate(templates) if k != i) for i in range(len(templates))]
-    spotter = Spotter(templates, mean, std, threshold=0.0)
+    spotter = Spotter(templates, mean, std, threshold=0.0, tags=list(name_tags)[:len(name_frames)])
     others = [spotter.score(f) for f in other_frames]
     near, far = max(same), (min(others) if others else max(same) * 1.6)
     if far <= near:

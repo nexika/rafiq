@@ -81,15 +81,22 @@ def trim(audio: np.ndarray, vad: SileroVAD, frame: int = 512) -> np.ndarray:
     return audio[max(0, (speech[0] - 2) * frame):min(len(audio), (speech[-1] + 3) * frame)]
 
 
+def form_tag(form: str) -> str | None:
+    """The language a form of the name says it in: "يا رفيق" is Arabic; "Rafiq" is said the same way in
+    every language, so it keeps the conversation's."""
+    return "ar" if any("\u0600" <= ch <= "\u06ff" for ch in form) else None
+
+
 def head(clip: np.ndarray) -> np.ndarray:
     return clip[:int(kws.MAX_SECONDS * RATE)]
 
 
 def fit(name_clips: list[np.ndarray], other_clips: list[np.ndarray], mel: kws.Mel | None = None,
-        sensitivity: float = kws.SENSITIVITY, request_clips: list[np.ndarray] = ()):
+        sensitivity: float = kws.SENSITIVITY, request_clips: list[np.ndarray] = (),
+        name_tags: list[str | None] = ()):
     mel = mel or kws.Mel()
     return kws.calibrate([mel(c) for c in name_clips], [mel(head(c)) for c in other_clips], sensitivity,
-                         request_frames=[mel(head(c)) for c in request_clips])
+                         request_frames=[mel(head(c)) for c in request_clips], name_tags=name_tags)
 
 
 def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input) -> int:
@@ -112,12 +119,13 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
             say("  I heard nothing; again, please.")
 
     say("Recording your voice for the wake word. Speak at your normal distance from the microphone.")
-    names, requests, others = [], [], []
+    names, tags, requests, others = [], [], [], []
     mic.start()
     try:
         for form in forms:
             for take in range(1, takes + 1):
                 names.append(record(f'"{form}" ({take}/{takes})'))
+                tags.append(form_tag(form))
                 save_wav(out / f"name-{len(names)}.wav", names[-1])
         say("Now call me with a request, the way you normally would (any request is fine), for example:")
         for i, example in enumerate(REQUESTS, 1):
@@ -131,7 +139,7 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
                 save_wav(out / f"other-{i}.wav", clip)
     finally:
         mic.stop()
-    spotter, report = fit(names, others, mel, request_clips=requests)
+    spotter, report = fit(names, others, mel, request_clips=requests, name_tags=tags)
     spotter.save(out)
     say(f"Saved {len(names)} recordings of the name, {len(requests)} requests and {len(others)} sentences "
         f"in {out}.")
@@ -151,6 +159,8 @@ def recalibrate(sensitivity: float) -> dict:
     names = [load_wav(p) for p in sorted(out.glob("name-*.wav"))]
     requests = [load_wav(p) for p in sorted(out.glob("request-*.wav"))]
     others = [load_wav(p) for p in sorted(out.glob("other-*.wav"))]
-    spotter, report = fit(names, others, sensitivity=sensitivity, request_clips=requests)
+    previous = kws.Spotter.load(out)       # the recordings don't say which form they are; the last fit does
+    tags = previous.tags[:len(names)] if previous else []
+    spotter, report = fit(names, others, sensitivity=sensitivity, request_clips=requests, name_tags=tags)
     spotter.save(out)
     return report

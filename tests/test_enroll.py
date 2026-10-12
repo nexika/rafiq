@@ -49,7 +49,7 @@ def test_a_clipped_take_is_asked_again_and_not_saved(monkeypatch):
     monkeypatch.setattr(kws, "Mel", lambda: None)
     fitted = {}
 
-    def fit(names, others, mel, request_clips=()):
+    def fit(names, others, mel, request_clips=(), name_tags=()):
         fitted["names"] = names
         return FakeSpotter(), {"name_spread": 0.3, "ordinary_closest": None, "threshold": 0.4}
 
@@ -64,3 +64,11 @@ def test_a_clipped_take_is_asked_again_and_not_saved(monkeypatch):
     assert not any(enroll.too_loud(clip) for clip in fitted["names"])
     assert any("too loud" in line for line in said)
     assert sorted(p.name for p in kws.folder().glob("*.wav")) == ["name-1.wav", "name-2.wav", "name-3.wav"]
+
+
+def test_a_name_form_in_arabic_script_is_tagged_arabic():
+    assert enroll.form_tag("يا رفيق") == "ar"
+
+
+def test_a_name_form_in_latin_letters_says_nothing_about_the_language():
+    assert enroll.form_tag("Rafiq") is None
