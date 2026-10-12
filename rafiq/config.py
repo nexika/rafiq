@@ -30,6 +30,9 @@ DEFAULTS: dict = {
         "openai_model": "gpt-5-mini",
         # Any server that speaks OpenAI's chat completions works here (DeepSeek, Gemini, a local one).
         "openai_url": "https://api.openai.com/v1",
+        # How long the OpenAI-compatible server may stay silent before Rafiq gives up on it (auto mode then
+        # asks Ollama). Gemini answered in 0.7 to 5.6 s; one request that hung kept the user waiting 60 s.
+        "openai_wait_seconds": 15,
         "ollama_model": "qwen2.5:7b",
         "ollama_url": "http://127.0.0.1:11434",
         "ollama_tools": "local",        # "local": a smaller set a 7B model handles well; "all"; or a list of names

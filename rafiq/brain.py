@@ -538,7 +538,8 @@ class Brain:
 
         brain = self.cfg["brain"]
         try:
-            resp = httpx.post(f"{brain['openai_url'].rstrip('/')}/chat/completions", timeout=60,
+            resp = httpx.post(f"{brain['openai_url'].rstrip('/')}/chat/completions",
+                              timeout=brain.get("openai_wait_seconds", 15),
                               headers={"Authorization": f"Bearer {self.cfg.get('openai_api_key', '')}"},
                               json={"model": brain["openai_model"], "max_completion_tokens": brain["max_tokens"],
                                     "messages": [{"role": "system", "content": system},
@@ -566,7 +567,7 @@ class Brain:
         extra = {"tools": openai_schemas(tools)} if tools else {}
         headers = {"Authorization": f"Bearer {self.cfg.get('openai_api_key', '')}"}
         while True:
-            wait = budget.next_round(60)
+            wait = budget.next_round(brain.get("openai_wait_seconds", 15))
             try:
                 with timing.Timer("model", backend="openai"):
                     resp = httpx.post(f"{brain['openai_url'].rstrip('/')}/chat/completions", headers=headers,
