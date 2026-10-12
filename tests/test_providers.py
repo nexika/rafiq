@@ -226,3 +226,43 @@ def test_the_picker_needs_the_token(panel):
     assistant, port = panel
     assert request(port, "/api/model", {"backend": "openai", "model": "gpt-5"}, token=None)[0] == 403
     assert assistant.brain.cfg["brain"]["mode"] == "auto"
+
+
+# ---------------------------------------------------------------------- a server that stays silent
+
+@pytest.fixture
+def silent(monkeypatch):
+    """An OpenAI-compatible server that never answers; Ollama answers. Records each wait asked for."""
+    waits = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        if "11434" in url:
+            return FakeResponse({"message": {"role": "assistant", "content": "from ollama"}})
+        waits.append(timeout)
+        raise httpx.ReadTimeout("silent")
+
+    monkeypatch.setattr(httpx, "post", post)
+    return waits
+
+
+def test_a_silent_openai_server_is_given_up_after_the_configured_wait(silent):
+    brain = make_brain(openai_api_key="k")
+    brain.cfg["brain"]["openai_wait_seconds"] = 7
+    brain.think("hello", "en")
+    assert silent == [7]
+
+
+def test_the_default_wait_for_an_openai_server_is_seconds_not_a_minute():
+    assert config.load()["brain"]["openai_wait_seconds"] <= 20
+
+
+def test_a_silent_openai_server_hands_over_to_ollama_in_auto_mode(silent):
+    assert make_brain("auto", openai_api_key="k").think("hello", "en") == "from ollama"
+
+
+def test_translation_waits_no_longer_than_an_answer(silent):
+    brain = make_brain(openai_api_key="k")
+    brain.cfg["brain"]["openai_wait_seconds"] = 7
+    with pytest.raises(BrainError):
+        brain._openai_text("translate", "bonjour")
+    assert silent == [7]
