@@ -27,6 +27,22 @@ SENTENCES = [
 ]
 
 
+# A boosted laptop microphone (+50 dB) clipped every take: peaks at 1.0, speech RMS 0.65 to 0.86. The name
+# and ordinary speech then looked alike (0.51 to 0.54 against 0.57) and Rafiq never woke. After lowering
+# the boost, peaks were 0.24 to 0.44 and no sample reached full scale; the same takes with the boost back
+# (+20 dB) had 7.6 to 26% of their samples there.
+CLIP_LEVEL = 0.99
+CLIP_SHARE = 0.001       # more than this share of samples at full scale is clipping, not one click
+TOO_LOUD = ("  That was too loud: the sound hit the microphone's limit and is distorted, so I can't learn "
+            "the name from it. Lower the microphone's input or its boost (the desktop's sound settings, or "
+            "`alsamixer`, F4), then try again.")
+
+
+def too_loud(clip: np.ndarray) -> bool:
+    """Whether a recording clipped: distorted sound makes the name look like any other speech."""
+    return len(clip) > 0 and float(np.mean(np.abs(clip) >= CLIP_LEVEL)) > CLIP_SHARE
+
+
 def save_wav(path: Path, audio: np.ndarray) -> None:
     with wave.open(str(path), "wb") as w:
         w.setnchannels(1)
@@ -88,6 +104,9 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
         while True:
             ask(f"  Press Enter, then say {prompt} ")
             clip = record_one(mic, vad, timeout)
+            if clip is not None and too_loud(clip):
+                say(TOO_LOUD)
+                continue
             if clip is not None or not required:
                 return clip
             say("  I heard nothing; again, please.")
