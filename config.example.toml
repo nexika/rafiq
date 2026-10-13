@@ -33,6 +33,11 @@ stt_engine = "auto"             # auto: Whisper here, the cloud only for stt_by_
 offline = false                 # true: what you say never leaves this computer
 openai_model = "gpt-4o-mini-transcribe"   # needs OPENAI_API_KEY
 
+[wake]
+names = []                      # other names Rafiq answers to, e.g. ["Jarvis"]; "Rafiq" always works.
+                                # Run `rafiq enroll` again after changing them. A name under five letters
+                                # must be heard exactly; a longer one wakes on a near miss too.
+
 [speech.stt_by_language]        # send a language Whisper hears badly to a cloud service
 # ar = "azure"                  # Azure's Egyptian recogniser (ar-EG), with the voice's AZURE_SPEECH_KEY
 

@@ -213,6 +213,8 @@ DEFAULTS: dict = {
     # Home Assistant, for Nest, Hue, plugs and the rest: its address and a long-lived access token.
     "home_assistant": {"url": "", "token": ""},
     # Computers Rafiq can wake: name -> network card address, or a table {mac, broadcast, port}.
+    # Names Rafiq answers to besides "Rafiq"; `rafiq enroll` records them too.
+    "wake": {"names": []},
     "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
     "hue": {"enabled": False, "rooms": {}},

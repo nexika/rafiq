@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import config, kws
+from . import config, kws, wake
 from .audio import RATE, Endpointer, Microphone, SileroVAD
 
 NAME_FORMS = ["Rafiq", "يا رفيق"]
@@ -100,11 +100,12 @@ def fit(name_clips: list[np.ndarray], other_clips: list[np.ndarray], mel: kws.Me
 
 
 def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input) -> int:
-    forms = forms or NAME_FORMS
+    cfg = config.load()
+    forms = forms or [*NAME_FORMS, *wake.names(cfg)]
     out = kws.folder()
     for old in out.glob("*.wav"):
         old.unlink()
-    mic, vad = Microphone.from_config(config.load()), SileroVAD()
+    mic, vad = Microphone.from_config(cfg), SileroVAD()
     mel = kws.Mel()
 
     def record(prompt: str, timeout: float = 8.0, required: bool = True) -> np.ndarray | None:

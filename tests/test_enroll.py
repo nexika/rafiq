@@ -72,3 +72,21 @@ def test_a_name_form_in_arabic_script_is_tagged_arabic():
 
 def test_a_name_form_in_latin_letters_says_nothing_about_the_language():
     assert enroll.form_tag("Rafiq") is None
+
+
+def test_enroll_records_the_other_names_from_the_settings(rafiq_home, monkeypatch):
+    rafiq_home.mkdir(parents=True, exist_ok=True)
+    (rafiq_home / "config.toml").write_text('[wake]\nnames = ["Jarvis"]\n', encoding="utf-8")
+    monkeypatch.setattr(enroll, "record_one", lambda mic, vad, timeout=8.0: speech(0.3))
+    monkeypatch.setattr(enroll.Microphone, "from_config", classmethod(lambda cls, cfg: FakeMic()))
+    monkeypatch.setattr(enroll, "SileroVAD", lambda: None)
+    monkeypatch.setattr(kws, "Mel", lambda: None)
+    monkeypatch.setattr(enroll, "fit", lambda *a, **k: (FakeSpotter(), {"name_spread": 0.3, "ordinary_closest": None,
+                                                                        "threshold": 0.4}))
+    monkeypatch.setattr(enroll, "REQUESTS", [])
+    monkeypatch.setattr(enroll, "SENTENCES", [])
+    prompts = []
+
+    enroll.run(takes=1, say=lambda line: None, ask=prompts.append)
+
+    assert [p for p in prompts if "Jarvis" in p] and [p for p in prompts if "يا رفيق" in p]

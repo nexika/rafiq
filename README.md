@@ -290,6 +290,9 @@ The mistakes came from look-alikes such as "Rafael" and "يا ريت". A real vo
 test that counts: the panel shows each wake-up's score next to the threshold.
 
 - Other forms: `rafiq enroll --forms "Rafiq" "Hey Rafiq" "يا رفيق"`.
+- Another name: set `[wake] names = ["Jarvis"]` in the config, then run `rafiq enroll` again. Rafiq
+  answers to it as well as "Rafiq", with or without recordings. Pick a name of five letters or more
+  that sounds unlike everyday words.
 - Wakes too rarely or too often: `rafiq enroll --sensitivity 0.6` (looser) or `0.3` (stricter) refits
   the saved recordings without recording again.
 - It is tuned to one voice: enrolling again replaces the recordings.

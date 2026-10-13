@@ -258,7 +258,7 @@ class Hub:
         if isinstance(audio, bool):
             raise ProtocolError("an answer outside a question")
         text, tag = self._hear(audio, ctx.tag)
-        found, rest = wake.find(text)
+        found, rest = wake.find(text, wake.names(self.cfg))
         text = rest if found else text
         send_json(sock, {"type": "heard", "text": text, "tag": tag})
         self.on_event("heard", {"text": text, "tag": tag, "room": device.room})
@@ -475,7 +475,7 @@ def run_device(cfg: dict) -> int:
     some, else a small Whisper model listens for the name. Returns 2 when the hub refuses it."""
     from . import kws
     from .audio import Endpointer, Microphone, SileroVAD
-    from .stt import WAKE_PROMPT, WAKE_SECONDS, Transcriber
+    from .stt import WAKE_SECONDS, Transcriber
     from .tts import Speaker
 
     found = settings(cfg)
@@ -525,8 +525,8 @@ def run_device(cfg: dict) -> int:
         if spotter:
             return spotter.score(mel(audio[:int(kws.MAX_SECONDS * RATE)])) <= spotter.threshold
         spotted = wake_stt.transcribe(audio[:int(WAKE_SECONDS * RATE)], beam_size=1, hotwords=None,
-                                      prompt=WAKE_PROMPT)
-        return wake.find(spotted.text)[0]
+                                      prompt=wake.prompt(wake.names(cfg)))
+        return wake.find(spotted.text, wake.names(cfg))[0]
 
     mic.start()
     print(f'Satellite "{name}" of {host}:{port}. Say "Rafiq". Ctrl+C stops.', flush=True)

@@ -801,7 +801,7 @@ def main(argv=None) -> int:
     hooks.add_argument("kind", choices=("claude-code", "shell"))
     hooks.set_defaults(fn=cmd_hooks)
     enroll = sub.add_parser("enroll", help="record yourself saying the name, for a reliable wake word")
-    enroll.add_argument("--forms", nargs="+", help='the ways you call it (default: "Rafiq" "يا رفيق")')
+    enroll.add_argument("--forms", nargs="+", help='the ways you call it (default: "Rafiq" "يا رفيق" and [wake] names)')
     enroll.add_argument("--takes", type=int, default=3, help="recordings of each form (default 3)")
     enroll.add_argument("--sensitivity", type=float,
                         help="refit the saved recordings: 0 strict ... 1 loose (default 0.45)")

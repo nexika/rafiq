@@ -81,3 +81,44 @@ def test_the_name_is_found_with_the_command_after_it(text, rest):
 ])
 def test_other_words_do_not_wake_rafiq(text):
     assert wake.find(text)[0] is False
+
+
+def test_another_name_from_the_settings_wakes_with_the_command_after_it():
+    assert wake.find("Jarvis, what time is it?", ["Jarvis"]) == (True, "what time is it?")
+    assert wake.find("Jarvys open firefox", ["Jarvis"]) == (True, "open firefox")
+
+
+def test_without_other_names_only_rafiq_wakes():
+    assert wake.find("Jarvis, what time is it?")[0] is False
+
+
+def test_rafiq_still_wakes_when_other_names_are_set():
+    assert wake.find("Rafiq, what time is it?", ["Jarvis"]) == (True, "what time is it?")
+
+
+def test_an_arabic_name_from_the_settings_is_found_after_ya():
+    assert wake.find("يا صاحبي، شغل الموسيقى", ["صاحبي"]) == (True, "شغل الموسيقى")
+    assert wake.find("ياصاحبي شغل الموسيقى", ["صاحبي"]) == (True, "شغل الموسيقى")
+
+
+def test_a_short_name_must_be_heard_exactly():
+    assert wake.find("Max, open firefox", ["Max"]) == (True, "open firefox")
+    assert wake.find("I mix the paint", ["Max"])[0] is False
+
+
+def test_a_name_of_two_words_is_found_whole():
+    assert wake.find("Abu Ali, what time is it?", ["Abu Ali"]) == (True, "what time is it?")
+    assert wake.find("Ali is coming", ["Abu Ali"])[0] is False
+
+
+def test_other_names_come_from_the_wake_settings():
+    assert wake.names({"wake": {"names": [" Jarvis ", "", 3]}}) == ("Jarvis",)
+    assert wake.names({"wake": {"names": "Jarvis"}}) == ("Jarvis",)
+    assert wake.names({}) == ()
+
+
+def test_the_wake_listener_is_told_the_other_names():
+    from rafiq import stt
+
+    assert wake.prompt(()) == stt.WAKE_PROMPT
+    assert "Jarvis" in wake.prompt(["Jarvis"])
