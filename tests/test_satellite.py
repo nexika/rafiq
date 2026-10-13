@@ -236,7 +236,7 @@ def test_the_token_can_come_from_the_environment(monkeypatch):
 
 def test_the_unit_restarts_except_when_refused():
     unit = satellite.unit("/opt/rafiq/.venv/bin/python")
-    assert "ExecStart=/opt/rafiq/.venv/bin/python -m rafiq satellite run" in unit
+    assert "ExecStart=/opt/rafiq/.venv/bin/python -P -m rafiq satellite run" in unit
     assert "Restart=always" in unit and "RestartPreventExitStatus=2" in unit
     assert "WantedBy=default.target" in unit
 

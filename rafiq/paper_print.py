@@ -132,7 +132,7 @@ def timer_units(at: str, python: str) -> dict[str, str]:
         raise ValueError(f"give the time as HH:MM, not {at!r}")
     return {
         SERVICE: ("[Unit]\nDescription=Rafiq: offer to print the morning paper\n\n"
-                  f"[Service]\nType=oneshot\nExecStart={python} -m rafiq paper offer\n"),
+                  f"[Service]\nType=oneshot\nExecStart={python} -P -m rafiq paper offer\n"),
         TIMER: ("[Unit]\nDescription=Rafiq: the morning paper, every day\n\n"
                 f"[Timer]\nOnCalendar=*-*-* {at}:00\n\n[Install]\nWantedBy=timers.target\n"),
     }

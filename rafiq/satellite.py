@@ -419,7 +419,7 @@ After=network-online.target sound.target
 Wants=network-online.target
 
 [Service]
-ExecStart={python} -m rafiq satellite run
+ExecStart={python} -P -m rafiq satellite run
 Restart=always
 RestartSec=5
 # 2: the main computer refused this satellite; fix the settings instead of retrying forever.
