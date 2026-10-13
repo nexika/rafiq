@@ -148,7 +148,7 @@ def test_cups_failures_are_print_errors(outcome):
 def test_the_timer_offers_at_the_chosen_time():
     units = timer_units("07:30", "/usr/bin/python3")
     assert "OnCalendar=*-*-* 07:30:00" in units["rafiq-paper.timer"]
-    assert "ExecStart=/usr/bin/python3 -m rafiq paper offer" in units["rafiq-paper.service"]
+    assert "ExecStart=/usr/bin/python3 -P -m rafiq paper offer" in units["rafiq-paper.service"]
 
 
 @pytest.mark.parametrize("bad", ["7", "25:00", "07:60", "seven", "07:30; rm -rf ~"])

@@ -28,9 +28,14 @@ def units(tmp_path, monkeypatch):
 
 def test_the_unit_runs_rafiq_with_this_python_and_restarts_on_failure():
     text = service.unit_text(python="/opt/venv/bin/python")
-    assert "ExecStart=/opt/venv/bin/python -m rafiq run" in text
+    assert "ExecStart=/opt/venv/bin/python -P -m rafiq run" in text
     assert "Restart=on-failure" in text
     assert "WantedBy=default.target" in text
+
+
+def test_the_unit_never_imports_rafiq_from_the_folder_it_starts_in():
+    # systemd starts in ~, where the checkout folder ~/rafiq would shadow the package.
+    assert " -P -m rafiq run" in service.unit_text(python="/usr/bin/python3")
 
 
 def test_the_unit_reads_secrets_from_an_optional_env_file_and_never_holds_them(rafiq_home, monkeypatch):
@@ -46,7 +51,7 @@ def test_the_unit_keeps_a_moved_settings_folder(rafiq_home):
 
 def test_a_path_with_spaces_is_quoted():
     text = service.unit_text(python="/home/me/my env/bin/python")
-    assert 'ExecStart="/home/me/my env/bin/python" -m rafiq run' in text
+    assert 'ExecStart="/home/me/my env/bin/python" -P -m rafiq run' in text
 
 
 def test_the_unit_goes_in_the_systemd_user_folder(units):

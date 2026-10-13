@@ -58,7 +58,8 @@ def unit_text(python: str | None = None) -> str:
         "After=pipewire.service pipewire-pulse.service",
         "",
         "[Service]",
-        f"ExecStart={_quote(python)} -m rafiq run",
+        # -P: systemd starts in ~, and a checkout at ~/rafiq would otherwise be imported as the package.
+        f"ExecStart={_quote(python)} -P -m rafiq run",
         "Restart=on-failure",
         "RestartSec=5",
         "Environment=PYTHONUNBUFFERED=1",      # print() reaches the journal at once
