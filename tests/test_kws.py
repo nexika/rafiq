@@ -170,3 +170,27 @@ def test_an_egyptian_conversation_stays_egyptian_when_called_in_arabic():
 
 def test_the_name_said_in_latin_letters_keeps_the_conversation_language():
     assert wake_with(None, "fr") == "fr"
+
+
+def test_the_whisper_wake_listener_answers_to_another_name_from_the_settings():
+    from rafiq.assistant import Assistant
+
+    a = object.__new__(Assistant)
+    a.follow_up_until, a.spotter, a.wake_names, a.tag = 0.0, None, ("Jarvis",), "en"
+    prompts = []
+
+    class WakeSTT:
+        def transcribe(self, audio, beam_size, hotwords, prompt):
+            prompts.append(prompt)
+            return type("H", (), {"text": "Jarvis, what time is it?", "lang": "en"})()
+
+    a.wake_stt = WakeSTT()
+    a.events = type("E", (), {"publish": lambda self, *args: None})()
+    a.hear = lambda audio: ("Jarvis, what time is it?", "en")
+    asked = []
+    a.respond = lambda text, tag: asked.append(text)
+
+    a.handle_idle_utterance(np.zeros(16000 * 3, dtype="float32"))
+
+    assert asked == ["what time is it?"]
+    assert "Jarvis" in prompts[0]

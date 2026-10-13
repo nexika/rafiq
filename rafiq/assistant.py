@@ -38,7 +38,7 @@ from .permissions import Approvals
 from .practice import Practice
 from .reader import Reader
 from .scheduler import Alarm, Scheduler
-from .stt import WAKE_PROMPT, WAKE_SECONDS, SpeechToText, Transcriber
+from .stt import WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
 from .tools import Tool, brief, dev, load_all, media
 from .tools import scenes as scenes_mod
@@ -142,6 +142,7 @@ class Assistant:
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or config_mod.load()
         speech = self.cfg["speech"]
+        self.wake_names = wake.names(self.cfg)           # names it answers to besides "Rafiq"
         self.events = Events()
         self.overlay = overlay.Overlay(overlay.pick_backend(self.cfg))
         self.events.watchers.append(self.overlay.feed)
@@ -782,7 +783,7 @@ class Assistant:
         self.events.publish("wake", {"score": round(score, 3), "threshold": round(self.spotter.threshold, 3)})
         if len(audio) / RATE > self.name_seconds + 1.3:    # more than the name: the request came with it
             text, tag = self.hear(audio)
-            found, command = wake.find(text)
+            found, command = wake.find(text, self.wake_names)
             self.respond(command if found else text, tag)
         else:
             self._listen_for_request(greet=True)
@@ -790,7 +791,7 @@ class Assistant:
     def handle_idle_utterance(self, audio: np.ndarray) -> None:
         if time.monotonic() < self.follow_up_until:      # a follow-up: no name needed
             text, tag = self.hear(audio)
-            found, rest = wake.find(text)
+            found, rest = wake.find(text, self.wake_names)
             self.respond(rest if found else text, tag)
             return
         if self.spotter:
@@ -798,14 +799,14 @@ class Assistant:
             return
         # The name comes first, so only the start is checked: faster, and less to mishear.
         spotted = self.wake_stt.transcribe(audio[:int(WAKE_SECONDS * RATE)], beam_size=1, hotwords=None,
-                                           prompt=WAKE_PROMPT)
-        found, rest = wake.find(spotted.text)
+                                           prompt=wake.prompt(self.wake_names))
+        found, rest = wake.find(spotted.text, self.wake_names)
         if not found:
             return
         self.events.publish("wake", {"text": spotted.text})
         if len(audio) / RATE > WAKE_SECONDS or len(rest.split()) >= 2:   # "Rafiq, what's the weather?" at once
             text, tag = self.hear(audio)
-            found, command = wake.find(text)
+            found, command = wake.find(text, self.wake_names)
             self.respond(command if found else text, tag)
         else:
             self.tag = lang.dialect(spotted.lang, spotted.text, self.tag)
