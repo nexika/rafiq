@@ -48,6 +48,7 @@ MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
 LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
+MUTED_RECORDING = "Rafiq is muted, so it does not record anything"
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,8 @@ class Context:
     (the panel shows it), the long-term memory, the background tasks (None without Claude), and the
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
     that changes something; the hand gestures; and, for a request from a satellite, its room;
-    the spending so far; and the language practice session."""
+    the spending so far; the language practice session; and a way to record the room (a song to
+    recognise) or to wait until Rafiq is quiet before recording this computer, only when Rafiq is running."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -75,6 +77,8 @@ class Context:
     budget: Budget | None = None
     practice: Practice | None = None
     reader: Reader | None = None
+    record: Callable[[float], np.ndarray] | None = None
+    quiet: Callable[[], None] | None = None
 
 
 @dataclass
@@ -179,7 +183,8 @@ class Assistant:
         self.ctx = Context(self.cfg, self.scheduler, say=lambda text, tag: self.submit("say", text=text, tag=tag),
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
-                           practice=self.practice, reader=self.reader)
+                           practice=self.practice, reader=self.reader, record=self.record,
+                           quiet=self.quiet)
         self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
@@ -380,6 +385,35 @@ class Assistant:
         self.events.publish("notify", {"text": sentence, "event": event, "spoken": spoken})
         if spoken:
             self.speaker.say(sentence, lang.script_language(sentence, tag))
+
+    def quiet(self) -> None:
+        """Wait until Rafiq has finished speaking, before a tool records the room or this computer, so its
+        own voice is not in the recording. Muted (now, or while it finished), nothing may be recorded."""
+        if self.muted:
+            raise RuntimeError(MUTED_RECORDING)
+        if self.speech:
+            self.speech.wait()
+        if self.muted:
+            raise RuntimeError(MUTED_RECORDING)
+
+    def record(self, seconds: float) -> np.ndarray:
+        """About `seconds` of what the microphone hears, for a tool (a song to recognise). Muting from the
+        panel during the recording stops it: nothing heard is returned."""
+        self.quiet()
+        self.set_state("listening")
+        try:
+            self.mic.drain()
+            frames, heard, deadline = [], 0, time.monotonic() + seconds + 2
+            while heard < seconds * RATE and time.monotonic() < deadline:
+                frame = self.mic.read(timeout=0.5)
+                if self.muted:
+                    raise RuntimeError(MUTED_RECORDING)
+                if frame is not None:
+                    frames.append(frame)
+                    heard += len(frame)
+        finally:
+            self.set_state("thinking")
+        return np.concatenate(frames) if frames else np.zeros(0, dtype=np.float32)
 
     def confirm(self, action: str, tag: str, can_remember: bool = True) -> bool | str:
         """Ask out loud before an action that changes something; only a clear yes goes ahead. The

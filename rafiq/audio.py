@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import queue
 import subprocess
+import threading
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -210,6 +211,36 @@ def echo_cancel_source(run=subprocess.run) -> str | None:
         if "echo" in name and "cancel" in name and not name.endswith(".monitor"):
             return name
     return None
+
+
+CAPTURE_GRACE = 3.0
+
+
+def system_audio(seconds: float, spawn=subprocess.Popen) -> np.ndarray:
+    """`seconds` of what this computer is playing, from PipeWire's (or PulseAudio's) monitor of the default
+    output, as 16 kHz mono floats. parec comes with pulseaudio-utils, like the pactl used above; a missing
+    parec raises FileNotFoundError. A recorder still running CAPTURE_GRACE seconds late is killed."""
+    want = int(seconds * RATE) * 2
+    rec = spawn(["parec", "-d", "@DEFAULT_MONITOR@", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=1"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    data = b""
+    stop = threading.Timer(seconds + CAPTURE_GRACE, rec.kill)   # a recorder that hangs ends the read below
+    stop.start()
+    try:
+        while len(data) < want:
+            chunk = rec.stdout.read(min(want - len(data), 8192))
+            if not chunk:
+                break
+            data += chunk
+    finally:
+        stop.cancel()
+        rec.terminate()
+        try:
+            rec.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            rec.kill()
+    data = data[:len(data) // 2 * 2]
+    return np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768
 
 
 class Resampler:

@@ -183,3 +183,77 @@ def test_rafiq_mute_says_when_rafiq_is_not_running(monkeypatch, capsys):
     monkeypatch.setattr(httpx, "post", down)
     assert main(["mute"]) == 1
     assert "not running" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------- recording for a tool (a song)
+
+
+def test_recording_waits_for_rafiq_to_finish_speaking_first(rafiq):
+    a, _ = rafiq
+    order = []
+    a.speech = SimpleNamespace(wait=lambda: order.append("wait"))
+    a.mic.drain = lambda: order.append("drain")
+    for _ in range(40):
+        a.mic.frames.put(np.full(512, 0.1, dtype=np.float32))
+    a.record(1)
+    assert order == ["wait", "drain"]
+
+
+def test_recording_returns_the_seconds_asked_for(rafiq):
+    a, _ = rafiq
+    for _ in range(100):
+        a.mic.frames.put(np.full(512, 0.1, dtype=np.float32))
+    clip = a.record(1)
+    assert 15000 <= len(clip) <= 17000
+
+
+def test_recording_the_room_is_refused_while_muted(rafiq):
+    a, _ = rafiq
+    a.muted = True
+    with pytest.raises(RuntimeError, match="muted"):
+        a.record(1)
+
+
+def test_tools_get_the_recorder_through_their_context(rafiq):
+    a, _ = rafiq
+    assert a.ctx.record == a.record
+
+
+def test_muting_during_the_recording_stops_it(rafiq):
+    a, _ = rafiq
+    frames = iter(range(100))
+
+    def read(timeout=0.5):
+        if next(frames) == 5:
+            a.muted = True              # the panel's Mute, from another thread
+        return np.full(512, 0.1, dtype=np.float32)
+
+    a.mic.read = read
+    with pytest.raises(RuntimeError, match="muted"):
+        a.record(1)
+
+
+def test_muting_while_rafiq_finishes_speaking_records_nothing(rafiq):
+    a, _ = rafiq
+    a.speech = SimpleNamespace(wait=lambda: setattr(a, "muted", True))
+    with pytest.raises(RuntimeError, match="muted"):
+        a.record(1)
+
+
+def test_after_recording_the_panel_no_longer_says_listening(rafiq):
+    a, _ = rafiq
+    for _ in range(40):
+        a.mic.frames.put(np.full(512, 0.1, dtype=np.float32))
+    a.record(1)
+    assert a.state == "thinking"
+
+
+def test_tools_get_a_way_to_wait_for_quiet_through_their_context(rafiq):
+    a, _ = rafiq
+    order = []
+    a.speech = SimpleNamespace(wait=lambda: order.append("wait"))
+    a.ctx.quiet()
+    assert order == ["wait"]
+    a.muted = True
+    with pytest.raises(RuntimeError, match="muted"):
+        a.ctx.quiet()

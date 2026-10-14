@@ -4,7 +4,7 @@ Choices made in the panel (the active models) are kept in choices.json next to i
 file, so the panel never rewrites the user's own config.toml.
 
 Secrets come from the environment first (ANTHROPIC_API_KEY, OPENAI_API_KEY, HOME_ASSISTANT_TOKEN,
-RAFIQ_AGENT_TOKEN, DISCORD_BOT_TOKEN), then the file, and are never logged.
+RAFIQ_AGENT_TOKEN, DISCORD_BOT_TOKEN, AUDD_API_TOKEN), then the file, and are never logged.
 """
 
 from __future__ import annotations
@@ -188,6 +188,8 @@ DEFAULTS: dict = {
     "brief": {"at_first_start": False, "language": "en"},
     # A Discord bot token (DISCORD_BOT_TOKEN), never a user token; user_id is your own Discord id.
     "discord": {"enabled": False, "bot_token": "", "user_id": ""},
+    # "What's this song?": an AudD token (AUDD_API_TOKEN, https://audd.io); how long to listen; how many to keep.
+    "songs": {"audd_token": "", "seconds": 8, "keep": 20},
     "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
     # accounts: usernames to report on; empty for every account linked to the token.
     "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
@@ -270,6 +272,8 @@ def load(path: Path | None = None) -> dict:
         cfg["agent"]["token"] = os.environ["RAFIQ_AGENT_TOKEN"]
     if os.environ.get("DISCORD_BOT_TOKEN"):
         cfg["discord"]["bot_token"] = os.environ["DISCORD_BOT_TOKEN"]
+    if os.environ.get("AUDD_API_TOKEN"):
+        cfg["songs"]["audd_token"] = os.environ["AUDD_API_TOKEN"]
     return cfg
 
 

@@ -190,6 +190,10 @@ language = "en"                 # en, fr, es, de, ar or ar-EG
 enabled = false                 # true once your bot is invited; its token goes in DISCORD_BOT_TOKEN
 user_id = ""                    # your Discord user id, for "who mentioned me"
 
+[songs]                         # "what's this song?": the token goes in AUDD_API_TOKEN (https://audd.io)
+seconds = 8                     # how long to listen to the room or to this computer
+keep = 20                       # how many recognised songs to remember
+
 [instagram]
 enabled = false                 # true after `rafiq instagram-setup <token>`
 accounts = []                   # usernames to report on; empty for all linked accounts
