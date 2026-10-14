@@ -222,6 +222,8 @@ DEFAULTS: dict = {
     "hue": {"enabled": False, "rooms": {}},
     # Video and stage lights over DMX: the Art-Net node on your network, and one [[dmx.lights]] per light.
     "dmx": {"host": "", "universe": 0, "lights": []},
+    # Rafiq's own browser (`rafiq browser`): chrome is the program (empty: find it); port 0 lets Chrome pick.
+    "browser": {"enabled": False, "chrome": "", "port": 0},
     "screen": {
         # Questions about the screen go to Claude (in the cloud), and never while offline unless a
         # local vision model is set: an Ollama model that reads images, e.g. "qwen2.5vl:7b".

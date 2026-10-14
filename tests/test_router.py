@@ -154,3 +154,25 @@ def test_routing_can_be_turned_off(ollama):
     script += [{"role": "assistant", "content": "Sunny."}]
     make_brain(routing=False).think("what's the weather", "en")
     assert tool_names(requests[0]) == set(NAMES)
+
+
+BROWSER = {name: Tool(name, name, lambda: "ok") for name in ("list_browser_tabs", "read_browser_tab",
+                                                              "switch_browser_tab", "read_page")}
+
+
+@pytest.mark.parametrize("text", [
+    "what tabs are open", "summarise this page", "résume cet onglet", "traduis cette page en arabe",
+    "resume esta pestaña", "fasse diese Seite zusammen", "لخص الصفحة دي", "ترجم التبويب",
+])
+def test_tab_requests_get_the_browser_tools(text):
+    assert {"list_browser_tabs", "read_browser_tab"} <= set(router.route(text, {**TOOLS, **BROWSER}).tools)
+
+
+@pytest.mark.parametrize("text", ["translate what I copied into Arabic", "résume ce que j'ai copié"])
+def test_translating_or_summarising_without_naming_a_page_keeps_every_tool(text):
+    tools = {**TOOLS, **BROWSER}
+    assert set(router.route(text, tools).tools) == set(tools)
+
+
+def test_reading_a_tab_never_comes_with_a_tool_that_fetches_an_address():
+    assert "read_page" not in router.DOMAINS["browser"][0]

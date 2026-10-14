@@ -21,6 +21,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Browser tabs | "what tabs are open?", "summarise this tab", "translate the Gmail tab into Arabic", "switch to the YouTube tab", in Rafiq's own Chrome (see below) |
 | Songs | "what's this song?" (listens to the room for 8 seconds), "what's playing on my computer?", "what song is ~/Music/track.mp3?", "which songs did you recognise?" (needs an [AudD](https://audd.io) token in `AUDD_API_TOKEN`, and `pulseaudio-utils` for the computer's sound) |
 | Clipboard | "translate what I copied into Arabic", "summarise my clipboard", "explain this error", "copy that" (needs `wl-clipboard` on Wayland, `xclip` on X11) |
 | Language practice | "let's practise French, level A2, about food": a simple conversation with short spoken corrections (the full list in the panel, slower voice for A1 and A2), then "let's stop" lists what to work on; common mistakes are kept in `data/practice.json` |
@@ -450,6 +451,14 @@ For now you type requests in the agent's terminal; the microphone stays on the P
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results, emails, Discord messages and the clipboard are passed to the model as data,
   never as instructions. The clipboard is read only when you ask about what you copied. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+- Rafiq's browser is a separate Chrome profile with a debugging port on 127.0.0.1 only. Rafiq talks only
+  to the port its own profile names, once the process there is your account's Chrome with that profile,
+  and only ever runs one fixed expression that reads the page's text, out of the page's own reach. Tab
+  titles and page text reach the model as data, never as instructions, stay out of the log, and never
+  come with a tool that fetches an address. While that browser is open, any program on the computer,
+  under any account, could drive it through the port: that is how Chrome's protocol works. Sign in there
+  only to the accounts you choose, and don't use it on a computer other people log into. Reading your own
+  open tab fetches nothing, so it may show a page on your network.
 - A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
   asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
   in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
@@ -626,6 +635,23 @@ your network directly; no Hue cloud account is used.
 
 Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
 Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
+## Browser tabs
+
+"What tabs are open?", "summarise this page", "translate the article tab into Arabic", "switch to the
+YouTube tab". Rafiq reads the page as the browser shows it, so pages you are signed in to and pages built
+by JavaScript work.
+
+1. Install Google Chrome or Chromium. Ubuntu's snap Chromium may refuse Rafiq's profile, which lives in a
+   hidden folder; Google Chrome, or Chromium on Fedora, works.
+2. Run `rafiq browser` (or `rafiq browser https://…`). It opens Chrome with Rafiq's own profile, in
+   `~/.config/rafiq/data/browser/chrome`: sign in there only to the sites you want Rafiq to read. Your
+   everyday browser is never touched.
+3. Set `enabled = true` under `[browser]` in the config.
+
+The tab list shows titles and sites, never full addresses. With Claude as the brain, the text of a tab
+you ask about goes to Claude, as the clipboard does. Closing tabs, clicking and filling forms are not
+done yet; they will ask first.
 
 ## Video and stage lights (DMX)
 

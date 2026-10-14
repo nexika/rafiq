@@ -184,6 +184,18 @@ def _dmx(cfg: dict) -> Check:
     return Check("Video lights (DMX)", True, f"{len(found)} lights on {host}")
 
 
+def _browser(cfg: dict, probe: Probe) -> Check:
+    """Only what is installed and whether it runs: nothing is asked of the browser."""
+    from . import browser
+
+    if not cfg.get("browser", {}).get("enabled"):
+        return Check("Browser tabs", False, "off", "rafiq browser, then [browser] enabled = true", optional=True)
+    program = browser.find_chrome(cfg, probe.which)
+    if not program:
+        return Check("Browser tabs", False, "no Chrome or Chromium", "install google-chrome or chromium")
+    return Check("Browser tabs", True, f"{program}, {'running' if browser.running() else 'not running'}")
+
+
 def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
     """One check per brain, voice service and skill that needs something outside Rafiq."""
     probe = probe or Probe()
@@ -195,6 +207,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _weather(cfg, probe),
         _songs(cfg, probe),
         _dmx(cfg),
+        _browser(cfg, probe),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         _programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
         _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),
