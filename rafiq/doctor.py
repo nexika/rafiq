@@ -190,10 +190,13 @@ def _browser(cfg: dict, probe: Probe) -> Check:
 
     if not cfg.get("browser", {}).get("enabled"):
         return Check("Browser tabs", False, "off", "rafiq browser, then [browser] enabled = true", optional=True)
-    program = browser.find_chrome(cfg, probe.which)
+    try:
+        engine, program = browser.find(cfg, probe.which)
+    except browser.BrowserError as exc:
+        return Check("Browser tabs", False, str(exc), "set [browser] engine to auto, chrome or firefox")
     if not program:
-        return Check("Browser tabs", False, "no Chrome or Chromium", "install google-chrome or chromium")
-    return Check("Browser tabs", True, f"{program}, {'running' if browser.running() else 'not running'}")
+        return Check("Browser tabs", False, *browser.missing(engine))
+    return Check("Browser tabs", True, f"{program}, {'running' if browser.running(engine) else 'not running'}")
 
 
 def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:

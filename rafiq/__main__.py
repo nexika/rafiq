@@ -757,10 +757,11 @@ def cmd_browser(args) -> int:
     cfg = config.load()
     try:
         browser.launch(cfg, args.url or "")
+        engine, _ = browser.find(cfg)
     except browser.BrowserError as exc:
         print(exc)
         return 1
-    print(f"Rafiq's browser is starting, with its own profile in {browser.profile_dir()}.")
+    print(f"Rafiq's browser is starting, with its own profile in {browser.profile_dir(engine)}.")
     print("Sign in there only to the sites you want Rafiq to read; your everyday browser is not touched.")
     if not cfg["browser"].get("enabled"):
         print("Then set [browser] enabled = true in", config.home() / "config.toml")
@@ -924,7 +925,7 @@ def main(argv=None) -> int:
     hue = sub.add_parser("hue-setup", help="pair with the Philips Hue bridge (press its link button)")
     hue.add_argument("--host", help="the bridge's address on your network (default: look for it)")
     hue.set_defaults(fn=cmd_hue_setup)
-    web = sub.add_parser("browser", help="start Rafiq's own Chrome, whose tabs Rafiq can read and switch")
+    web = sub.add_parser("browser", help="start Rafiq's own Chrome or Firefox, whose tabs Rafiq can read")
     web.add_argument("url", nargs="?", help="a web address to open")
     web.set_defaults(fn=cmd_browser)
     sub.add_parser("install-service", help="start Rafiq at every login (systemd user service)").set_defaults(
