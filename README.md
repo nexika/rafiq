@@ -31,6 +31,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Content | "add a video idea: desk tour, out by the 20th", "the desk tour is scripted", "what videos are late?" (idea → script → shoot → edit → published) |
 | Scenes | "film mode", "turn everything off" (offers to shut down), a morning scene at the first start of the day: your own lists of steps in the config, named in any language |
 | Home | "which lights are on?", "turn off the coffee plug" (asks first), through Home Assistant |
+| Video lights | "key light to 60%, 5600 K", "fill off", "all the lights at 30%", over DMX through an Art-Net node (see below) |
 | Background tasks | "research the best e-bike under 2000 euros" (Rafiq says it is on it and reads the answer aloud when it is ready), "how are my tasks going?"; needs Claude, and the panel shows what each task cost |
 | Memory | "remember that my sister is called Sara", "what do you know about my project?", "forget that" |
 | Style | "be more concise", "talk like a butler", "back to normal": neutral, concise, or a dry, witty butler (also in the panel) |
@@ -625,6 +626,27 @@ your network directly; no Hue cloud account is used.
 
 Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
 Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
+## Video and stage lights (DMX)
+
+"Key light to 60%, 5600 K", "turn off the fill", "all the lights at 30%". Rafiq speaks DMX, the open
+standard most video and stage lights take (Aputure, Godox, Nanlite and others in their DMX mode),
+through an Art-Net node: a small box on your network, or a light with Art-Net built in. Bluetooth
+control of amaran lights is not supported, because it needs keys taken from the vendor's app.
+
+1. Set the light to DMX in its menu and give it a start address, then connect it to the Art-Net node.
+2. Under `[dmx]` in the config, set `host` to the node's address on your network (it must be a local
+   address) and `universe` to the node's universe.
+3. Add one `[[dmx.lights]]` per light: its `name`, its start `address`, its `channels` in the order the
+   manual's DMX table gives them, and its `kelvin` range. A channel is `dimmer`, `cct` (colour
+   temperature), their 16-bit forms `dimmer16` and `cct16` (two channels, coarse then fine), or `none`
+   for a channel to leave at zero.
+
+`rafiq doctor` checks the settings: addresses in range, no two lights on the same channels. Rafiq keeps
+what it last set in `~/.config/rafiq/data/dmx.json` and sends every light's channels each time, so
+changing one light leaves the others as they were. Rafiq sends a frame only when you ask for a change,
+so set the Art-Net node to hold the last frame ("hold last look" or "merge: hold" in its settings);
+some nodes otherwise go dark a few seconds after the last frame.
 
 ## Smart plugs and energy meters
 

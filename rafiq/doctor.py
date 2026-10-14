@@ -169,6 +169,21 @@ def _songs(cfg: dict, probe: Probe) -> Check:
     return Check("Song recognition", True, "AudD")
 
 
+def _dmx(cfg: dict) -> Check:
+    """Only the settings: a DMX frame sent to check would change the lights."""
+    from .tools import dmx
+
+    try:
+        found = dmx.lights(cfg)
+        if not found:
+            return Check("Video lights (DMX)", False, "none set up", "add [[dmx.lights]] (see config.example.toml)",
+                         optional=True)
+        host = dmx.node(cfg)
+    except ValueError as exc:
+        return Check("Video lights (DMX)", False, str(exc), "fix [dmx] in the config")
+    return Check("Video lights (DMX)", True, f"{len(found)} lights on {host}")
+
+
 def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
     """One check per brain, voice service and skill that needs something outside Rafiq."""
     probe = probe or Probe()
@@ -179,6 +194,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _google(cfg, probe),
         _weather(cfg, probe),
         _songs(cfg, probe),
+        _dmx(cfg),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         _programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
         _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),

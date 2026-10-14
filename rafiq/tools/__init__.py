@@ -151,6 +151,10 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         from . import songs  # noqa: F401
     else:
         off.add(f"{__name__}.songs")
+    if cfg.get("dmx", {}).get("lights"):
+        from . import dmx  # noqa: F401
+    else:
+        off.add(f"{__name__}.dmx")
     if cfg.get("hue", {}).get("enabled"):
         from . import hue  # noqa: F401
     else:
