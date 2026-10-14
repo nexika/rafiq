@@ -245,6 +245,17 @@ steps = [
 [day_start]
 scene = ""                      # e.g. "morning": runs at the first start of each day
 
+[dmx]                           # video and stage lights over DMX, through an Art-Net node (see the README)
+host = ""                       # the node's address on your network, e.g. "192.168.1.50"
+universe = 0
+
+# One [[dmx.lights]] per light; channels in the order of the DMX table in its manual.
+# [[dmx.lights]]
+# name = "key"
+# address = 1                   # its start address, set in the light's menu
+# channels = ["dimmer", "cct"]  # dimmer, cct, dimmer16, cct16 (16-bit: two channels) or none
+# kelvin = [2700, 6500]         # its colour temperature range
+
 [hue]
 enabled = false                 # true after `rafiq hue-setup`
 

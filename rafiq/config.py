@@ -220,6 +220,8 @@ DEFAULTS: dict = {
     "wake_on_lan": {"broadcast": "255.255.255.255", "port": 9, "machines": {}},
     # Philips Hue: enabled after `rafiq hue-setup`; rooms maps names you say to the Hue app's room names.
     "hue": {"enabled": False, "rooms": {}},
+    # Video and stage lights over DMX: the Art-Net node on your network, and one [[dmx.lights]] per light.
+    "dmx": {"host": "", "universe": 0, "lights": []},
     "screen": {
         # Questions about the screen go to Claude (in the cloud), and never while offline unless a
         # local vision model is set: an Ollama model that reads images, e.g. "qwen2.5vl:7b".
