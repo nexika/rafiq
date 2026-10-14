@@ -156,6 +156,19 @@ def _programs(label: str, names: list[str], probe: Probe, fix: str) -> Check:
     return Check(label, True, ", ".join(names))
 
 
+def _songs(cfg: dict, probe: Probe) -> Check:
+    """Never sends a request: each one counts against the AudD plan."""
+    if not cfg.get("songs", {}).get("audd_token"):
+        return Check("Song recognition", False, "no AudD token", "set AUDD_API_TOKEN (https://audd.io)",
+                     optional=True)
+    missing = [n for n in ("parec", "ffmpeg") if not probe.which(n)]
+    if missing:
+        return Check("Song recognition", False, f"room only, missing {', '.join(missing)}",
+                     "install pulseaudio-utils (parec) for the computer's sound and ffmpeg for files",
+                     optional=True)
+    return Check("Song recognition", True, "AudD")
+
+
 def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
     """One check per brain, voice service and skill that needs something outside Rafiq."""
     probe = probe or Probe()
@@ -165,6 +178,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _azure(cfg, probe),
         _google(cfg, probe),
         _weather(cfg, probe),
+        _songs(cfg, probe),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         _programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
         _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),

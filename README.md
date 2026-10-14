@@ -21,6 +21,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
+| Songs | "what's this song?" (listens to the room for 8 seconds), "what's playing on my computer?", "what song is ~/Music/track.mp3?", "which songs did you recognise?" (needs an [AudD](https://audd.io) token in `AUDD_API_TOKEN`, and `pulseaudio-utils` for the computer's sound) |
 | Clipboard | "translate what I copied into Arabic", "summarise my clipboard", "explain this error", "copy that" (needs `wl-clipboard` on Wayland, `xclip` on X11) |
 | Language practice | "let's practise French, level A2, about food": a simple conversation with short spoken corrections (the full list in the panel, slower voice for A1 and A2), then "let's stop" lists what to work on; common mistakes are kept in `data/practice.json` |
 | Read aloud | "read this to me" (the selected text), "read the clipboard", "read this article aloud", "read ~/paper.pdf"; each sentence in its language's voice, pause, skip and stop from the panel |
@@ -451,6 +452,11 @@ For now you type requests in the agent's terminal; the microphone stays on the P
 - A question about the screen sends a screenshot of the whole screen to Claude, in the cloud, so Rafiq
   asks first (`screen.ask_first`). Offline it never leaves the computer: only a local vision model set
   in `screen.ollama_model` may see it. On GNOME Wayland the desktop also asks you to allow screenshots.
+- "What's this song?" sends a few seconds of sound to AudD: 8 seconds from the room or from what the
+  computer plays, or 12 seconds decoded from a file, never the whole file, and never Rafiq's own
+  recordings of your voice. Rafiq finishes speaking before it listens, stops if you mute it, sends
+  nothing when muted, offline or asked from a satellite, and keeps the last 20 songs in
+  `~/.config/rafiq/data/songs.json`.
 - What you ask Rafiq to remember is kept in `~/.config/rafiq/data/memory.json`, a plain list you can
   read and edit; "forget" deletes it from the file. Remembered facts go to the model as data with
   each request, never as instructions.
