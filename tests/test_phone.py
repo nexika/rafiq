@@ -7,6 +7,7 @@ import urllib.request
 import pytest
 
 from rafiq import config
+from rafiq import phone as phone_mod
 from rafiq.phone import PHONE_TOOLS, PhoneBridge, remote_tools, serve
 from rafiq.scheduler import Scheduler
 from rafiq.tools import REGISTRY, Tool, lists, load_all
@@ -195,3 +196,101 @@ def test_the_phone_token_is_kept_and_private():
     assert len(token) >= 32 and config.phone_token() == token
     assert (config.home() / "phone.token").stat().st_mode & 0o077 == 0
     assert token != config.panel_token()
+
+
+# ---------------------------------------------------------------- where the bridge may listen (#70)
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "8.8.8.8", "phone.example.com", "::ffff:0.0.0.0",
+                                  "::ffff:8.8.8.8"])
+def test_the_phone_bridge_never_listens_on_a_public_address(host):
+    with pytest.raises(ValueError, match="tailscale"):
+        phone_mod.address(host)
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "192.168.1.20", "100.101.12.3"])
+def test_the_phone_bridge_may_listen_on_this_computer_the_lan_or_tailscale(host):
+    assert phone_mod.address(host) == host
+
+
+def test_serve_refuses_every_network_even_when_called_directly():
+    with pytest.raises(ValueError):
+        serve(PhoneBridge(config.load(), {}, None), "0.0.0.0", 0, TOKEN)
+
+
+class FakeRun:
+    def __init__(self, stdout="", code=0, error=None):
+        self.stdout, self.code, self.error, self.calls = stdout, code, error, []
+
+    def __call__(self, args, **kwargs):
+        self.calls.append((args, kwargs))
+        if self.error:
+            raise self.error
+        import subprocess
+
+        return subprocess.CompletedProcess(args, self.code, stdout=self.stdout, stderr="")
+
+
+def test_tailscale_as_the_host_means_this_computers_tailnet_address():
+    run = FakeRun("100.101.12.3\n")
+    assert phone_mod.address("tailscale", run=run) == "100.101.12.3"
+    args, kwargs = run.calls[0]
+    assert args == ["tailscale", "ip", "-4"] and kwargs.get("timeout") and not kwargs.get("shell")
+
+
+@pytest.mark.parametrize("run", [FakeRun(error=FileNotFoundError("tailscale")), FakeRun("", code=1),
+                                 FakeRun("8.8.8.8\n")])
+def test_tailscale_missing_down_or_odd_says_how_to_fix_it(run):
+    with pytest.raises(ValueError, match="tailscale up"):
+        phone_mod.address("tailscale", run=run)
+
+
+def test_a_refused_address_leaves_the_bridge_off_and_rafiq_running(monkeypatch, capsys):
+    from rafiq import __main__ as cli
+
+    cfg = config.load()
+    cfg["phone"].update(enabled=True, host="0.0.0.0")
+    assistant = type("A", (), {"tools": {}, "scheduler": None, "events": type("E", (), {"publish": None})()})()
+    assert cli._start_phone(cfg, assistant) is None
+    assert "Phone bridge off" in capsys.readouterr().out
+
+
+def test_rafiq_phone_prints_the_tailnet_address(monkeypatch, capsys):
+    from rafiq import __main__ as cli
+
+    config.home().mkdir(parents=True, exist_ok=True)
+    (config.home() / "config.toml").write_text('[phone]\nenabled = true\nhost = "tailscale"\n', encoding="utf-8")
+    monkeypatch.setattr(phone_mod, "tailscale_ip", lambda run=None: "100.101.12.3")
+    assert cli.main(["phone"]) == 0
+    assert "http://100.101.12.3:8767/api/inbox" in capsys.readouterr().out
+
+
+def test_serve_checks_the_address_it_actually_bound(monkeypatch):
+    class EveryNetwork:
+        def __init__(self, address, handler):
+            self.server_address, self.closed = ("0.0.0.0", address[1]), False
+
+        def server_close(self):
+            self.closed = True
+
+    monkeypatch.setattr(phone_mod, "ThreadingHTTPServer", EveryNetwork)
+    with pytest.raises(ValueError):
+        serve(PhoneBridge(config.load(), {}, None), "localhost", 0, TOKEN)
+
+
+def test_a_port_already_in_use_leaves_the_bridge_off_and_rafiq_running(capsys):
+    import socket
+
+    from rafiq import __main__ as cli
+
+    taken = socket.socket()
+    taken.bind(("127.0.0.1", 0))
+    taken.listen()
+    try:
+        cfg = config.load()
+        cfg["phone"].update(enabled=True, host="127.0.0.1", port=taken.getsockname()[1])
+        assistant = type("A", (), {"tools": {}, "scheduler": None, "events": type("E", (), {"publish": None})()})()
+        assert cli._start_phone(cfg, assistant) is None
+    finally:
+        taken.close()
+    assert "Phone bridge off" in capsys.readouterr().out

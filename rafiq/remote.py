@@ -54,6 +54,8 @@ def _private_ip(host: str) -> bool:
         ip = ipaddress.ip_address(host.strip("[]"))
     except ValueError:
         return False
+    if ip.version == 6 and ip.ipv4_mapped:   # ::ffff:0.0.0.0 binds 0.0.0.0; older 3.11 and 3.12 call it private
+        ip = ip.ipv4_mapped
     if ip.is_unspecified:     # 0.0.0.0 and :: listen on every network, the internet included
         return False
     return ip.is_loopback or ip.is_private or (ip.version == 4 and ip in TAILSCALE)
