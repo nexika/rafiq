@@ -256,10 +256,12 @@ universe = 0
 # channels = ["dimmer", "cct"]  # dimmer, cct, dimmer16, cct16 (16-bit: two channels) or none
 # kelvin = [2700, 6500]         # its colour temperature range
 
-[browser]                       # Rafiq's own Chrome, whose tabs it can read: start it with `rafiq browser`
+[browser]                       # Rafiq's own Chrome or Firefox, whose tabs it can read: `rafiq browser`
 enabled = false                 # true to let Rafiq list, read and switch its tabs
+engine = "auto"                 # auto (Chrome if installed, else Firefox), chrome or firefox
 chrome = ""                     # the program; empty: google-chrome, then chromium
-port = 0                        # its debugging port on 127.0.0.1; 0 lets Chrome pick a free one
+firefox = ""                    # the program; empty: firefox
+port = 0                        # its debugging port on 127.0.0.1; 0 lets the browser pick a free one
 read_only = []                  # more sites Rafiq only reads, never acts on, e.g. ["mycreditunion.org"]
 
 [hue]
