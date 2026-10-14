@@ -260,6 +260,7 @@ universe = 0
 enabled = false                 # true to let Rafiq list, read and switch its tabs
 chrome = ""                     # the program; empty: google-chrome, then chromium
 port = 0                        # its debugging port on 127.0.0.1; 0 lets Chrome pick a free one
+read_only = []                  # more sites Rafiq only reads, never acts on, e.g. ["mycreditunion.org"]
 
 [hue]
 enabled = false                 # true after `rafiq hue-setup`

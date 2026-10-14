@@ -63,7 +63,8 @@ DOMAINS: dict[str, tuple[tuple[str, ...], set[str]]] = {
         "احسب", "احسبلي", "ضرب", "مضروب", "قسمة", "زائد", "ناقص", "تحويل",
     }),
     # Never with a tool that fetches an address: a page's text could steer it into sending data out.
-    "browser": (("list_browser_tabs", "read_browser_tab", "switch_browser_tab"), {
+    "browser": (("list_browser_tabs", "read_browser_tab", "switch_browser_tab", "close_browser_tabs",
+                 "close_other_browser_tabs"), {
         # Only words that name a tab, a page or the browser: "translate what I copied" is the clipboard's.
         "tab", "tabs", "browser", "chrome", "page",
         "onglet", "onglets", "navigateur",

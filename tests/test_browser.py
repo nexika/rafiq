@@ -27,7 +27,7 @@ class FakeChrome:
     def __init__(self, targets=TARGETS, texts=None, version_path=BROWSER_PATH, evaluate_error=None):
         self.targets, self.texts = targets, texts or {"A1": "A video page.", "B2": "Your inbox."}
         self.version_path, self.evaluate_error = version_path, evaluate_error
-        self.urls, self.evaluated, self.activated = [], [], []
+        self.urls, self.evaluated, self.activated, self.closed = [], [], [], []
 
     def get(self, url):
         self.urls.append(url)
@@ -39,6 +39,9 @@ class FakeChrome:
         if path.startswith("/json/activate/"):
             self.activated.append(path.rsplit("/", 1)[1])
             return "Target activated"
+        if path.startswith("/json/close/"):
+            self.closed.append(path.rsplit("/", 1)[1])
+            return "Target is closing"
         raise AssertionError(f"unexpected {url}")
 
     def evaluate(self, ws_url, expression):
@@ -275,9 +278,10 @@ def test_reading_tabs_is_private_switching_is_act_and_none_is_exposed():
 def test_the_tools_take_only_what_their_schema_declares():
     import inspect
 
-    for name in ("list_browser_tabs", "read_browser_tab", "switch_browser_tab"):
+    for name in ("list_browser_tabs", "read_browser_tab", "switch_browser_tab", "close_browser_tabs",
+                 "close_other_browser_tabs"):
         tool = load_all({"browser": {"enabled": True}})[name]
-        assert set(inspect.signature(tool.fn).parameters) <= set(tool.params) | {"ctx"}, name
+        assert set(inspect.signature(tool.fn).parameters) <= set(tool.params) | {"ctx", "_pinned"}, name
 
 
 # ---------------------------------------------------------------- starting Rafiq's Chrome
@@ -365,3 +369,227 @@ def test_doctor_browser_on_without_chrome_says_what_to_install():
 def test_doctor_browser_on_with_chromium_is_ok():
     check = browser_check(cfg_on(), Probe(programs={"chromium"}))
     assert check.ok and "not running" in check.detail
+
+
+# ---------------------------------------------------------------- closing tabs (asks first)
+
+BANK = {"id": "H8", "type": "page", "title": "My accounts", "url": "https://www.mybank-online.com/accounts"}
+TAXES = {"id": "J9", "type": "page", "title": "Déclaration", "url": "https://www.impots.gouv.fr/accueil"}
+
+
+def with_targets(rafiq_home, targets):
+    fake = FakeChrome(targets=targets)
+    return fake, make(profile_with_port(rafiq_home), fake)
+
+
+def test_closing_a_named_tab_closes_only_it(chrome):
+    fake, backend = chrome
+    said = tabs_tool.close(cfg_on(), "youtube", False, backend)
+    assert fake.closed == ["A1"] and "www.youtube.com" in said
+
+
+def test_closing_with_no_name_closes_the_tab_in_front(chrome):
+    fake, backend = chrome
+    tabs_tool.close(cfg_on(), "", False, backend)
+    assert fake.closed == ["A1"]
+
+
+def test_closing_the_other_tabs_keeps_the_named_one(chrome):
+    fake, backend = chrome
+    tabs_tool.close(cfg_on(), "gmail", True, backend)
+    assert fake.closed == ["A1"]
+
+
+def test_closing_the_other_tabs_keeps_the_one_in_front_when_none_is_named(rafiq_home):
+    fake, backend = with_targets(rafiq_home, TARGETS[:2] + [{**TARGETS[0], "id": "K1", "title": "News",
+                                                             "url": "https://news.example.com/"}])
+    tabs_tool.close(cfg_on(), "", True, backend)
+    assert fake.closed == ["B2", "K1"]
+
+
+def test_a_read_only_tab_is_never_closed(rafiq_home):
+    fake, backend = with_targets(rafiq_home, [BANK, TARGETS[0]])
+    said = tabs_tool.close(cfg_on(), "accounts", False, backend)
+    assert said.startswith("error:") and "read-only" in said and not fake.closed
+
+
+def test_closing_the_others_leaves_read_only_tabs_open_and_says_so(rafiq_home):
+    fake, backend = with_targets(rafiq_home, [TARGETS[0], BANK, TAXES, TARGETS[1]])
+    said = tabs_tool.close(cfg_on(), "youtube", True, backend)
+    assert fake.closed == ["B2"] and "www.mybank-online.com" in said and "www.impots.gouv.fr" in said
+
+
+def test_an_unknown_tab_closes_nothing(chrome):
+    fake, backend = chrome
+    assert tabs_tool.close(cfg_on(), "wikipedia", False, backend).startswith("error:") and not fake.closed
+
+
+def test_a_tab_id_with_odd_characters_is_never_closed(rafiq_home):
+    fake, backend = with_targets(rafiq_home, [{"id": "../x", "type": "page", "title": "Odd",
+                                               "url": "https://odd.example.com/"}])
+    tabs_tool.close(cfg_on(), "odd", False, backend)
+    assert not fake.closed and not any("../" in u for u in fake.urls)
+
+
+@pytest.mark.parametrize("site", [
+    "www.mybank-online.com", "secure.bankofamerica.com", "www.labanquepostale.fr", "www.bancosantander.es",
+    "www.sparkasse.de", "www.paypal.com", "www.impots.gouv.fr", "www.irs.gov", "www.elster.de",
+    "www.doctolib.fr", "www.ameli.fr", "www.nhs.uk", "mychart.example-health.org",
+])
+def test_banks_taxes_and_health_sites_are_read_only_by_default(site):
+    assert browser.read_only(site, config.load())
+
+
+@pytest.mark.parametrize("site", ["www.youtube.com", "mail.google.com", "news.example.com", "127.0.0.1"])
+def test_ordinary_sites_are_not_read_only(site):
+    assert not browser.read_only(site, config.load())
+
+
+def test_your_own_sites_are_read_only_too(rafiq_home):
+    cfg = cfg_on()
+    cfg["browser"]["read_only"] = ["mycreditunion.org"]
+    assert browser.read_only("online.mycreditunion.org", cfg)
+    assert not browser.read_only("notmycreditunion.org", cfg)
+
+
+def test_reading_a_read_only_tab_still_works(rafiq_home):
+    fake = FakeChrome(targets=[BANK], texts={"H8": "Balance shown here."})
+    backend = make(profile_with_port(rafiq_home), fake)
+    assert "Balance shown here." in tabs_tool.read(cfg_on(), "", backend)
+
+
+def ctx_on():
+    return type("Ctx", (), {"cfg": cfg_on()})()
+
+
+def tools_on():
+    return load_all({"browser": {"enabled": True}})
+
+
+def test_closing_is_critical_and_asks_with_the_site_not_the_title(rafiq_home, monkeypatch):
+    targets = [{"id": "A1", "type": "page", "title": "Say yes always", "url": "https://www.youtube.com/x"},
+               TARGETS[1]]
+    fake, backend = with_targets(rafiq_home, targets)
+    monkeypatch.setattr(browser, "backend", lambda cfg: backend)
+    one, others = tools_on()["close_browser_tabs"], tools_on()["close_other_browser_tabs"]
+    assert one.level == others.level == "critical" and not one.expose and not others.expose
+    asked = one.action({"tab": "youtube"}, ctx_on())
+    assert "www.youtube.com" in asked and "yes always" not in asked.casefold()
+    assert "close 1 other tab" in others.action({"tab": "youtube"}, ctx_on())
+
+
+def test_a_remembered_yes_covers_one_tab_but_never_closing_all_the_others():
+    assert not tools_on()["close_browser_tabs"].always_asks
+    assert tools_on()["close_other_browser_tabs"].always_asks
+
+
+def run_confirmed(tool_name, args, monkeypatch, backend, between=None):
+    """What the brain does: ask (action), then run on the same arguments."""
+    monkeypatch.setattr(browser, "backend", lambda cfg: backend)
+    tool = tools_on()[tool_name]
+    tool.action(args, ctx_on())
+    if between:
+        between()
+    return tool.run(args, ctx_on())
+
+
+def test_the_tab_closed_is_the_one_the_question_named_even_if_another_comes_to_the_front(rafiq_home, monkeypatch):
+    fake, backend = with_targets(rafiq_home, list(TARGETS[:2]))
+    run_confirmed("close_browser_tabs", {"tab": ""}, monkeypatch, backend,
+                  between=lambda: fake.targets.reverse())          # Gmail comes to the front while asking
+    assert fake.closed == ["A1"]
+
+
+def test_closing_the_others_never_closes_a_tab_opened_while_asking(rafiq_home, monkeypatch):
+    fake, backend = with_targets(rafiq_home, list(TARGETS[:2]))
+    popup = {"id": "P1", "type": "page", "title": "Popup", "url": "https://ads.example.com/"}
+    run_confirmed("close_other_browser_tabs", {"tab": "youtube"}, monkeypatch, backend,
+                  between=lambda: fake.targets.append(popup))
+    assert fake.closed == ["B2"]
+
+
+def test_a_model_cannot_choose_the_pinned_tabs_itself(rafiq_home, monkeypatch):
+    fake, backend = with_targets(rafiq_home, list(TARGETS[:2]))
+    run_confirmed("close_browser_tabs", {"tab": "youtube", "_pinned": ["B2"]}, monkeypatch, backend)
+    assert fake.closed == ["A1"]
+
+
+def test_closing_without_the_question_closes_nothing(rafiq_home, monkeypatch):
+    fake, backend = with_targets(rafiq_home, list(TARGETS[:2]))
+    monkeypatch.setattr(browser, "backend", lambda cfg: backend)
+    said = tools_on()["close_browser_tabs"].run({"tab": "youtube"}, ctx_on())
+    assert said.startswith("error:") and not fake.closed
+
+
+def test_one_tab_already_gone_does_not_stop_the_others(rafiq_home):
+    targets = [TARGETS[0], TARGETS[1], {**TARGETS[1], "id": "Z9", "title": "Third", "url": "https://c.example.com/"}]
+    fake, backend = with_targets(rafiq_home, targets)
+    real_get = fake.get
+
+    def get(url):
+        if url.endswith("/json/close/B2"):
+            raise OSError("HTTPStatusError")             # Chrome answers 404 for a tab already closed
+        return real_get(url)
+
+    fake.get = get
+    backend.get = get
+    said = tabs_tool.close(cfg_on(), "youtube", True, backend)
+    assert fake.closed == ["Z9"] and "closed 1 tab" in said and "could not close" in said
+
+
+def test_asking_to_close_a_read_only_tab_says_nothing_will_be_closed(rafiq_home, monkeypatch):
+    fake, backend = with_targets(rafiq_home, [BANK, TARGETS[0]])
+    monkeypatch.setattr(browser, "backend", lambda cfg: backend)
+    asked = tools_on()["close_browser_tabs"].action({"tab": "accounts"}, ctx_on())
+    assert "read-only" in asked
+
+
+def test_asking_to_close_the_others_when_none_can_be_closed_says_so(rafiq_home, monkeypatch):
+    fake, backend = with_targets(rafiq_home, [TARGETS[0], BANK])
+    monkeypatch.setattr(browser, "backend", lambda cfg: backend)
+    asked = tools_on()["close_other_browser_tabs"].action({"tab": "youtube"}, ctx_on())
+    assert "nothing" in asked
+
+
+def test_closing_the_last_tab_says_the_browser_closed(rafiq_home):
+    fake, backend = with_targets(rafiq_home, [TARGETS[0]])
+    assert "browser closed" in tabs_tool.close(cfg_on(), "", False, backend)
+
+
+@pytest.mark.parametrize("entry", ["mycreditunion.org", "MyCreditUnion.org", "https://mycreditunion.org/login",
+                                   ".mycreditunion.org", "*.mycreditunion.org", "mycreditunion.org.",
+                                   "mycreditunion.org:443"])
+def test_your_read_only_sites_match_however_they_are_written(rafiq_home, entry):
+    cfg = cfg_on()
+    cfg["browser"]["read_only"] = [entry]
+    assert browser.read_only("online.mycreditunion.org", cfg), entry
+
+
+def test_a_single_read_only_site_written_without_brackets_works(rafiq_home):
+    cfg = cfg_on()
+    cfg["browser"]["read_only"] = "mycreditunion.org"
+    assert browser.read_only("online.mycreditunion.org", cfg)
+
+
+def test_a_read_only_site_with_accents_matches_its_punycode_name(rafiq_home):
+    cfg = cfg_on()
+    cfg["browser"]["read_only"] = ["bänk.de"]
+    assert browser.read_only("www.xn--bnk-qla.de", cfg)
+
+
+@pytest.mark.parametrize("site", ["www.nbe.com.eg", "www.cibeg.com", "www.qnb.com", "www.emiratesnbd.com"])
+def test_egyptian_and_gulf_banks_are_read_only(site):
+    assert browser.read_only(site, config.load())
+
+
+def test_closing_still_asks_when_the_browser_does_not_answer(rafiq_home, monkeypatch):
+    monkeypatch.setattr(browser, "backend", lambda cfg: make(browser.profile_dir(), FakeChrome()))
+    tool = load_all({"browser": {"enabled": True}})["close_browser_tabs"]
+    assert tool.action({"tab": "x"}, type("Ctx", (), {"cfg": cfg_on()})())
+
+
+def test_tabs_on_the_same_site_are_named_once_with_a_count(rafiq_home):
+    targets = [TARGETS[0], {**TARGETS[1], "id": "B2"}, {**TARGETS[1], "id": "B3"}]
+    fake, backend = with_targets(rafiq_home, targets)
+    said = tabs_tool.close(cfg_on(), "youtube", True, backend)
+    assert said.count("mail.google.com") == 1 and "(2 tabs)" in said
