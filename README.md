@@ -61,8 +61,9 @@ git clone https://github.com/nexika/rafiq.git && cd rafiq
 ./install.sh
 ```
 
-`install.sh` creates `.venv`, installs Rafiq with the offline voices and Google, then starts
-`rafiq setup`, a wizard that:
+`install.sh` creates `.venv`, installs Rafiq with the offline voices and Google, links
+`~/.local/bin/rafiq` so `rafiq` works from any folder (it says so if `~/.local/bin` is not on your PATH
+yet), then starts `rafiq setup`, a wizard that:
 
 1. asks your name, the brain (auto, Claude or Ollama), the Claude and Azure keys (both optional, typed
    hidden) and your city, and writes `~/.config/rafiq/config.toml`, readable only by you;

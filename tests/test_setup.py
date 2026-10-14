@@ -267,6 +267,57 @@ def test_install_script_is_executable():
     assert INSTALL.stat().st_mode & stat.S_IXUSR
 
 
+def link_only(tmp_path, on_path=True):
+    """Run `install.sh --link-only` from a copy of the checkout with a fake .venv, in a fresh home."""
+    checkout, home = tmp_path / "rafiq", tmp_path / "home"
+    (checkout / ".venv" / "bin").mkdir(parents=True)
+    (checkout / ".venv" / "bin" / "rafiq").write_text("#!/bin/sh\n")
+    (checkout / ".venv" / "bin" / "rafiq").chmod(0o755)
+    shutil.copy(INSTALL, checkout / "install.sh")
+    home.mkdir(exist_ok=True)
+    path = (f"{home}/.local/bin:" if on_path else "") + "/usr/bin:/bin"
+    done = subprocess.run(["bash", str(checkout / "install.sh"), "--link-only"], capture_output=True, text=True,
+                          env={"HOME": str(home), "PATH": path}, timeout=10)
+    return done, checkout / ".venv" / "bin" / "rafiq", home / ".local" / "bin" / "rafiq"
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+def test_install_puts_rafiq_on_the_path_so_the_guides_work_as_written(tmp_path):
+    done, venv_rafiq, link = link_only(tmp_path)
+    assert done.returncode == 0
+    assert link.is_symlink() and link.resolve() == venv_rafiq.resolve()
+    assert "rafiq doctor" in done.stdout
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+def test_install_says_how_to_add_local_bin_when_it_is_not_on_the_path(tmp_path):
+    done, venv_rafiq, link = link_only(tmp_path, on_path=False)
+    assert done.returncode == 0
+    assert link.is_symlink()
+    assert "PATH" in done.stdout and ".venv/bin/rafiq" in done.stdout
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+def test_install_replaces_a_link_to_an_older_checkout(tmp_path):
+    old = tmp_path / "home" / ".local" / "bin" / "rafiq"
+    old.parent.mkdir(parents=True)
+    old.symlink_to(tmp_path / "old-checkout" / ".venv" / "bin" / "rafiq")
+    done, venv_rafiq, link = link_only(tmp_path)
+    assert done.returncode == 0
+    assert link.resolve() == venv_rafiq.resolve()
+
+
+@pytest.mark.skipif(not shutil.which("bash"), reason="needs bash")
+def test_install_leaves_a_rafiq_that_is_not_a_link_alone(tmp_path):
+    mine = tmp_path / "home" / ".local" / "bin" / "rafiq"
+    mine.parent.mkdir(parents=True)
+    mine.write_text("#!/bin/sh\necho mine\n")
+    done, venv_rafiq, link = link_only(tmp_path)
+    assert done.returncode == 0
+    assert not link.is_symlink() and "echo mine" in link.read_text()
+    assert ".venv/bin/rafiq" in done.stdout
+
+
 def test_rafiq_setup_runs_the_wizard(monkeypatch):
     from rafiq import __main__ as cli
 
