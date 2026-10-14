@@ -10,14 +10,17 @@ A command from the phone may only run safe (level 1) tools. The model still sees
 can explain: calling one answers "do that at home by voice" and runs nothing, and nothing from here
 ever asks for a confirmation, because nobody at home would hear the question.
 
-The bridge listens on this computer only unless `[phone] host` says otherwise; reaching it from the
-street needs a tunnel or a VPN in front of it.
+The bridge listens on this computer only unless `[phone] host` says otherwise, and never on a public
+address: from the street, the phone reaches it over Tailscale (`host = "tailscale"`), never through a
+public tunnel. The token crosses the network in plain HTTP, so only a private network may carry it (#70).
 """
 
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
+import subprocess
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +28,7 @@ from urllib.parse import urlparse
 
 from . import lang
 from .brain import Brain
+from .remote import TAILSCALE, _private_ip, check_listen
 from .tools import Tool, lists
 
 MAX_BODY = 10_000
@@ -134,9 +138,42 @@ def make_handler(bridge: PhoneBridge, token: str):
     return Handler
 
 
+def tailscale_ip(run=subprocess.run) -> str:
+    """This computer's address on the tailnet (100.64.0.0/10), from `tailscale ip -4`."""
+    fix = "install Tailscale on this computer and the phone, then run `sudo tailscale up`"
+    try:
+        done = run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        raise ValueError(f"Tailscale is not available: {fix}") from None
+    for line in done.stdout.split() if done.returncode == 0 else []:
+        try:
+            if ipaddress.ip_address(line) in TAILSCALE:
+                return line
+        except ValueError:
+            continue
+    raise ValueError(f"this computer has no Tailscale address: {fix}")
+
+
+def address(host: str, run=subprocess.run) -> str:
+    """Where the bridge listens: "tailscale" is this computer's tailnet address; anything else must be this
+    computer, the LAN or Tailscale. Every network (0.0.0.0) and public addresses raise ValueError."""
+    if host == "tailscale":
+        return tailscale_ip(run)
+    try:
+        check_listen(host, tls=False)
+    except ValueError:
+        raise ValueError(f'the phone bridge never listens on {host}: set [phone] host = "tailscale" '
+                         "(or this computer's LAN address, such as 192.168.1.20)") from None
+    return host
+
+
 def serve(bridge: PhoneBridge, host: str, port: int, token: str) -> ThreadingHTTPServer:
     if len(token) < 32:
         raise ValueError("the phone token is too short")
+    check_listen(host, tls=False)
     server = ThreadingHTTPServer((host, port), make_handler(bridge, token))
+    if not _private_ip(server.server_address[0]):    # what was bound, whatever the name resolved to
+        server.server_close()
+        raise ValueError(f"the phone bridge bound {server.server_address[0]}, which is not a private address")
     server.daemon_threads = True
     return server

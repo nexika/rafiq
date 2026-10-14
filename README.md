@@ -466,7 +466,8 @@ For now you type requests in the agent's terminal; the microphone stays on the P
   The project tools only read (tests, git status, CI, PR); the model picks the question, never the command.
 - The panel listens on 127.0.0.1 only, and every request must carry a random token that only the
   panel page knows; requests under another host name are refused.
-- The phone bridge is off until you turn it on, needs its own token, and runs only safe tools.
+- The phone bridge is off until you turn it on, needs its own token, runs only safe tools, and listens
+  only on a private address (this computer, the LAN or Tailscale), never on every network.
 - Keys are read from the environment or `~/.config/rafiq/config.toml` and never logged. The Google
   token is stored readable only by you.
 - The log (`~/.config/rafiq/data/logs/rafiq.log`) has email addresses, keys, phone numbers and
@@ -483,9 +484,13 @@ the new version, reinstalls it and restarts the service.
 
 Dictate a note, share a link or send a command ("Hey Siri, tell Rafiq: what's on my shopping list?").
 
-1. Set `enabled = true` under `[phone]` in the config and restart `rafiq run`.
-2. Run `rafiq phone`: it prints the address and the token for the shortcut.
-3. On an iPhone, make a Shortcut with **Dictate Text**, then **Get Contents of URL** (method POST,
+1. Install [Tailscale](https://tailscale.com) on this computer (`sudo tailscale up`) and on the phone,
+   signed in to the same account. The phone then reaches the computer from anywhere, and nothing is
+   opened to the internet.
+2. Under `[phone]` in the config, set `enabled = true` and `host = "tailscale"`, then restart `rafiq run`.
+3. Run `rafiq phone`: it prints the address (this computer's Tailscale address) and the token for the
+   shortcut.
+4. On an iPhone, make a Shortcut with **Dictate Text**, then **Get Contents of URL** (method POST,
    header `Authorization: Bearer <token>`, JSON body `text` = the dictated text), then **Speak Text**
    with the reply's `answer`. On Android, do the same with HTTP Shortcuts or Tasker.
 
@@ -498,9 +503,11 @@ A command from the phone only runs safe tools: the time, weather, timers and rem
 calculations, web search and the computer's status. Anything else (power, apps, volume, email,
 calendar) answers "do that at home by voice", and nothing from the phone is ever confirmed.
 
-The bridge listens on 127.0.0.1 by default, so the phone needs a tunnel or a VPN (Tailscale, for
-example) to reach it. `host = "0.0.0.0"` opens it to your home Wi-Fi, but the token then crosses the
-network in plain HTTP: use that only on a network you trust.
+The bridge only listens on a private address: this computer (`127.0.0.1`, the default), Tailscale
+(`"tailscale"`), or this computer's address on your home network (such as `"192.168.1.20"`, for a phone
+on the same Wi-Fi). It refuses `0.0.0.0` and public addresses, and Rafiq then starts without it: the
+token travels in plain HTTP, so only a private network may carry it. Public tunnels such as ngrok are
+not supported.
 
 ## Rafiq's tools in other programs (MCP)
 

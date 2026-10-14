@@ -37,20 +37,33 @@ def cmd_run(args) -> int:
         print(f"Panel: http://{host}:{port}/", flush=True)
     _start_hub(cfg, assistant)
     if cfg["phone"].get("enabled"):
-        from .phone import PhoneBridge
-        from .phone import serve as serve_phone
-
-        bridge = PhoneBridge(cfg, assistant.tools, assistant.scheduler, on_event=assistant.events.publish)
-        host, port = cfg["phone"]["host"], int(cfg["phone"]["port"])
-        server = serve_phone(bridge, host, port, config.phone_token())
-        threading.Thread(target=server.serve_forever, name="rafiq-phone", daemon=True).start()
-        print(f"Phone bridge: http://{host}:{port}/api/inbox", flush=True)
+        _start_phone(cfg, assistant)
     print('Say "Rafiq" (or "يا رفيق"). Ctrl+C stops.', flush=True)
     try:
         assistant.run()
     except KeyboardInterrupt:
         assistant.stop()
     return 0
+
+
+def _start_phone(cfg: dict, assistant):
+    """Serve the phone bridge on a private address; when the address is refused, Rafiq runs without it."""
+    from . import phone
+
+    try:
+        host, port = phone.address(cfg["phone"]["host"]), int(cfg["phone"]["port"])
+    except ValueError as exc:
+        print(f"Phone bridge off: {exc}", flush=True)
+        return None
+    bridge = phone.PhoneBridge(cfg, assistant.tools, assistant.scheduler, on_event=assistant.events.publish)
+    try:
+        server = phone.serve(bridge, host, port, config.phone_token())
+    except (ValueError, OSError) as exc:          # the port is taken, or the address can't be bound
+        print(f"Phone bridge off: {exc}", flush=True)
+        return None
+    threading.Thread(target=server.serve_forever, name="rafiq-phone", daemon=True).start()
+    print(f"Phone bridge: http://{host}:{port}/api/inbox", flush=True)
+    return server
 
 
 def _start_hub(cfg: dict, assistant) -> None:
@@ -674,16 +687,23 @@ def cmd_wake_pc(args) -> int:
 
 def cmd_phone(_args) -> int:
     """What to put in an iOS Shortcut or an Android HTTP Shortcut."""
+    from . import phone as phone_mod
+
     cfg = config.load()
     phone = cfg["phone"]
-    print(f"Address:  http://{phone['host']}:{phone['port']}/api/inbox  (POST, JSON body)")
+    try:
+        host = phone_mod.address(phone["host"])
+    except ValueError as exc:
+        print(f"The phone bridge can't listen there: {exc}")
+        return 1
+    print(f"Address:  http://{host}:{phone['port']}/api/inbox  (POST, JSON body)")
     print(f"Header:   Authorization: Bearer {config.phone_token()}")
     print('Body:     {"text": "film mode"}  or  {"kind": "note", "list": "shopping", "text": "milk"}')
     print('Reply:    {"ok": true, "answer": "..."}: have the shortcut speak or show "answer".')
     if not phone.get("enabled"):
         print("Turn it on: set [phone] enabled = true in", config.home() / "config.toml")
-    if phone["host"] in ("127.0.0.1", "localhost", "::1"):
-        print("It only listens on this computer: put a tunnel or a VPN in front of it to reach it from the phone.")
+    if host in ("127.0.0.1", "localhost"):
+        print('It only listens on this computer: set [phone] host = "tailscale" to reach it from the phone.')
     return 0
 
 

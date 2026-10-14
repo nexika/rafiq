@@ -152,7 +152,7 @@ after_brief = false             # also offer to print it after the first brief o
 
 [phone]                         # notes and commands from an iOS or Android shortcut: `rafiq phone`
 enabled = false
-host = "127.0.0.1"              # this computer only; "0.0.0.0" to reach it on your home Wi-Fi
+host = "127.0.0.1"              # this computer only; "tailscale" from anywhere; never "0.0.0.0"
 port = 8767
 
 [screen]
