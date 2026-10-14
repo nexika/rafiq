@@ -650,8 +650,16 @@ by JavaScript work.
 3. Set `enabled = true` under `[browser]` in the config.
 
 The tab list shows titles and sites, never full addresses. With Claude as the brain, the text of a tab
-you ask about goes to Claude, as the clipboard does. Closing tabs, clicking and filling forms are not
-done yet; they will ask first.
+you ask about goes to Claude, as the clipboard does.
+
+"Close this tab" and "close the other tabs" ask first, naming the sites (not the titles, which a page
+chooses itself), and close only the tabs the question named: not one that came to the front or opened
+while you answered. "Yes, always" can be remembered for closing one tab, never for closing all the
+others, which asks every time. Sites for banks, taxes and health are read-only: Rafiq reads them but never closes them,
+and "close the other tabs" leaves them open and says so. They are recognised by a word in the site's
+name (bank, banque, tax, impot, steuer, health, salud, hospital, …) or a known site (paypal.com,
+impots.gouv.fr, irs.gov, doctolib, nhs.uk, nbe.com.eg, …); add your own under `[browser] read_only`,
+such as `["mycreditunion.org"]`. Clicking and filling forms are not done yet.
 
 ## Video and stage lights (DMX)
 

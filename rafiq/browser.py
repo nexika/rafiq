@@ -35,6 +35,14 @@ from . import config
 PROGRAMS = ("google-chrome-stable", "google-chrome", "chromium-browser", "chromium")
 TEXT = "document.body ? document.body.innerText.slice(0, 200000) : ''"
 _ID = re.compile(r"[A-Za-z0-9]{1,64}")
+# Sites Rafiq never acts on, only reads: banks, taxes and health, by a word in the site's name or by the
+# site itself, plus [browser] read_only. Never complete, so it errs on the side of more: "taxi" is caught too.
+READ_ONLY_WORDS = ("bank", "banque", "banco", "sparkasse", "tax", "impot", "steuer", "hacienda", "tributaria",
+                   "health", "sante", "salud", "gesundheit", "hospital", "hopital", "clinic", "doctolib", "mychart",
+                   "patient")
+READ_ONLY_SITES = ("paypal.com", "irs.gov", "hmrc.gov.uk", "elster.de", "impots.gouv.fr", "ameli.fr", "nhs.uk",
+                   "revolut.com", "wise.com", "n26.com", "stripe.com", "nbe.com.eg", "cibeg.com", "qnb.com",
+                   "emiratesnbd.com", "adcb.com")
 START = "start it with `rafiq browser`"
 
 
@@ -59,6 +67,8 @@ class Backend(Protocol):
     def text(self, tab_id: str) -> str: ...
 
     def activate(self, tab_id: str) -> None: ...
+
+    def close(self, tab_id: str) -> None: ...
 
 
 def _http_get(url: str) -> str:
@@ -184,6 +194,37 @@ class Chrome:
             self.get(f"http://127.0.0.1:{port}/json/activate/{tab_id}")
         except OSError:
             raise BrowserError("Rafiq's browser did not answer") from None
+
+
+    def close(self, tab_id: str) -> None:
+        tab_id = self._checked(tab_id)
+        port = self._port()
+        try:
+            self.get(f"http://127.0.0.1:{port}/json/close/{tab_id}")
+        except OSError:
+            raise BrowserError("Rafiq's browser did not answer") from None
+
+
+def _host(entry) -> str:
+    """A site as written in the settings ("https://MyBank.com/login", "*.mybank.com", "bänk.de") as Chrome
+    names it ("mybank.com", "xn--bnk-sna.de")."""
+    entry = str(entry).strip().casefold()
+    host = (urlparse(entry if "//" in entry else "//" + entry).hostname or "").removeprefix("*.").strip(".")
+    try:
+        return host.encode("idna").decode()
+    except UnicodeError:
+        return host
+
+
+def read_only(site: str, cfg: dict) -> bool:
+    """Whether Rafiq may only read this site, never act on it."""
+    site = site.casefold().rstrip(".")
+    extra = cfg.get("browser", {}).get("read_only") or []
+    extra = [extra] if isinstance(extra, str) else extra       # read_only = "mybank.com" is one site
+    sites = (*READ_ONLY_SITES, *(h for h in map(_host, extra) if h))
+    if any(site == s or site.endswith("." + s) for s in sites):
+        return True
+    return any(word in site for word in READ_ONLY_WORDS)
 
 
 def profile_dir() -> Path:
