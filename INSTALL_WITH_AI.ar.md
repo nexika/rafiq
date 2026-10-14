@@ -78,7 +78,8 @@ Known problems, use these instead of guessing:
 - `ensurepip is not available` or `No module named venv`: install `python3-venv` (Ubuntu).
 - `OSError: PortAudio library not found`: install `portaudio` (Fedora) or `libportaudio2` (Ubuntu).
 - `externally-managed-environment`: pip was run outside the environment. Always use `.venv/bin/pip`.
-- `rafiq: command not found`: use `.venv/bin/rafiq` from inside `~/rafiq`.
+- `rafiq: command not found`: use `.venv/bin/rafiq` from inside `~/rafiq`, or run `./install.sh --link-only`
+  once there so `rafiq` works from any folder.
 - doctor says `no  microphone`: plug it in, choose it in Settings → Sound → Input, and check its level
   moves when I speak.
 - doctor says `no  audio player (ffplay)`: install `ffmpeg-free` (Fedora) or `ffmpeg` (Ubuntu).
