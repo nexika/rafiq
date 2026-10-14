@@ -256,6 +256,11 @@ universe = 0
 # channels = ["dimmer", "cct"]  # dimmer, cct, dimmer16, cct16 (16-bit: two channels) or none
 # kelvin = [2700, 6500]         # its colour temperature range
 
+[browser]                       # Rafiq's own Chrome, whose tabs it can read: start it with `rafiq browser`
+enabled = false                 # true to let Rafiq list, read and switch its tabs
+chrome = ""                     # the program; empty: google-chrome, then chromium
+port = 0                        # its debugging port on 127.0.0.1; 0 lets Chrome pick a free one
+
 [hue]
 enabled = false                 # true after `rafiq hue-setup`
 

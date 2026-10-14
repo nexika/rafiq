@@ -1,6 +1,6 @@
 """rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
 gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup |
-hue-setup | install-service | uninstall-service | wake-pc | backup | stt-score |
+hue-setup | browser | install-service | uninstall-service | wake-pc | backup | stt-score |
 enroll | voiceid | listen"""
 
 from __future__ import annotations
@@ -750,6 +750,23 @@ def cmd_instagram_setup(args) -> int:
     return 0
 
 
+def cmd_browser(args) -> int:
+    """Start Rafiq's own browser, whose tabs Rafiq can list, read and switch."""
+    from . import browser
+
+    cfg = config.load()
+    try:
+        browser.launch(cfg, args.url or "")
+    except browser.BrowserError as exc:
+        print(exc)
+        return 1
+    print(f"Rafiq's browser is starting, with its own profile in {browser.profile_dir()}.")
+    print("Sign in there only to the sites you want Rafiq to read; your everyday browser is not touched.")
+    if not cfg["browser"].get("enabled"):
+        print("Then set [browser] enabled = true in", config.home() / "config.toml")
+    return 0
+
+
 def cmd_hue_setup(args) -> int:
     from .tools import hue
 
@@ -907,6 +924,9 @@ def main(argv=None) -> int:
     hue = sub.add_parser("hue-setup", help="pair with the Philips Hue bridge (press its link button)")
     hue.add_argument("--host", help="the bridge's address on your network (default: look for it)")
     hue.set_defaults(fn=cmd_hue_setup)
+    web = sub.add_parser("browser", help="start Rafiq's own Chrome, whose tabs Rafiq can read and switch")
+    web.add_argument("url", nargs="?", help="a web address to open")
+    web.set_defaults(fn=cmd_browser)
     sub.add_parser("install-service", help="start Rafiq at every login (systemd user service)").set_defaults(
         fn=cmd_install_service)
     sub.add_parser("uninstall-service", help="stop starting Rafiq at login").set_defaults(fn=cmd_uninstall_service)
