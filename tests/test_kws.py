@@ -64,6 +64,35 @@ def test_the_threshold_lies_between_the_name_and_ordinary_speech():
     assert spotter.score(word(40)) > spotter.threshold
 
 
+def overlapping():
+    """Loose name takes, and one ordinary sentence closer to them than they are to each other."""
+    base = word()
+    names = [base + rng.normal(scale=0.6, size=base.shape) for _ in range(4)]
+    return names, [base + rng.normal(scale=0.05, size=base.shape), word(40)]
+
+
+def test_ordinary_speech_as_close_as_the_name_keeps_the_threshold_below_it():
+    names, others = overlapping()
+    spotter, report = kws.calibrate(names, others)
+    closest = spotter.score(others[0])
+    assert closest <= report["name_spread"]              # the case from #175
+    assert spotter.threshold < closest
+
+
+def test_the_report_gives_the_real_closest_sentence():
+    names, others = overlapping()
+    spotter, report = kws.calibrate(names, others)
+    assert report["ordinary_closest"] == pytest.approx(min(spotter.score(o) for o in others))
+    assert report["ordinary_closest_index"] == 0
+
+
+def test_the_loosest_sensitivity_still_stays_below_every_ordinary_sentence():
+    base = word()
+    names = [base + rng.normal(scale=0.2, size=base.shape) for _ in range(4)]
+    spotter, report = kws.calibrate(names, [word(40) for _ in range(3)], sensitivity=1.0)
+    assert spotter.threshold < report["ordinary_closest"]
+
+
 def test_too_few_recordings_are_refused():
     with pytest.raises(ValueError):
         kws.calibrate([word(), word()], [])

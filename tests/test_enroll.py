@@ -90,3 +90,31 @@ def test_enroll_records_the_other_names_from_the_settings(rafiq_home, monkeypatc
     enroll.run(takes=1, say=lambda line: None, ask=prompts.append)
 
     assert [p for p in prompts if "Jarvis" in p] and [p for p in prompts if "يا رفيق" in p]
+
+
+def enroll_with_report(monkeypatch, report, sentences):
+    monkeypatch.setattr(enroll, "record_one", lambda mic, vad, timeout=8.0: speech(0.3))
+    monkeypatch.setattr(enroll.Microphone, "from_config", classmethod(lambda cls, cfg: FakeMic()))
+    monkeypatch.setattr(enroll, "SileroVAD", lambda: None)
+    monkeypatch.setattr(kws, "Mel", lambda: None)
+    monkeypatch.setattr(enroll, "fit", lambda *a, **k: (FakeSpotter(), report))
+    monkeypatch.setattr(enroll, "REQUESTS", [])
+    monkeypatch.setattr(enroll, "SENTENCES", sentences)
+    said = []
+    enroll.run(forms=["Rafiq"], takes=1, say=said.append, ask=lambda prompt: "")
+    return "\n".join(said)
+
+
+def test_enroll_names_the_sentence_that_came_as_close_as_the_name(monkeypatch):
+    said = enroll_with_report(monkeypatch, {"name_spread": 0.562, "ordinary_closest": 0.518,
+                                            "ordinary_closest_index": 1, "threshold": 0.49},
+                              ["Remind me to call my friend later.", "What's the weather like today?"])
+    assert "0.52" in said
+    assert "What's the weather like today?" in said.split("close")[-1]
+
+
+def test_enroll_says_nothing_when_ordinary_speech_is_far_from_the_name(monkeypatch):
+    said = enroll_with_report(monkeypatch, {"name_spread": 0.3, "ordinary_closest": 0.6,
+                                            "ordinary_closest_index": 0, "threshold": 0.43},
+                              ["What's the weather like today?"])
+    assert "enroll` again" not in said

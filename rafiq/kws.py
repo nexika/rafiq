@@ -29,6 +29,10 @@ HOP = 2                 # mel frames are 10 ms; two are averaged into one 20 ms 
 START_FRAMES = 50       # the name must start within the first second of speech
 MAX_SECONDS = 2.5       # only the start of what was said is compared
 SENSITIVITY = 0.45      # where the threshold sits between the name and ordinary speech (0 strict, 1 loose)
+# The threshold always stays this far below the closest ordinary sentence. One user's "What's the weather
+# like today?" scored 0.518 while their name takes differed by up to 0.562; the old rule then set 0.600
+# and that sentence woke Rafiq (#175).
+BELOW_ORDINARY = 0.95
 
 
 def folder() -> Path:
@@ -168,7 +172,8 @@ def calibrate(name_frames: list[np.ndarray], other_frames: list[np.ndarray],
     request recordings can be in any language, so theirs is unknown.
 
     The threshold lies between the name recordings' distance to each other (each one against the rest)
-    and the ordinary sentences' distance to the name, at `sensitivity` of the way."""
+    and the ordinary sentences' distance to the name, at `sensitivity` of the way, and always below the
+    closest sentence: waking on ordinary speech is worse than missing a loose take of the name."""
     if len(name_frames) < 3:
         raise ValueError("record the name at least three times")
     stacked = np.concatenate(name_frames)
@@ -178,9 +183,12 @@ def calibrate(name_frames: list[np.ndarray], other_frames: list[np.ndarray],
     same = [min(sdtw(t, templates[i]) for k, t in enumerate(templates) if k != i) for i in range(len(templates))]
     spotter = Spotter(templates, mean, std, threshold=0.0, tags=list(name_tags)[:len(name_frames)])
     others = [spotter.score(f) for f in other_frames]
-    near, far = max(same), (min(others) if others else max(same) * 1.6)
-    if far <= near:
-        far = near * 1.15      # ordinary speech came as close as the name: stay strict
-    spotter.threshold = near + sensitivity * (far - near)
-    return spotter, {"name_spread": near, "ordinary_closest": far if others else None,
+    near = max(same)
+    if others:
+        far = min(others)
+        spotter.threshold = min(near + sensitivity * (far - near), far * BELOW_ORDINARY)
+    else:
+        spotter.threshold = near + sensitivity * near * 0.6
+    return spotter, {"name_spread": near, "ordinary_closest": min(others) if others else None,
+                     "ordinary_closest_index": others.index(min(others)) if others else None,
                      "threshold": spotter.threshold}

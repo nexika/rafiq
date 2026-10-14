@@ -120,7 +120,7 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
             say("  I heard nothing; again, please.")
 
     say("Recording your voice for the wake word. Speak at your normal distance from the microphone.")
-    names, tags, requests, others = [], [], [], []
+    names, tags, requests, others, said = [], [], [], [], []
     mic.start()
     try:
         for form in forms:
@@ -137,6 +137,7 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
             clip = record(f'"{sentence}"', timeout=10, required=False)
             if clip is not None:
                 others.append(clip)
+                said.append(sentence)
                 save_wav(out / f"other-{i}.wav", clip)
     finally:
         mic.stop()
@@ -148,8 +149,11 @@ def run(forms: list[str] | None = None, takes: int = TAKES, say=print, ask=input
         + (f"ordinary speech comes no closer than {report['ordinary_closest']:.2f}; "
            if report["ordinary_closest"] is not None else "")
         + f"Rafiq wakes below {report['threshold']:.2f}.")
-    if report["ordinary_closest"] is not None and report["ordinary_closest"] - report["name_spread"] < 0.08:
-        say("  Your name recordings and ordinary speech are close: run `rafiq enroll` again in a quieter "
+    closest = report["ordinary_closest"]
+    if closest is not None and closest - report["name_spread"] < 0.08:
+        sentence = said[report["ordinary_closest_index"]]
+        say(f'  Ordinary speech came close to the name: "{sentence}" scored {closest:.2f}, and your recordings '
+            f"of the name differ by up to {report['name_spread']:.2f}. Run `rafiq enroll` again in a quieter "
             "moment, or say the name more clearly.")
     return 0
 
