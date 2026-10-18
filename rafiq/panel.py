@@ -29,6 +29,9 @@ from . import lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
 
 MAX_BODY = 10_000
+# How long `rafiq ask` waits for the running Rafiq: a request's own 120 s, a spoken yes, and one already
+# being answered ahead of it.
+ASK_SECONDS = 300
 
 # The panel's changes besides talking: path -> what it does with the name sent.
 WRITES = {
@@ -168,6 +171,12 @@ def make_handler(assistant, token: str, port: int):
                     gestures.stop()
             elif path == "/api/text" and isinstance(data.get("text"), str) and data["text"].strip():
                 assistant.submit("text", text=data["text"][:2000])
+            elif (path == "/api/ask" and isinstance(data.get("text"), str) and data["text"].strip()
+                  and data.get("lang") in (None, *lang.TAGS)):
+                answer = assistant.ask(data["text"][:2000], data.get("lang"), data.get("speak") is True, ASK_SECONDS)
+                if answer is None:
+                    return self._send(504, b'{"error":"no answer in time"}')
+                return self._send(200, json.dumps({"answer": answer}, ensure_ascii=False).encode())
             elif path == "/api/listen":
                 assistant.submit("listen")
             elif path == "/api/mute" and isinstance(data.get("muted", False), bool):

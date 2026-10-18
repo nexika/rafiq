@@ -200,6 +200,9 @@ rafiq show                # show the last answer on screen again
 rafiq dictate             # start (or stop) typing what you say into the focused window
 ```
 
+While `rafiq run` is up, `rafiq ask` hands the request to it, so both share the same browser and tools.
+It answers by itself when nothing is running, or when you choose `--brain` or `--mode`.
+
 **Dictation**: say "Rafiq, dictate" (or "dictée", "dicta", "Diktat", "إملاء"), press the panel's
 Dictate button, or bind `rafiq dictate` to a shortcut. Each thing you say is typed into the focused
 window, in any of the six languages, with spoken punctuation ("comma", "question mark", "new line";

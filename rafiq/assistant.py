@@ -662,6 +662,16 @@ class Assistant:
     def submit(self, kind: str, **data) -> None:
         self.jobs.put((kind, data))
 
+    def ask(self, text: str, tag: str | None = None, speak: bool = False, timeout: float | None = None) -> str | None:
+        """A request from `rafiq ask`, answered on the loop's thread like a typed one, so the tools (Firefox's
+        one session) are shared. What Rafiq said, or None when it took longer than timeout."""
+        reply: queue.Queue = queue.Queue(maxsize=1)
+        self.submit("text", text=text, tag=tag, speak=speak, reply=reply)
+        try:
+            return reply.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
     def announce(self, text: str, tag: str) -> None:
         """Say the result of a background task, without the private data in it (privacy.redact)."""
         self.submit("result", text=text, tag=tag)
@@ -674,9 +684,7 @@ class Assistant:
                 return
             try:
                 if kind == "text":
-                    text = data["text"]
-                    self.events.publish("typed", {"text": text})
-                    self.respond(text, lang.dialect(lang.guess(text, self.tag), text, self.tag), source="typed")
+                    self._typed(data)
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "notify":
@@ -708,6 +716,29 @@ class Assistant:
             except Exception as exc:
                 self.events.publish("error", {"error": f"{type(exc).__name__}: {exc}"})
             self.set_state("dictating" if self.dictating else "idle")
+
+    def _typed(self, data: dict) -> None:
+        """A typed request. One from `rafiq ask` carries a reply queue that gets what Rafiq said, and is said
+        out loud only with --speak."""
+        text, reply = data["text"], data.get("reply")
+        tag = data.get("tag") or lang.dialect(lang.guess(text, self.tag), text, self.tag)
+        heard = self.events.subscribe() if reply else None
+        silent = self.silent
+        if reply and not data.get("speak"):
+            self.silent = True
+        try:
+            self.events.publish("typed", {"text": text})
+            self.respond(text, tag, source="typed")
+        finally:
+            self.silent = silent
+            if reply:
+                self.events.unsubscribe(heard)
+                said = []
+                while not heard.empty():
+                    event = heard.get_nowait()
+                    if event["kind"] == "said":
+                        said.append(event["text"])
+                reply.put("\n".join(said))
 
     def offer_paper(self) -> None:
         """The timer's offer: ask, and print on a yes. Silent when there is nothing to print."""

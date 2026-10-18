@@ -240,11 +240,15 @@ def cmd_ask(args) -> int:
     from .tts import Speaker
 
     cfg = config.load()
+    text = " ".join(args.text)
+    if not (args.brain or args.mode):
+        answered = _ask_through_running(cfg, text, args.lang, args.speak)
+        if answered is not None:
+            return answered
     if args.brain:
         cfg["brain"]["mode"] = args.brain
     if args.mode:
         modes.switch(cfg, args.mode)
-    text = " ".join(args.text)
     tag = args.lang or lang.dialect(lang.guess(text), text)
 
     def show(kind, data):
@@ -278,6 +282,33 @@ def cmd_ask(args) -> int:
     finally:
         if stream:
             stream.close()
+    return 0
+
+
+def _ask_through_running(cfg: dict, text: str, tag: str | None, speak: bool) -> int | None:
+    """Have the running Rafiq answer, so its tools are shared (Firefox allows one session). None when no Rafiq
+    took the request: nothing runs there, or an older one has no /api/ask. A request it took is never sent
+    again here, even when the answer comes too late."""
+    import httpx
+
+    from .panel import ASK_SECONDS
+
+    host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
+    try:
+        resp = httpx.post(f"http://{host}:{port}/api/ask", json={"text": text, "lang": tag, "speak": speak},
+                          headers={"X-Rafiq-Token": config.panel_token()},
+                          timeout=httpx.Timeout(ASK_SECONDS + 10, connect=2))
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        return None
+    except httpx.HTTPError:
+        print("The running Rafiq took the request but didn't answer in time.", file=sys.stderr)
+        return 1
+    if resp.status_code == 504:
+        print("The running Rafiq didn't answer in time.", file=sys.stderr)
+        return 1
+    if resp.status_code != 200:
+        return None
+    print(resp.json().get("answer", ""))
     return 0
 
 
