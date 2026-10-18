@@ -46,6 +46,9 @@ class Tool:
     # True: its arguments and results (amounts, payees) stay out of the event log and the panel.
     private: bool = False
     always_asks: bool = False        # asks every time: "yes, always" is never remembered for it
+    # The parameters whose values leave this computer (an address, a search). After a private read in the
+    # same request, a value the user didn't say is read back and asked about first (#187).
+    sends: tuple = ()
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -90,14 +93,16 @@ def check(t: Tool) -> None:
         raise ValueError(f"{t.name}: a slow tool needs a waiting phrase in each of {TAGS}")
     if not t.slow and t.waiting_phrase:
         raise ValueError(f"{t.name}: only a slow tool has a waiting phrase")
+    if set(t.sends) - set(t.params):
+        raise ValueError(f"{t.name}: it can only send its own parameters")
 
 
 def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None, *,
          level: str, slow: bool = False, waiting_phrase: dict | None = None, expose: bool = False,
-         card: str = "text", private: bool = False, always_asks: bool = False):
+         card: str = "text", private: bool = False, always_asks: bool = False, sends: tuple = ()):
     def register(fn: Callable) -> Callable:
         t = Tool(name, description, fn, params or {}, tuple(required), confirm, level, slow,
-                 dict(waiting_phrase or {}), expose, card, private, always_asks)
+                 dict(waiting_phrase or {}), expose, card, private, always_asks, tuple(sends))
         check(t)
         REGISTRY[name] = t
         return fn

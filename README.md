@@ -451,6 +451,8 @@ For now you type requests in the agent's terminal; the microphone stays on the P
   (`[pc] shutdown_delay` changes the wait, 0 shuts down at once).
 - Web pages, search results, emails, Discord messages and the clipboard are passed to the model as data,
   never as instructions. The clipboard is read only when you ask about what you copied. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
+  Once Rafiq has read something private in a request (a tab, an email, the clipboard), an address it would
+  fetch or open, or a search, that isn't in what you said is read back and runs only on your yes.
 - Rafiq's browser is a separate Chrome or Firefox profile with a debugging port on 127.0.0.1 only. Rafiq
   talks only to the port its own profile names, once the process there is your account's browser with
   that profile, and only runs fixed expressions that read the page's title and text, out of the page's own

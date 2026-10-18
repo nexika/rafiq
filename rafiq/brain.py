@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -104,12 +105,26 @@ class LimitReached(Exception):
 @dataclass
 class Budget:
     """What one request may still spend: model rounds and tool calls for this backend, and time
-    for the whole request, so a model that keeps calling tools is stopped instead of looping."""
+    for the whole request, so a model that keeps calling tools is stopped instead of looping. It also
+    keeps what the user said and whether a private tool has answered, for what may leave the machine."""
     limits: dict
     clock: Callable[[], float]
     deadline: float
     rounds: int = 0
     calls: int = 0
+    said: str = ""
+    read_private: bool = False
+
+    def unsaid(self, tool: Tool, args: dict) -> str | None:
+        """After a private read, the first value this tool would send out that the user didn't say.
+        A page, an email or the clipboard could have told the model to put it there."""
+        if not self.read_private:
+            return None
+        for name in tool.sends:
+            value = str(args.get(name) or "").strip()
+            if value and not said_by_user(value, self.said):
+                return value
+        return None
 
     def left(self) -> float:
         left = self.deadline - self.clock()
@@ -132,6 +147,16 @@ class Budget:
             raise LimitReached(f"over {self.limits['max_tool_calls']} tool calls")
         self.left()
         self.calls += count
+
+
+def said_by_user(value: str, said: str) -> bool:
+    """An address is said when it appears in the request (without "https://www." or a last slash);
+    a search is said when each of its words is."""
+    said = said.casefold()
+    if "://" in value:
+        address = re.sub(r"^[a-z][a-z0-9+.-]*://(www\.)?", "", value.casefold()).rstrip("/")
+        return bool(address) and address in said
+    return set(re.findall(r"\w+", value.casefold())) <= set(re.findall(r"\w+", said))
 
 
 class Voice:
@@ -271,7 +296,7 @@ class Brain:
                 run = {"claude": self._claude_turn, "openai": self._openai_turn, "ollama": self._ollama_turn}[backend]
                 # A local model gets its smaller set when the router kept every tool.
                 tools = self.local_tools() if backend == "ollama" and route.name == "all" else route.tools
-                answer = run(history, text, tag, ctx, tools, Budget(limits, self.clock, deadline), voice)
+                answer = run(history, text, tag, ctx, tools, Budget(limits, self.clock, deadline, said=text), voice)
                 voice.end()
                 self.memory.add(text, answer, self.clock(), tag)
                 self.on_event("brain", {"backend": backend, "route": route.name})
@@ -391,13 +416,16 @@ class Brain:
         return self.confirm(action, tag)
 
     def _run_tool(self, name: str, args: dict, tag: str, ctx, tools: dict[str, Tool],
-                  voice: Voice | None = None) -> str:
+                  voice: Voice | None = None, budget: Budget | None = None) -> str:
         """Run a tool the model asked for; only the ones it was offered for this request."""
         tool = tools.get(name)
         if tool is None:
             return f"error: there is no tool named {name}"
         action = tool.action(args, ctx)
         can_remember = self.approvals is not None and not tool.always_asks
+        unsaid = budget.unsaid(tool, args) if budget else None
+        if unsaid:
+            action, can_remember = f'send "{unsaid}" out to the internet, though you didn\'t say it', False
         if action and not (can_remember and self.approvals.allowed(name)):
             answer = self._ask(action, tag, can_remember)
             if not answer:
@@ -415,6 +443,8 @@ class Brain:
                 result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
+        if budget and tool.level == "private":
+            budget.read_private = True
         if tool.private:
             hidden = "error (hidden)" if result.startswith("error") else "(hidden)"
             self.on_event("tool", {"name": name, "args": "(hidden)", "result": hidden, "card": tool.card})
@@ -501,7 +531,7 @@ class Brain:
             budget.tool_calls(len(calls))
             messages.append({"role": "user", "content": [
                 {"type": "tool_result", "tool_use_id": c.id,
-                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools, voice)}
+                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools, voice, budget)}
                 for c in calls]})
 
     def _claude_text(self, system: str, text: str) -> str:
@@ -593,7 +623,7 @@ class Brain:
                 if not isinstance(args, dict):
                     args = {}
                 messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
-                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, tools, voice)})
+                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, tools, voice, budget)})
 
     # ------------------------------------------------------------------ Ollama
 
@@ -641,5 +671,5 @@ class Brain:
                     self.on_event("tool", {"name": name, "args": fn.get("arguments"), "result": problem})
                     result = f"error: {problem}. Call {name} again with valid JSON arguments."
                 else:
-                    result = self._run_tool(name, args, tag, ctx, tools, voice)
+                    result = self._run_tool(name, args, tag, ctx, tools, voice, budget)
                 messages.append({"role": "tool", "tool_name": name, "content": result})
