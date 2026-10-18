@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -25,6 +26,7 @@ def cmd_run(args) -> int:
     privacy.start_logging(config.data_dir() / "logs", int(cfg["privacy"]["log_days"]))
     if args.mode:
         modes.switch(cfg, args.mode)
+    _stop_on_sigterm()
     if args.server:
         return run_server(cfg)
     print("Loading the speech models (the first start downloads them)...", flush=True)
@@ -44,6 +46,12 @@ def cmd_run(args) -> int:
     except KeyboardInterrupt:
         assistant.stop()
     return 0
+
+
+def _stop_on_sigterm() -> None:
+    """`systemctl stop` sends SIGTERM, whose default skips atexit hooks (Firefox then keeps a session it refuses
+    to share); end the way Ctrl+C does instead."""
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
 
 
 def _start_phone(cfg: dict, assistant):
