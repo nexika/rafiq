@@ -4,7 +4,9 @@ the answer is said when it is ready.
 Each task is a Claude agent loop of its own, with only the tools that read (web search, reading a
 page, arithmetic): nobody is there to say yes to an action, so tools that change something are left
 out. Every task is a paid model call, so its cost is added up from the tokens it used and shown.
-Tasks live in memory: a restart forgets them.
+Tasks live in memory: a restart forgets them. A task can be cancelled (by voice, or in the panel): it ends
+after the step it is running, keeping the cost so far. Stop doesn't cancel tasks: it is for the request being
+answered, which a task outlives.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from . import lang as lang_mod
@@ -39,11 +41,19 @@ class AgentResult:
 
 
 class Agent(Protocol):
-    def run(self, goal: str, tag: str) -> AgentResult: ...
+    def run(self, goal: str, tag: str, cancelled: threading.Event | None = None) -> AgentResult: ...
 
 
 class TooManyTasks(Exception):
     pass
+
+
+class Cancelled(Exception):
+    """The task was cancelled; `cost` is what it spent until then."""
+
+    def __init__(self, cost: float | None):
+        super().__init__("cancelled")
+        self.cost = cost
 
 
 def cost_of(model: str, input_tokens: int, output_tokens: int, prices: dict) -> float | None:
@@ -67,14 +77,21 @@ class ClaudeAgent:
             self._client = anthropic.Anthropic(api_key=self.cfg["anthropic_api_key"], max_retries=2, timeout=120)
         return self._client
 
-    def run(self, goal: str, tag: str) -> AgentResult:
+    def run(self, goal: str, tag: str, cancelled: threading.Event | None = None) -> AgentResult:
+        """The answer; Cancelled when `cancelled` is set: checked before each model call and each tool, so a
+        tool already running finishes."""
         settings = self.cfg["tasks"]
         model = settings["model"] or self.cfg["brain"]["claude_model"]
         language = lang_mod.NAMES.get(tag, "English")
         messages = [{"role": "user", "content": f"{goal}\n[Answer in {language}.]"}]
         schemas = claude_schemas(self.tools)
         used_in = used_out = 0
+        def stop_if_cancelled() -> None:
+            if cancelled is not None and cancelled.is_set():
+                raise Cancelled(cost_of(model, used_in, used_out, settings["prices"]))
+
         for _ in range(MAX_STEPS):
+            stop_if_cancelled()
             resp = self.client().messages.create(model=model, max_tokens=settings["max_tokens"],
                                                  system=AGENT_SYSTEM.format(language=language),
                                                  tools=schemas, messages=messages)
@@ -85,9 +102,12 @@ class ClaudeAgent:
             if not calls:
                 text = " ".join(b.text for b in resp.content if b.type == "text").strip()
                 return AgentResult(text, cost_of(model, used_in, used_out, settings["prices"]))
-            messages.append({"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": c.id, "content": self._run_tool(c.name, c.input or {})}
-                for c in calls]})
+            results = []
+            for c in calls:
+                stop_if_cancelled()
+                results.append({"type": "tool_result", "tool_use_id": c.id,
+                                "content": self._run_tool(c.name, c.input or {})})
+            messages.append({"role": "user", "content": results})
         raise RuntimeError(f"gave up after {MAX_STEPS} steps")
 
     def _run_tool(self, name: str, args: dict) -> str:
@@ -106,11 +126,12 @@ class Task:
     goal: str
     tag: str                 # the language it was asked in, so the answer is said in that language
     started: float
-    state: str = "running"   # "running", "done" or "failed"
+    state: str = "running"   # "running", "done", "failed" or "cancelled"
     result: str = ""
     error: str = ""
     cost: float | None = None
     finished: float | None = None
+    cancelled: threading.Event = field(default_factory=threading.Event, repr=False, compare=False)
 
 
 def _in_a_thread(fn: Callable[[], None]) -> None:
@@ -138,14 +159,25 @@ class Tasks:
         self.spawn(lambda: self._run(task))
         return task
 
+    def cancel(self, task_id: str) -> bool:
+        """Cancel a running task; False when there is none with that id, or it already ended."""
+        with self.lock:
+            task = self.tasks.get(task_id)
+            if task is None or task.state != "running":
+                return False
+            task.cancelled.set()
+        return True
+
     def all(self) -> list[Task]:
         with self.lock:
             return sorted(self.tasks.values(), key=lambda t: t.started)
 
     def _run(self, task: Task) -> None:
         try:
-            result = self.agent.run(task.goal, task.tag)
+            result = self.agent.run(task.goal, task.tag, task.cancelled)
             task.result, task.cost, task.state = result.text, result.cost, "done"
+        except Cancelled as exc:
+            task.cost, task.state = exc.cost, "cancelled"
         except Exception as exc:     # recorded, shown and said: a thread must not lose it
             task.error, task.state = f"{type(exc).__name__}: {exc}", "failed"
         task.finished = self.clock()

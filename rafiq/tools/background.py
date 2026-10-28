@@ -26,6 +26,20 @@ def start_background_task(goal: str, ctx=None) -> str:
     return f"started task {task.id}: {goal}"
 
 
+@tool("cancel_task",
+      "Cancel a background task the user no longer wants. It ends after the step it is running and keeps "
+      "what it cost so far. Find its id with background_tasks first.",
+      {"id": {"type": "string", "description": "the task's id, from background_tasks"}},
+      required=("id",), level="act")
+def cancel_task(id: str, ctx=None) -> str:
+    tasks = getattr(ctx, "tasks", None)
+    if tasks is None:
+        return OFF
+    if not tasks.cancel(id):
+        return f"error: no running task {id}; it may have finished already"
+    return f"cancelling task {id}: it ends after the step it is running, and Rafiq says so"
+
+
 def _cost(cost: float | None) -> str:
     return f"${cost:.4f}" if cost is not None else "cost unknown"
 

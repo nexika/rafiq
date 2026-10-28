@@ -881,6 +881,8 @@ class Assistant:
         """Said on this thread, between requests, like an alarm."""
         if task.state == "done":
             text = lang.phrase("task_done", task.tag, result=task.result)
+        elif task.state == "cancelled":
+            text = lang.phrase("task_cancelled", task.tag, goal=task.goal)
         else:
             text = lang.phrase("task_failed", task.tag, goal=task.goal)
         self.submit("say", text=text, tag=lang.script_language(text, task.tag))
