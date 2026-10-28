@@ -33,6 +33,12 @@ def test_the_unit_runs_rafiq_with_this_python_and_restarts_on_failure():
     assert "WantedBy=default.target" in text
 
 
+def test_the_unit_caps_memory_so_a_runaway_rafiq_cannot_fill_the_computer():
+    text = service.unit_text(python="/usr/bin/python3")
+    assert "MemoryHigh=1500M" in text
+    assert "MemoryMax=2G" in text
+
+
 def test_the_unit_never_imports_rafiq_from_the_folder_it_starts_in():
     # systemd starts in ~, where the checkout folder ~/rafiq would shadow the package.
     assert " -P -m rafiq run" in service.unit_text(python="/usr/bin/python3")
