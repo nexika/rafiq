@@ -1,0 +1,20 @@
+[package]
+name = "rafiq-widget"
+version = "0.1.0"
+description = "Rafiq's widget: what Rafiq is doing, step by step"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"
+toml = "0.8"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

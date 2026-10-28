@@ -1,0 +1,9 @@
+{
+  "name": "rafiq-widget",
+  "private": true,
+  "type": "module",
+  "description": "Rafiq's widget. No packages: the page is plain HTML and JS, the shell is Tauri (src-tauri).",
+  "scripts": {
+    "test": "node --test"
+  }
+}
