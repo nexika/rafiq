@@ -194,6 +194,9 @@ user_id = ""                    # your Discord user id, for "who mentioned me"
 seconds = 8                     # how long to listen to the room or to this computer
 keep = 20                       # how many recognised songs to remember
 
+[prof]                          # Nexika's prof plugin: explain at your level, record what you learned
+helper = ""                     # empty finds the newest prof installed for Claude Code; or the path to prof_store.py
+
 [video]                         # "explain this video": its sound stays here; only the transcript goes to the brain
 max_minutes = 20                # stop listening after this long, and explain what was heard
 chunk_seconds = 30              # transcribed and summarised this much at a time

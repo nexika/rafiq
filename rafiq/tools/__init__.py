@@ -124,6 +124,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         display,
         everyday,
         finance,
+        learning,
         lists,
         media,
         memory,

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import lang as lang_mod
-from . import modes, persona, router, timing
+from . import modes, persona, prof, router, timing
 from .facts import Facts
 from .tools import Tool, claude_schemas, local_tools, ollama_schemas, openai_schemas
 from .tts import Sentences
@@ -210,7 +210,8 @@ def system_prompt(cfg: dict) -> str:
     """The same text for every request, whatever the language, so a local model reuses its cached
     reading of it (and of the tools) instead of reading it again each time."""
     city = cfg.get("place", {}).get("city")
-    return SYSTEM.format(user=cfg.get("user_name") or "the user", place=f"The user is in {city}." if city else "")
+    text = SYSTEM.format(user=cfg.get("user_name") or "the user", place=f"The user is in {city}." if city else "")
+    return text + prof.note()            # empty without a prof profile; the same for every request otherwise
 
 
 def _one_line(fact: str) -> str:

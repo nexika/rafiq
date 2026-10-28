@@ -18,7 +18,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from . import audio
+from . import audio, prof
 from . import lang as lang_mod
 
 SILENT_RMS = 1e-4            # an output that plays nothing gives zeros
@@ -96,7 +96,8 @@ class VideoWatch:
             self.on_event("video", {"state": "explaining"})
             language = lang_mod.NAMES.get(tag, "English")
             asked = f'The user asked: "{question}". ' if question.strip() else ""
-            text = self.complete(FINAL.format(language=language, question=asked), f"The summary:\n{summary}")
+            system = FINAL.format(language=language, question=asked) + prof.note()   # at the learner's level
+            text = self.complete(system, f"The summary:\n{summary}")
             self.on_done(text or lang_mod.phrase("brain_down", tag), tag)
         except FileNotFoundError:
             why = "recording this computer's sound needs parec (install pulseaudio-utils)"
