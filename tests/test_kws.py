@@ -176,12 +176,12 @@ def test_recordings_saved_before_languages_were_kept_still_load(tmp_path):
 
 
 def wake_with(tag, conversation):
-    from rafiq.assistant import Assistant
+    from rafiq.assistant import Assistant, Events
 
     a = object.__new__(Assistant)
     a.spotter = type("S", (), {"threshold": 1.0, "best": lambda self, frames: (0.2, tag)})()
     a.mel = lambda audio: audio
-    a.events = type("E", (), {"publish": lambda self, *args: None})()
+    a.events = Events()
     a.name_seconds, a.tag = 0.8, conversation
     greeted = []
     a._listen_for_request = lambda greet=True: greeted.append(a.tag)
@@ -202,7 +202,7 @@ def test_the_name_said_in_latin_letters_keeps_the_conversation_language():
 
 
 def test_the_whisper_wake_listener_answers_to_another_name_from_the_settings():
-    from rafiq.assistant import Assistant
+    from rafiq.assistant import Assistant, Events
 
     a = object.__new__(Assistant)
     a.follow_up_until, a.spotter, a.wake_names, a.tag = 0.0, None, ("Jarvis",), "en"
@@ -214,7 +214,7 @@ def test_the_whisper_wake_listener_answers_to_another_name_from_the_settings():
             return type("H", (), {"text": "Jarvis, what time is it?", "lang": "en"})()
 
     a.wake_stt = WakeSTT()
-    a.events = type("E", (), {"publish": lambda self, *args: None})()
+    a.events = Events()
     a.hear = lambda audio: ("Jarvis, what time is it?", "en")
     asked = []
     a.respond = lambda text, tag: asked.append(text)

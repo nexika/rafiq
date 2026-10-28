@@ -116,5 +116,5 @@ def test_respond_plays_directly_without_the_model(monkeypatch):
     assert a.brain.asked == [] and len(opened) == 1 and "أم كلثوم" in said[0][0]
     a.respond("what time is it", "en")
     assert a.brain.asked == ["what time is it"]
-    last = a.events.history[-1]
+    last = [e for e in a.events.history if e["kind"] == "said"][-1]
     assert (last["kind"], last["text"], last["tag"]) == ("said", "from the model", "en")

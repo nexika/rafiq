@@ -260,6 +260,8 @@ class Brain:
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
+        self.steps = 0
+        self.open_steps: dict[int, tuple[str, float]] = {}   # step_id: its tool and when it was asked for
         self._claude = None
         self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
 
@@ -283,6 +285,7 @@ class Brain:
         """Answer one thing the user said. In auto mode, tries Claude, OpenAI, then Ollama. With on_speech,
         every word of the answer also goes to on_speech, sentence by sentence, as soon as it is known."""
         history = self.memory.recent(self.clock(), tag)
+        self.steps = 0                       # step_id counts the tool calls of this request, from 1
         if self.cfg["brain"].get("routing", True):
             route = router.route(text, self.tools)
         else:
@@ -296,7 +299,10 @@ class Brain:
                 run = {"claude": self._claude_turn, "openai": self._openai_turn, "ollama": self._ollama_turn}[backend]
                 # A local model gets its smaller set when the router kept every tool.
                 tools = self.local_tools() if backend == "ollama" and route.name == "all" else route.tools
-                answer = run(history, text, tag, ctx, tools, Budget(limits, self.clock, deadline, said=text), voice)
+                try:
+                    answer = run(history, text, tag, ctx, tools, Budget(limits, self.clock, deadline, said=text), voice)
+                finally:
+                    self._end_open_steps()
                 voice.end()
                 self.memory.add(text, answer, self.clock(), tag)
                 self.on_event("brain", {"backend": backend, "route": route.name})
@@ -415,11 +421,39 @@ class Brain:
             return self.confirm(action, tag, can_remember=can_remember)
         return self.confirm(action, tag)
 
+    def _queue(self, names: list[str]) -> list[int]:
+        """Number the tool calls of one model reply, and show them all as queued before the first runs."""
+        steps = []
+        for name in names:
+            self.steps += 1
+            steps.append(self.steps)
+            self.open_steps[self.steps] = (name, self.clock())
+            self._step(self.steps, "queued")
+        return steps
+
+    def _step(self, step: int, status: str) -> None:
+        """A step's state for the widget: never its arguments or result, which stay in the tool event.
+        `started` is when the model asked for it; a step that ends says when."""
+        name, started = self.open_steps[step]
+        event = {"step_id": step, "name": name, "status": status, "started": started}
+        if status in ("done", "failed", "declined"):
+            del self.open_steps[step]
+            event["ended"] = self.clock()
+        self.on_event("step", event)
+
+    def _end_open_steps(self) -> None:
+        """A turn that stopped early (an error, a second broken call) leaves no step looking unfinished."""
+        for step in list(self.open_steps):
+            self._step(step, "failed")
+
     def _run_tool(self, name: str, args: dict, tag: str, ctx, tools: dict[str, Tool],
-                  voice: Voice | None = None, budget: Budget | None = None) -> str:
+                  voice: Voice | None = None, budget: Budget | None = None, step: int | None = None) -> str:
         """Run a tool the model asked for; only the ones it was offered for this request."""
+        if step is None:
+            step = self._queue([name])[0]
         tool = tools.get(name)
         if tool is None:
+            self._step(step, "failed")
             return f"error: there is no tool named {name}"
         action = tool.action(args, ctx)
         can_remember = self.approvals is not None and not tool.always_asks
@@ -427,15 +461,19 @@ class Brain:
         if unsaid:
             action, can_remember = f'send "{unsaid}" out to the internet, though you didn\'t say it', False
         if action and not (can_remember and self.approvals.allowed(name)):
+            self._step(step, "asking")
             answer = self._ask(action, tag, can_remember)
             if not answer:
-                self.on_event("tool", {"name": name, "args": args, "result": "declined"})
+                self._step(step, "declined")
+                self.on_event("tool", {"name": name, "args": "(hidden)" if tool.private else args, "result": "declined",
+                                       "step_id": step})
                 return "The user said no; it was not done. Tell them briefly that you didn't do it."
             if answer == "always" and can_remember:
                 self.approvals.remember(name)
-        self.on_event("tool_start", {"name": name})
+        self.on_event("tool_start", {"name": name, "step_id": step})
+        self._step(step, "running")
         if tool.slow:
-            self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag})
+            self.on_event("waiting", {"name": name, "text": tool.waiting(tag), "tag": tag, "step_id": step})
             if voice is not None:
                 voice.wait(tool.waiting(tag))
         try:
@@ -447,9 +485,12 @@ class Brain:
             budget.read_private = True
         if tool.private:
             hidden = "error (hidden)" if result.startswith("error") else "(hidden)"
-            self.on_event("tool", {"name": name, "args": "(hidden)", "result": hidden, "card": tool.card})
+            self.on_event("tool", {"name": name, "args": "(hidden)", "result": hidden, "card": tool.card,
+                                   "step_id": step})
         else:
-            self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card})
+            self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card,
+                                   "step_id": step})
+        self._step(step, "failed" if result.startswith("error") else "done")
         return result[:8000]
 
     def spend(self) -> dict:
@@ -529,10 +570,11 @@ class Brain:
             if not calls:
                 return " ".join(b.text for b in resp.content if b.type == "text").strip()
             budget.tool_calls(len(calls))
+            steps = self._queue([c.name for c in calls])
             messages.append({"role": "user", "content": [
                 {"type": "tool_result", "tool_use_id": c.id,
-                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools, voice, budget)}
-                for c in calls]})
+                 "content": self._run_tool(c.name, c.input or {}, tag, ctx, tools, voice, budget, step)}
+                for c, step in zip(calls, steps, strict=True)]})
 
     def _claude_text(self, system: str, text: str) -> str:
         import anthropic
@@ -614,7 +656,8 @@ class Brain:
                 voice.text(answer)
                 return answer
             budget.tool_calls(len(calls))
-            for call in calls:
+            steps = self._queue([(call.get("function") or {}).get("name", "") for call in calls])
+            for call, step in zip(calls, steps, strict=True):
                 fn = call.get("function") or {}
                 try:
                     args = json.loads(fn.get("arguments") or "{}")
@@ -623,7 +666,8 @@ class Brain:
                 if not isinstance(args, dict):
                     args = {}
                 messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
-                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, tools, voice, budget)})
+                                 "content": self._run_tool(fn.get("name", ""), args, tag, ctx, tools, voice, budget,
+                                                           step)})
 
     # ------------------------------------------------------------------ Ollama
 
@@ -658,7 +702,8 @@ class Brain:
                 voice.text(answer)
                 return answer
             budget.tool_calls(len(calls))
-            for call in calls:
+            steps = self._queue([(call.get("function") or {}).get("name", "") for call in calls])
+            for call, step in zip(calls, steps, strict=True):
                 fn = call.get("function") or {}
                 name = fn.get("name", "")
                 args, problem = check_arguments(tools.get(name), fn.get("arguments"))
@@ -668,8 +713,11 @@ class Brain:
                     if retried:
                         raise BrainError(f"broken tool call: {problem}")
                     retried = True
-                    self.on_event("tool", {"name": name, "args": fn.get("arguments"), "result": problem})
+                    self._step(step, "failed")
+                    hide = tools.get(name) is not None and tools[name].private
+                    self.on_event("tool", {"name": name, "args": "(hidden)" if hide else fn.get("arguments"),
+                                           "result": problem, "step_id": step})
                     result = f"error: {problem}. Call {name} again with valid JSON arguments."
                 else:
-                    result = self._run_tool(name, args, tag, ctx, tools, voice, budget)
+                    result = self._run_tool(name, args, tag, ctx, tools, voice, budget, step)
                 messages.append({"role": "tool", "tool_name": name, "content": result})

@@ -182,3 +182,9 @@ def test_the_agent_gives_up_after_too_many_steps():
                for i in range(50)]
     with pytest.raises(RuntimeError):
         ClaudeAgent(config.load(), agent_tools([]), client=FakeClaude(endless)).run("x", "en")
+
+
+def test_a_background_task_reports_under_its_own_run_id():
+    tasks, _, events = make_tasks(FakeAgent(AgentResult("done", None)))
+    task = tasks.start("find a flight", "en")
+    assert {d["run_id"] for k, d in events if k == "task"} == {f"task-{task.id}"}
