@@ -160,3 +160,9 @@ def test_service_file_runs_rafiq_from_its_venv():
     unit = (Path(hosting.__file__).parent / "rafiq.service").read_text()
     assert "ExecStart=" in unit and "rafiq run" in unit
     assert "Restart=on-failure" in unit
+
+
+def test_service_file_caps_memory_like_the_unit_rafiq_writes():
+    unit = (Path(hosting.__file__).parent / "rafiq.service").read_text()
+    assert "MemoryHigh=1500M" in unit
+    assert "MemoryMax=2G" in unit

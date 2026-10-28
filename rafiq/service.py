@@ -62,6 +62,10 @@ def unit_text(python: str | None = None) -> str:
         f"ExecStart={_quote(python)} -P -m rafiq run",
         "Restart=on-failure",
         "RestartSec=5",
+        # Rafiq runs in about 150 MB. A runaway one once reached 10.5 GB of a 14 GB laptop and the kernel
+        # killed it; with these caps systemd squeezes, then restarts, Rafiq alone.
+        "MemoryHigh=1500M",
+        "MemoryMax=2G",
         "Environment=PYTHONUNBUFFERED=1",      # print() reaches the journal at once
         f"EnvironmentFile=-{env_file()}",
     ]

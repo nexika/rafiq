@@ -13,6 +13,9 @@ Wants=network-online.target
 ExecStart=%h/rafiq/.venv/bin/rafiq run
 Restart=on-failure
 RestartSec=5
+# Rafiq runs in about 150 MB; past these systemd squeezes, then restarts, Rafiq alone.
+MemoryHigh=1500M
+MemoryMax=2G
 # Keys: put ANTHROPIC_API_KEY=... and the others in this file (readable only by you).
 EnvironmentFile=-%h/.config/rafiq/env
 Environment=PYTHONUNBUFFERED=1

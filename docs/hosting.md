@@ -65,6 +65,9 @@ systemctl --user enable --now rafiq
 sudo loginctl enable-linger "$USER"     # start at boot and keep running when you log out
 ```
 
+The unit also caps Rafiq's memory. Rafiq runs in about 150 MB. Past `MemoryHigh=1500M` systemd slows
+it down, and past `MemoryMax=2G` it restarts Rafiq alone, so a runaway Rafiq can't fill the computer.
+
 If the checkout isn't `~/rafiq`, edit the `ExecStart=` line first. Logs:
 `journalctl --user -u rafiq -f`.
 
