@@ -121,6 +121,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         clipboard,
         content,
         dev,
+        display,
         everyday,
         finance,
         lists,

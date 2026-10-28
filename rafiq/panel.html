@@ -299,7 +299,9 @@ function add(cls, text, meta) {
   el.append(document.createTextNode(text));
   log.append(el);
   el.scrollIntoView({ block: "end", behavior: "smooth" });
+  return el;
 }
+const plans = {};          // one element per plan, updated as its steps are done
 function showSpending(e) {
   const el = document.getElementById("spending"), money = (n) => n.toFixed(2) + " " + e.currency;
   el.textContent = "Spent today " + money(e.today) + (e.daily_cap ? " of " + money(e.daily_cap) : "")
@@ -342,6 +344,15 @@ function handle(e) {
     case "brain": stateEl.dataset.backend = e.backend; break;
     case "spending": showSpending(e); break;
     case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
+    case "plan": {
+      const text = "▤ " + e.title + "\n" + e.steps.map((s, i) => (i < e.done ? "✓ " : "○ ") + s).join("\n");
+      const key = (e.run_id || "") + "\u0000" + e.title, el = plans[key];
+      if (el) { el.lastChild.textContent = text; el.dataset.text = text; } else plans[key] = add("tool", text);
+    } break;
+    case "explain": add("msg rafiq", e.text, (e.source === "mcp" ? "Another program, through Rafiq" : "Rafiq explains")
+      + " · " + (LANG[e.tag] || e.tag)); break;
+    case "card": add("tool", "▣ " + e.card + "\n" + Object.entries(e.data).map(([k, v]) => k + ": " + v).join("\n"));
+      break;
     case "task": add(e.state === "failed" ? "note err" : "note", "Background task “" + e.goal + "”: " + e.state
       + (e.state === "running" ? "" : " (" + (e.cost == null ? "cost unknown" : "$" + e.cost.toFixed(4)) + ")\n"
       + e.result)); break;

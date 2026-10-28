@@ -500,3 +500,16 @@ def test_a_declined_private_tool_hides_its_arguments(ollama):
     brain.on_event = lambda kind, data: events.append((kind, data))
     brain.think("close my bank tab", "en")
     assert "my bank" not in str([d for k, d in events if k == "tool"])
+
+
+def test_a_tool_can_reach_the_voice_of_the_request_it_runs_in(ollama):
+    script, _ = ollama
+    seen = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "peek", "arguments": {}}}]},
+               {"role": "assistant", "content": "Done."}]
+    brain = make_brain()
+    brain.tools["peek"] = Tool("peek", "peek", lambda: seen.append(brain.voice) or "ok")
+    brain.cfg["brain"]["routing"] = False
+    brain.cfg["brain"]["ollama_tools"] = "all"
+    brain.think("peek", "en", on_speech=lambda text, tag: None)
+    assert seen[0] is not None and brain.voice is None

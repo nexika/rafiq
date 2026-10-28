@@ -532,6 +532,13 @@ unit conversion. Nothing that changes anything is offered (no power, email, apps
 timers), and never a tool that would ask you first. Every call is logged to
 `~/.config/rafiq/data/mcp.log`.
 
+Three more tools let the other program show its work in Rafiq's panel (and the widget, later):
+`show_steps` shows its plan and how far it got, `show_card` shows music, news, weather or a timer,
+and `explain` shows an explanation and reads it aloud with Rafiq's voice. They need `rafiq run` to be
+running, and reach it through the panel with its token. Rafiq says first that another program is
+speaking, and stays quiet while muted, in quiet hours or while it waits for your yes. Rafiq's own brain
+gets them too, on requests that keep every tool.
+
 ```bash
 claude mcp add rafiq -- /path/to/rafiq/.venv/bin/rafiq mcp
 ```
