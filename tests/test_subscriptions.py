@@ -218,11 +218,11 @@ def panel():
     server.shutdown()
 
 
-def test_the_page_carries_its_token(panel):
+def test_the_page_never_carries_its_token(panel):
     from test_brain_panel import request
 
     status, page = request(panel, "/subscriptions")
-    assert status == 200 and "t" * 40 in page and "__TOKEN__" not in page
+    assert status == 200 and "t" * 40 not in page and "__TOKEN__" not in page
 
 
 def test_the_panel_adds_and_lists_subscriptions(panel):
@@ -238,7 +238,7 @@ def test_the_panel_adds_and_lists_subscriptions(panel):
 def test_the_panel_refuses_bad_or_untokened_requests(panel):
     from test_brain_panel import request
 
-    assert request(panel, "/api/subscriptions?token=" + "x" * 40)[0] == 403
+    assert request(panel, "/api/subscriptions?token=" + "x" * 40, token=None)[0] == 403
     assert request(panel, "/api/subscriptions", {"action": "add", "name": "x"}, token=None)[0] == 403
     status, text = request(panel, "/api/subscriptions", {"action": "add", "name": "x", "amount": -3})
     assert status == 400 and "amount" in json.loads(text)["error"]

@@ -251,7 +251,8 @@ def call(port, path, body=None, token="t" * 40):
 
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method="POST" if body is not None else "GET",
                                  data=json.dumps(body).encode() if body is not None else None)
-    req.add_header("X-Rafiq-Token", token)
+    if token:
+        req.add_header("X-Rafiq-Token", token)
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status, json.loads(resp.read() or b"{}")
@@ -274,8 +275,8 @@ def test_the_panel_lists_and_searches_the_history_with_the_privacy_status(panel,
 def test_the_history_needs_the_token(panel):
     assistant, port = panel
     assistant.respond("secret", "en")
-    assert call(port, "/api/history")[0] == 403
-    assert call(port, "/api/history?token=" + "x" * 40)[0] == 403
+    assert call(port, "/api/history", token=None)[0] == 403
+    assert call(port, "/api/history?token=" + "x" * 40, token=None)[0] == 403
     assert call(port, "/api/history/clear", {}, token="x" * 40)[0] == 403
     assert len(assistant.history.entries()) == 1
 

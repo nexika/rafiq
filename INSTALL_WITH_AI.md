@@ -60,8 +60,8 @@ Then guide me in this order:
 7. Try a voice: `.venv/bin/rafiq say "Hello, I am Rafiq"`, and the brain:
    `.venv/bin/rafiq ask "what time is it in Tokyo?"`
 8. Teach it my voice saying its name (about two minutes, in a quiet room): `.venv/bin/rafiq enroll`
-9. Start it: `.venv/bin/rafiq run`, then say "Rafiq, what time is it?" The panel opens at
-   http://127.0.0.1:8765/ and shows what it heard. Ctrl+C stops it.
+9. Start it: `.venv/bin/rafiq run`, then say "Rafiq, what time is it?" In another terminal,
+   `.venv/bin/rafiq panel` opens its panel in the browser, which shows what it heard. Ctrl+C stops it.
 10. Optional: a keyboard shortcut to call it without the name. In GNOME: Settings → Keyboard →
     Custom Shortcuts, command `/home/<me>/rafiq/.venv/bin/rafiq listen`, keys such as Super+R.
 

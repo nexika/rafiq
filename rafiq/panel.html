@@ -280,7 +280,32 @@ button.danger { color: var(--err); }
   </form>
 </footer>
 <script>
-const TOKEN = "__TOKEN__";
+// The panel's session (#222). `rafiq panel` opens this page with a one-time key after "#", which no server ever
+// receives; the key becomes a session kept for this tab only (sessionStorage belongs to this port, a cookie
+// would be shared with every program listening on 127.0.0.1).
+let SESSION = "";
+try { SESSION = sessionStorage.getItem("rafiq-session") || ""; } catch (e) { /* storage off: memory only */ }
+async function openSession() {
+  const key = new URLSearchParams(location.hash.slice(1)).get("key");
+  if (key) {
+    history.replaceState(null, "", location.pathname);
+    const r = await fetch("/api/panel-key/redeem", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-Rafiq-Panel": "1" }, body: JSON.stringify({ key }) });
+    if (r.ok) {
+      SESSION = (await r.json()).session;
+      try { sessionStorage.setItem("rafiq-session", SESSION); } catch (e) { /* memory only */ }
+    }
+  }
+  if (!SESSION) closed();
+  return Boolean(SESSION);
+}
+function closed() {
+  try { sessionStorage.removeItem("rafiq-session"); } catch (e) { /* nothing kept */ }
+  const note = document.createElement("p");
+  note.style.cssText = "max-width:34em;margin:15vh auto;padding:0 16px;font:16px/1.5 system-ui,sans-serif";
+  note.textContent = "Open Rafiq's panel with: rafiq panel (or rafiq panel --print to copy its address).";
+  document.body.replaceChildren(note);
+}
 const STATES = { idle: "Waiting for “Rafiq”", listening: "Listening…", thinking: "Thinking…",
   speaking: "Speaking", dictating: "Dictating into the focused window: say “stop dictating” to finish",
   muted: "Muted: not listening for “Rafiq”", starting: "Starting…",
@@ -321,9 +346,10 @@ function setState(s) {
   }
 }
 async function post(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Session": SESSION },
     body: JSON.stringify(body || {}) });
   if (r.status === 400) { const e = await r.json().catch(() => ({})); add("note err", e.error || "Rafiq refused that."); }
+  else if (r.status === 403) closed();           // the session ended, or Rafiq restarted
   else if (!r.ok) add("note err", "The panel could not reach Rafiq (" + r.status + ").");
 }
 const LANG = { en: "English", fr: "Français", es: "Español", de: "Deutsch", ar: "العربية", "ar-EG": "مصري" };
@@ -417,7 +443,7 @@ function showPrivacy(p) {
 const historyBox = document.getElementById("history"), entriesEl = document.getElementById("entries");
 async function loadHistory() {
   const q = document.getElementById("search").value;
-  const r = await fetch("/api/history?token=" + encodeURIComponent(TOKEN) + "&q=" + encodeURIComponent(q));
+  const r = await fetch("/api/history?q=" + encodeURIComponent(q), { headers: { "X-Rafiq-Session": SESSION } });
   if (!r.ok) return add("note err", "The panel could not read the history (" + r.status + ").");
   const data = await r.json();
   showPrivacy(data.privacy);
@@ -476,7 +502,7 @@ function button(label, path, name, ask) {
     if (ask && !confirm(ask)) return;
     b.disabled = true;
     const r = await fetch(path, { method: "POST", body: JSON.stringify({ name }),
-      headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN } });
+      headers: { "Content-Type": "application/json", "X-Rafiq-Session": SESSION } });
     if (!r.ok) alert((await r.json().catch(() => ({}))).error || "Refused (" + r.status + ")");
     show(page);
   };
@@ -534,14 +560,30 @@ async function show(name) {
   for (const t of document.querySelectorAll("nav button")) t.setAttribute("aria-selected", t.dataset.page === name);
   for (const s of document.querySelectorAll("main section")) s.hidden = s.id !== "page-" + name;
   if (!RENDER[name]) return;
-  const r = await fetch("/api/" + name, { headers: { "X-Rafiq-Token": TOKEN } });
+  const r = await fetch("/api/" + name, { headers: { "X-Rafiq-Session": SESSION } });
   if (r.ok) RENDER[name](await r.json());
 }
 for (const t of document.querySelectorAll("nav button")) t.onclick = () => show(t.dataset.page);
-function connect() {
-  const es = new EventSource("/events?token=" + encodeURIComponent(TOKEN));
-  es.onmessage = (m) => handle(JSON.parse(m.data));
-  es.onerror = () => { setState("offline"); es.close(); setTimeout(connect, 3000); };
+// The event stream, read with fetch so it can send the session header.
+async function connect() {
+  try {
+    const r = await fetch("/events", { headers: { "X-Rafiq-Session": SESSION } });
+    if (r.status === 403) return closed();          // the session ended, or Rafiq restarted
+    const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let end;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        for (const line of buffer.slice(0, end).split("\n")) if (line.startsWith("data: ")) handle(JSON.parse(line.slice(6)));
+        buffer = buffer.slice(end + 2);
+      }
+    }
+  } catch (e) { /* Rafiq stopped: try again */ }
+  setState("offline");
+  setTimeout(connect, 3000);
 }
 document.getElementById("form").onsubmit = (ev) => {
   ev.preventDefault();
@@ -584,7 +626,7 @@ function fillDrawer() {
   voiceName.value = settings["voice.voices." + voiceTag.value] ?? "";
 }
 async function openDrawer() {
-  const r = await fetch("/api/settings", { headers: { "X-Rafiq-Token": TOKEN } });
+  const r = await fetch("/api/settings", { headers: { "X-Rafiq-Session": SESSION } });
   if (!r.ok) return add("note err", "The panel could not reach Rafiq (" + r.status + ").");
   const s = await r.json();
   settings = s.settings;
@@ -627,7 +669,7 @@ document.getElementById("save").onclick = async () => {
     if (v !== (settings["voice.voices." + tag] ?? "")) changes["voice.voices." + tag] = v;
   if (!Object.keys(changes).length) { savedEl.textContent = "Nothing changed."; return; }
   const r = await fetch("/api/settings", { method: "POST", body: JSON.stringify({ changes }),
-    headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN } });
+    headers: { "Content-Type": "application/json", "X-Rafiq-Session": SESSION } });
   const body = await r.json().catch(() => ({}));
   savedEl.textContent = r.ok ? "Saved to config.toml." : "Not saved: " + (body.error || r.status);
 };
@@ -636,7 +678,7 @@ const backendEl = document.getElementById("backend"), modelEl = document.getElem
 const useEl = document.getElementById("use"), pickerNote = document.getElementById("picker-note");
 let brain = null;
 async function ask(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN },
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Rafiq-Session": SESSION },
     body: JSON.stringify(body || {}) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || "error " + r.status);
@@ -667,8 +709,7 @@ useEl.onclick = async () => {
   modelEl.hidden = useEl.hidden = true;
   loadBrain();
 };
-loadBrain();
-connect();
+openSession().then((open) => { if (open) { loadBrain(); connect(); } });
 </script>
 </body>
 </html>

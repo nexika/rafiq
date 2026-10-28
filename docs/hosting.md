@@ -107,8 +107,9 @@ An SSH tunnel brings the server's panel to your laptop without opening any port:
 ssh -N -L 8765:127.0.0.1:8765 you@server
 ```
 
-Then open `http://127.0.0.1:8765/` on the laptop. The panel only accepts the host names
-`127.0.0.1` and `localhost`, which is what the tunnel gives it.
+Then, on the server, `rafiq panel --print` shows a one-time address; open it on the laptop within two
+minutes. It becomes that tab's session, so the page itself never carries the panel's token. The panel
+only accepts the host names `127.0.0.1` and `localhost`, which is what the tunnel gives it.
 
 With Tailscale or WireGuard you can SSH to the server from anywhere, phone included, the same way.
 Don't change the panel's `host` to the private network's address: anything else on that network
