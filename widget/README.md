@@ -4,8 +4,11 @@ A small window that shows what Rafiq is doing as it happens. The small view show
 running now. The large view shows the whole request: what you asked, the plan and its progress, each step,
 an explanation, cards and the answer. Arabic is shown right to left.
 
-This is the first version (#199). It shows; it doesn't ask yet. Typed requests, the Yes, No and Always buttons,
-and a stop button come next.
+In the large view you can type a request, and answer Rafiq's questions with Yes, No or Always (Always only
+when Rafiq may remember it for that tool). The stop button, shown while Rafiq is busy, cuts its speech and
+keeps it from running the rest of the request: a step already running finishes, and a question waiting is
+answered no. A request typed that can't be sent stays in the box. A private tool's result
+shows as "(hidden)".
 
 ## How it works
 
@@ -16,6 +19,8 @@ and a stop button come next.
   restarts.
 - The page (`ui/`) is plain HTML and JavaScript with no packages. It only gets the events, never the token, and
   draws everything as text.
+- The page asks the Rust side for one of three things: a typed request, an answer, or stop. It never chooses
+  a path, and the Rust side adds the token.
 - It only connects on this computer. A panel set to listen anywhere else is refused.
 - Before it sends the token, it checks in `/proc/net/tcp` that the program listening on the panel's port is
   yours. The token is kept between Rafiq's starts, so while Rafiq is stopped another program could take the

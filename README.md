@@ -528,8 +528,8 @@ not supported.
 
 A small window that shows what Rafiq is doing, step by step: the state and the step running now, or, made
 larger, the whole request with its plan, steps, explanations, cards and answer. It is a separate app built
-with Tauri, in `widget/`, and connects to the running Rafiq on this computer only. This first version shows
-and doesn't ask yet. [widget/README.md](widget/README.md) says how to build it.
+with Tauri, in `widget/`, and connects to the running Rafiq on this computer only. You can type a request
+in it, answer Rafiq's questions and press stop. [widget/README.md](widget/README.md) says how to build it.
 
 ## Rafiq's tools in other programs (MCP)
 

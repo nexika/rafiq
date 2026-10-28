@@ -59,6 +59,7 @@ in the order the model asked for them. A step's `step` event comes again each ti
 | `done` | It finished. |
 | `failed` | It returned an error, raised one, or doesn't exist. |
 | `declined` | The user said no; it didn't run. |
+| `stopped` | The user pressed stop (`POST /api/stop`) before it ran. A tool already running finishes; a question waiting is answered no. |
 
 ```json
 {"kind": "step", "run_id": "3f9c2a1b", "step_id": 1, "name": "weather", "status": "running", "started": 1793180400.01, "time": 1793180400.01, "version": 1}
@@ -66,8 +67,8 @@ in the order the model asked for them. A step's `step` event comes again each ti
 ```
 
 `started` is when the model asked for the tool, the same on every event of the step. `ended` comes
-with `done`, `failed` and `declined`. Every step ends: one left open when a turn stops early is
-ended as `failed`. Both are Unix times. The
+with `done`, `failed`, `declined` and `stopped`. Every step ends: one left open when a turn stops
+early is ended as `failed`, or `stopped` after a stop. Both are Unix times. The
 `tool_start`, `waiting` and `tool` events of a step carry its `step_id` too.
 
 A **background task** runs apart from the request that started it, so its `task` events carry

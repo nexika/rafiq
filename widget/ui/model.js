@@ -7,6 +7,8 @@ const RTL = new Set(["ar", "ar-EG"]);
 // Without a run_id these come from a satellite or the phone (docs/events.md), not from the request on screen.
 const OF_THE_REQUEST = new Set(["heard", "typed", "step", "confirm", "confirmed", "said"]);
 const MAX_CARDS = 4;
+const RESULT_CHARS = 160;
+const HIDDEN = new Set(["(hidden)", "error (hidden)"]);   // what Rafiq sends for a private tool (brain.py)
 
 export function initial() {
   return { problem: "connecting", state: "idle", run: null, request: "", tag: "en", steps: [], plan: null,
@@ -28,14 +30,20 @@ export function reduce(s, e) {
     case "state": return { ...s, state: e.state };
     case "heard": case "typed": return { ...s, request: e.text, tag: e.tag || s.tag };
     case "step": {
-      const step = { id: e.step_id, name: e.name, status: e.status };
-      const known = s.steps.some((x) => x.id === e.step_id);
+      const known = s.steps.find((x) => x.id === e.step_id);
+      const step = { result: null, hidden: false, ...known, id: e.step_id, name: e.name, status: e.status };
       return { ...s, steps: known ? s.steps.map((x) => (x.id === e.step_id ? step : x)) : [...s.steps, step] };
+    }
+    case "tool": {
+      if (e.step_id == null) return s;
+      const hidden = HIDDEN.has(e.result);
+      const result = hidden || typeof e.result !== "string" ? null : e.result.slice(0, RESULT_CHARS);
+      return { ...s, steps: s.steps.map((x) => (x.id === e.step_id ? { ...x, result, hidden } : x)) };
     }
     case "plan": return { ...s, plan: { title: e.title, steps: e.steps, done: e.done } };
     case "explain": return { ...s, explain: { text: e.text, tag: e.tag, source: e.source || null } };
     case "card": return { ...s, cards: [{ card: e.card, data: e.data }, ...s.cards].slice(0, MAX_CARDS) };
-    case "confirm": return { ...s, confirm: e.action };
+    case "confirm": return { ...s, confirm: { action: e.action, always: e.always === true } };
     case "confirmed": return { ...s, confirm: null };
     case "said": return { ...s, answer: e.text, tag: e.tag || s.tag };
     default: return s;
@@ -45,9 +53,15 @@ export function reduce(s, e) {
 /** One line for the small view: a problem, the question waiting, the step running, or the state. */
 export function now(s) {
   if (s.problem) return t(s.problem, s.tag) || t("stopped", s.tag);
-  if (s.confirm) return s.confirm + "?";
+  if (s.confirm) return s.confirm.action + "?";
   const running = s.steps.find((x) => x.status === "running" || x.status === "asking");
   return running ? label(running.name) : t("state_" + s.state, s.tag) || s.state;
+}
+
+/** Whether there is something to stop: Rafiq thinking or speaking, a step running, or a question waiting. */
+export function busy(s) {
+  return ["thinking", "speaking"].includes(s.state) || Boolean(s.confirm)
+    || s.steps.some((x) => x.status === "running" || x.status === "asking");
 }
 
 export function direction(tag) {

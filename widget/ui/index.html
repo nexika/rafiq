@@ -11,6 +11,7 @@
   <header id="bar">
     <span id="dot" aria-hidden="true"></span>
     <span id="now" dir="auto" aria-live="polite"></span>
+    <button id="stop" type="button" hidden>■</button>
     <button id="size" type="button">⤢</button>
   </header>
   <main id="more">
@@ -20,7 +21,14 @@
       <ol id="plan-steps"></ol>
     </section>
     <ol id="steps" class="steps" aria-label="Steps"></ol>
-    <p id="confirm" class="confirm" dir="auto" hidden></p>
+    <section id="confirm" class="confirm" hidden>
+      <p id="confirm-text" dir="auto"></p>
+      <div class="answers">
+        <button id="yes" type="button" class="yes"></button>
+        <button id="always" type="button"></button>
+        <button id="no" type="button"></button>
+      </div>
+    </section>
     <section id="explain" class="explain" hidden>
       <span id="explain-from" class="from"></span>
       <p id="explain-text" dir="auto"></p>
@@ -28,5 +36,10 @@
     <div id="cards" class="cards"></div>
     <p id="answer" class="answer" dir="auto" hidden></p>
   </main>
+  <form id="ask" class="ask">
+    <input id="ask-text" type="text" dir="auto" maxlength="2000" autocomplete="off">
+    <button id="send" type="submit"></button>
+  </form>
+  <p id="notice" class="notice" dir="auto" role="status" hidden></p>
 </body>
 </html>

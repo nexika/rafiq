@@ -65,6 +65,9 @@ class FakeBrain:
     def backends(self):
         return ["ollama"]
 
+    def clear_stop(self):
+        pass
+
     def think(self, text, tag, ctx=None, on_speech=None):
         self.asked.append(text)
         return "an answer"
