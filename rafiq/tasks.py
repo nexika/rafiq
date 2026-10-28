@@ -153,5 +153,6 @@ class Tasks:
         self.on_done(task)
 
     def _publish(self, task: Task) -> None:
-        self.on_event("task", {"id": task.id, "goal": task.goal, "state": task.state, "cost": task.cost,
-                               "result": task.result or task.error})
+        # Its own run: a task outlives the request that started it.
+        self.on_event("task", {"id": task.id, "run_id": f"task-{task.id}", "goal": task.goal, "state": task.state,
+                               "cost": task.cost, "result": task.result or task.error})

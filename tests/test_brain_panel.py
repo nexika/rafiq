@@ -91,7 +91,7 @@ def test_a_slow_tool_announces_a_waiting_phrase_and_each_result_carries_its_card
     brain.on_event = lambda kind, data: events.append((kind, data))
     brain.think("cherche", "fr")
     waits = [d for k, d in events if k == "waiting"]
-    assert waits == [{"name": "web_search", "text": "Je cherche.", "tag": "fr"}]
+    assert waits == [{"name": "web_search", "text": "Je cherche.", "tag": "fr", "step_id": 1}]
     cards = {d["name"]: d["card"] for k, d in events if k == "tool"}
     assert cards == {"web_search": "text", "get_time": "facts"}
 
@@ -363,3 +363,140 @@ def test_an_unknown_mode_from_the_panel_is_refused(panel, body):
     assistant, port = panel
     assert request(port, "/api/mode", body)[0] == 400
     assert assistant.jobs == []
+
+
+# ---------------------------------------------------------------------- steps on the event stream
+
+def steps_of(events):
+    return [d for k, d in events if k == "step"]
+
+
+def test_each_tool_call_is_a_numbered_step_that_runs_then_ends(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "get_time", "arguments": {}}},
+                                                    {"function": {"name": "web_search", "arguments": {}}}]},
+               {"role": "assistant", "content": "Done."}]
+    brain = make_brain()
+    brain.cfg["brain"]["routing"] = False
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("what time is it, and search", "en")
+    assert [(s["step_id"], s["name"], s["status"]) for s in steps_of(events)] == [
+        (1, "get_time", "queued"), (2, "web_search", "queued"),
+        (1, "get_time", "running"), (1, "get_time", "done"),
+        (2, "web_search", "running"), (2, "web_search", "done")]
+    done = [s for s in steps_of(events) if s["status"] == "done"]
+    assert all(s["ended"] >= s["started"] for s in done)
+
+
+def test_the_tool_events_name_their_step(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "get_time", "arguments": {}}}]},
+               {"role": "assistant", "content": "Noon."}]
+    brain = make_brain()
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("what time is it", "en")
+    assert {d["step_id"] for k, d in events if k in ("tool_start", "tool")} == {1}
+
+
+def test_steps_start_again_from_one_on_the_next_request(ollama):
+    script, _ = ollama
+    events = []
+    for _ in range(2):
+        script += [{"role": "assistant", "tool_calls": [{"function": {"name": "get_time", "arguments": {}}}]},
+                   {"role": "assistant", "content": "Noon."}]
+    brain = make_brain()
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("what time is it", "en")
+    brain.think("and now?", "en")
+    assert {s["step_id"] for s in steps_of(events)} == {1}
+
+
+def test_a_step_waiting_for_a_yes_is_asking_and_a_no_ends_it_as_declined(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "power", "arguments": "{}"}}]},
+               {"role": "assistant", "content": "Okay, I didn't."}]
+    brain = make_brain(confirm=lambda action, tag: False)
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("shut down", "en")
+    assert [s["status"] for s in steps_of(events)] == ["queued", "asking", "declined"]
+
+
+def test_a_step_whose_tool_fails_ends_as_failed(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "broken", "arguments": {}}}]},
+               {"role": "assistant", "content": "Sorry."}]
+    brain = make_brain()
+
+    def broken():
+        raise OSError("disk gone")
+
+    brain.tools["broken"] = Tool("broken", "fails", broken)
+    brain.cfg["brain"]["routing"] = False
+    brain.cfg["brain"]["ollama_tools"] = "all"     # the test's own tool is not in the local set
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("break", "en")
+    assert steps_of(events)[-1]["status"] == "failed"
+
+
+def test_a_private_step_shows_neither_arguments_nor_result(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "read_mail",
+                                                                  "arguments": {"query": "bank"}}}]},
+               {"role": "assistant", "content": "Two emails."}]
+    brain = make_brain()
+    brain.tools["read_mail"] = Tool("read_mail", "mail", lambda query="": "secret statement",
+                                    params={"query": {"type": "string"}}, level="private", private=True)
+    brain.cfg["brain"]["routing"] = False
+    brain.cfg["brain"]["ollama_tools"] = "all"     # the test's own tool is not in the local set
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("my mail", "en")
+    for step in steps_of(events):
+        assert "bank" not in str(step) and "secret" not in str(step)
+
+
+def test_a_second_broken_call_still_ends_every_step_of_the_reply(ollama):
+    script, _ = ollama
+    events = []
+    broken = {"function": {"name": "get_time", "arguments": "not json"}}
+    script += [{"role": "assistant", "tool_calls": [broken, broken, {"function": {"name": "get_time",
+                                                                                   "arguments": {}}}]}]
+    brain = make_brain()
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("what time is it", "en")
+    last = {s["step_id"]: s for s in steps_of(events)}
+    assert {i: s["status"] for i, s in last.items()} == {1: "failed", 2: "failed", 3: "failed"}
+    assert all("ended" in s for s in last.values())
+
+
+def test_a_step_with_broken_arguments_keeps_its_start_and_has_an_end(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "get_time", "arguments": "not json"}}]},
+               {"role": "assistant", "content": "Noon."}]
+    brain = make_brain()
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("what time is it", "en")
+    queued, failed = steps_of(events)[:2]
+    assert failed["status"] == "failed" and failed["started"] == queued["started"] and "ended" in failed
+
+
+def test_a_declined_private_tool_hides_its_arguments(ollama):
+    script, _ = ollama
+    events = []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "close_tab",
+                                                                  "arguments": {"tab": "my bank"}}}]},
+               {"role": "assistant", "content": "Okay."}]
+    brain = make_brain(confirm=lambda action, tag: False)
+    brain.tools["close_tab"] = Tool("close_tab", "close a tab", lambda tab="": "closed",
+                                    params={"tab": {"type": "string"}}, confirm="close a tab", level="private",
+                                    private=True)
+    brain.cfg["brain"]["routing"] = False
+    brain.cfg["brain"]["ollama_tools"] = "all"     # the test's own tool is not in the local set
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.think("close my bank tab", "en")
+    assert "my bank" not in str([d for k, d in events if k == "tool"])

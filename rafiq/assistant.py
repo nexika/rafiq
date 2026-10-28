@@ -8,14 +8,17 @@ wake-word listener for the microphone.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
 import queue
 import threading
 import time
+import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -33,6 +36,7 @@ from .gestures import GestureControl, SystemDesktop
 from .gestures import settings as gesture_settings
 from .models import Models
 from .nudges import Nudge, Nudger, OpenRouteService
+from .panel import EVENTS_VERSION
 from .paper_print import MorningPaper
 from .permissions import Approvals
 from .practice import Practice
@@ -84,16 +88,49 @@ class Context:
 @dataclass
 class Events:
     """What happened, for the panel: the last 100 events, and a queue per open panel. Watchers are
-    called with each event as it happens (the answer overlay is one)."""
+    called with each event as it happens (the answer overlay is one). Events published inside `run()`
+    carry its run_id, so a client built apart from Rafiq (the widget) can group a request's steps."""
     history: deque = field(default_factory=lambda: deque(maxlen=100))
     listeners: list = field(default_factory=list)
     watchers: list = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    # A context variable, not an attribute, holding the run and the thread that opened it: the panel's
+    # thread and the background tasks never pick up the request running on the loop, even where a new
+    # thread inherits its parent's context (free-threaded Python).
+    current: contextvars.ContextVar = field(default_factory=lambda: contextvars.ContextVar("rafiq_run", default=None))
+
+    def run_id(self) -> str | None:
+        run = self.current.get()
+        return run[0] if run is not None and run[1] == threading.get_ident() else None
+
+    @contextmanager
+    def run(self) -> Iterator[str]:
+        """One request, from what was heard or typed to the answer. A run inside a run is the same run."""
+        outer = self.run_id()
+        if outer is not None:
+            yield outer
+            return
+        run_id = uuid.uuid4().hex[:8]
+        token = self.current.set((run_id, threading.get_ident()))
+        self.publish("run", {"status": "started"})
+        end: dict = {"status": "failed"}
+        try:
+            yield run_id
+            end["status"] = "done"
+        except Exception as exc:         # said in the run, so a client grouping by run_id sees why
+            end["error"] = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            self.publish("run", end)
+            self.current.reset(token)
 
     def publish(self, kind: str, data: dict, keep: bool = True) -> None:
         """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
         are not replayed to a panel opened later."""
-        event = {"kind": kind, "time": time.time(), **data}
+        event = {"kind": kind, "time": time.time(), "version": EVENTS_VERSION, **data}
+        run_id = self.run_id()
+        if run_id is not None:
+            event.setdefault("run_id", run_id)
         # The log is redacted (privacy.RedactFilter); the panel, on this computer only, is not.
         logger.log(logging.DEBUG if kind == "state" or not keep else logging.INFO, "%s %s", kind,
                    json.dumps(data, ensure_ascii=False, default=str))
@@ -500,6 +537,10 @@ class Assistant:
     def respond(self, text: str, tag: str, source: str = "voice") -> None:
         """Think about one request and say the answer, starting with its first sentence while the
         rest is still being written, and keep both in the history."""
+        with self.events.run():
+            self._respond(text, tag, source)
+
+    def _respond(self, text: str, tag: str, source: str) -> None:
         if not text.strip():
             self.say(lang.phrase("not_heard", tag), tag)
             return
@@ -727,8 +768,9 @@ class Assistant:
         if reply and not data.get("speak"):
             self.silent = True
         try:
-            self.events.publish("typed", {"text": text})
-            self.respond(text, tag, source="typed")
+            with self.events.run():
+                self.events.publish("typed", {"text": text})
+                self.respond(text, tag, source="typed")
         finally:
             self.silent = silent
             if reply:
@@ -832,8 +874,9 @@ class Assistant:
         audio = self.next_utterance(timeout=LISTEN_SECONDS)
         if audio is None:
             return
-        text, tag = self.hear(audio)
-        self.respond(text, tag)
+        with self.events.run():
+            text, tag = self.hear(audio)
+            self.respond(text, tag)
 
     # ------------------------------------------------------------------ the main loop
 
@@ -847,17 +890,19 @@ class Assistant:
             self.tag = tag
         self.events.publish("wake", {"score": round(score, 3), "threshold": round(self.spotter.threshold, 3)})
         if len(audio) / RATE > self.name_seconds + 1.3:    # more than the name: the request came with it
-            text, tag = self.hear(audio)
-            found, command = wake.find(text, self.wake_names)
-            self.respond(command if found else text, tag)
+            with self.events.run():
+                text, tag = self.hear(audio)
+                found, command = wake.find(text, self.wake_names)
+                self.respond(command if found else text, tag)
         else:
             self._listen_for_request(greet=True)
 
     def handle_idle_utterance(self, audio: np.ndarray) -> None:
         if time.monotonic() < self.follow_up_until:      # a follow-up: no name needed
-            text, tag = self.hear(audio)
-            found, rest = wake.find(text, self.wake_names)
-            self.respond(rest if found else text, tag)
+            with self.events.run():
+                text, tag = self.hear(audio)
+                found, rest = wake.find(text, self.wake_names)
+                self.respond(rest if found else text, tag)
             return
         if self.spotter:
             self._spot_with_recordings(audio)
@@ -870,9 +915,10 @@ class Assistant:
             return
         self.events.publish("wake", {"text": spotted.text})
         if len(audio) / RATE > WAKE_SECONDS or len(rest.split()) >= 2:   # "Rafiq, what's the weather?" at once
-            text, tag = self.hear(audio)
-            found, command = wake.find(text, self.wake_names)
-            self.respond(command if found else text, tag)
+            with self.events.run():
+                text, tag = self.hear(audio)
+                found, command = wake.find(text, self.wake_names)
+                self.respond(command if found else text, tag)
         else:
             self.tag = lang.dialect(spotted.lang, spotted.text, self.tag)
             self._listen_for_request(greet=True)

@@ -28,6 +28,8 @@ from urllib.parse import parse_qs, urlparse
 from . import lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
 
+EVENTS_VERSION = 1           # docs/events.md; fields are only added, a removal raises it
+
 MAX_BODY = 10_000
 # How long `rafiq ask` waits for the running Rafiq: a request's own 120 s, a spoken yes, and one already
 # being answered ahead of it.
@@ -124,12 +126,13 @@ def make_handler(assistant, token: str, port: int):
             try:
                 for event in list(assistant.events.history):
                     self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
-                self.wfile.write(f"data: {json.dumps({'kind': 'state', 'state': assistant.state})}\n\n".encode())
-                privacy = {"kind": "privacy", **assistant.privacy()}
-                self.wfile.write(f"data: {json.dumps(privacy)}\n\n".encode())
-                self.wfile.write(f"data: {json.dumps({'kind': 'mode', 'mode': assistant.mode})}\n\n".encode())
-                style = persona.active(getattr(assistant, "cfg", {}))
-                self.wfile.write(f"data: {json.dumps({'kind': 'persona', 'persona': style})}\n\n".encode())
+                # Where things stand now, for a panel that just opened; versioned like every published event.
+                now = [{"kind": "state", "state": assistant.state}, {"kind": "privacy", **assistant.privacy()},
+                       {"kind": "mode", "mode": assistant.mode},
+                       {"kind": "persona", "persona": persona.active(getattr(assistant, "cfg", {}))}]
+                for event in now:
+                    event = {**event, "version": EVENTS_VERSION}
+                    self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
                 self.wfile.flush()
                 while True:
                     try:

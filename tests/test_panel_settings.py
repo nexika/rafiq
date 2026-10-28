@@ -142,7 +142,7 @@ def test_the_panel_hears_which_tool_is_running_before_it_finishes():
     claude_brain(events).think("what time is it", "en")
     kinds = [kind for kind, _ in events]
     assert kinds.index("tool_start") < kinds.index("tool")
-    assert dict(events)["tool_start"] == {"name": "get_time"}
+    assert dict(events)["tool_start"]["name"] == "get_time"
 
 
 def test_claude_tokens_are_counted_and_priced_when_a_price_is_set():
@@ -234,3 +234,10 @@ def test_the_voice_test_button_says_a_line_in_that_language(panel):
     kind, data = assistant.jobs[0]
     assert kind == "say" and data["tag"] == "ar-EG" and data["text"]
     assert len(assistant.jobs) == 1
+
+
+def test_a_claude_tool_call_is_a_step_that_runs_and_ends():
+    events = []
+    claude_brain(events).think("what time is it", "en")
+    assert [(d["step_id"], d["status"]) for k, d in events if k == "step"] == [(1, "queued"), (1, "running"),
+                                                                              (1, "done")]

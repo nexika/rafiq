@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from rafiq import config
-from rafiq.assistant import Assistant, Context
+from rafiq.assistant import Assistant, Context, Events
 from rafiq.practice import Practice
 from rafiq.reader import Reader
 from rafiq.tools import Tool, load_all
@@ -176,7 +176,7 @@ def bare_assistant(scenes, log, confirm=lambda action, tag: True):
     a.publish_spending = lambda tag: None
     a.reader = Reader(interrupt=lambda: None)
     a.speaker = SimpleNamespace(stream=lambda: SimpleNamespace(put=lambda text, tag: None, close=lambda: True))
-    a.events = type("E", (), {"publish": lambda self, kind, data: None})()
+    a.events = Events()
     return a
 
 
