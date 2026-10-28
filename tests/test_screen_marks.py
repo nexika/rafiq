@@ -14,6 +14,33 @@ from rafiq.panel import serve
 from rafiq.tools import load_all, screen
 
 
+@pytest.fixture(autouse=True)
+def never_the_real_screen(monkeypatch, tmp_path):
+    """No test here may take a screenshot of the computer it runs on: a test that needs one gives its own.
+    Replacing screen.capture is not enough (look() and capture() bind theirs as defaults), so the portal's
+    session bus and the screenshot commands are out of reach too."""
+    def real(*args, **kwargs):
+        raise AssertionError("a test tried to take a real screenshot")
+
+    monkeypatch.setattr(screen, "capture", real)
+    monkeypatch.setattr(screen, "portal_screenshot", real)
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))         # no grim, gnome-screenshot or spectacle
+
+
+def test_the_guard_leaves_no_way_to_the_real_screen():
+    """The functions as defined, not as replaced above: they find no portal and no command."""
+    import importlib
+    import subprocess
+
+    original = importlib.reload(screen)
+    try:
+        with pytest.raises(original.ScreenError):
+            original.capture(run=subprocess.run)
+    finally:
+        importlib.reload(screen)
+
+
 def png(width, height):
     """A real (blank) PNG, so its size can be read from it."""
     def chunk(kind, data):

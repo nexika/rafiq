@@ -292,4 +292,6 @@ def look_at_screen(question: str, ctx=None) -> str:
     keep, show = getattr(ctx, "keep_screen", None), getattr(ctx, "show", None)
     if keep is not None and show is not None:
         return look_marked(ctx.cfg, question, ctx.tag, keep, show)
-    return look(ctx.cfg, question, ctx.tag)
+    # Named here, not left to look()'s defaults (bound once, when look() was defined): what is called is
+    # what this module holds now.
+    return look(ctx.cfg, question, ctx.tag, capture=capture, shrink=shrink_png)
