@@ -38,7 +38,23 @@ class Server:
         # Read the saved timers afresh on each call; nothing here adds, cancels or rings them, so the
         # running Rafiq stays the only one writing the file.
         alarms = Scheduler(config.data_dir() / "alarms.json", lambda alarm: None)
-        return SimpleNamespace(cfg=self.cfg, scheduler=alarms, tag="en")
+        return SimpleNamespace(cfg=self.cfg, scheduler=alarms, tag="en", show=self.show)
+
+    def show(self, kind: str, data: dict) -> None:
+        """A plan, an explanation or a card for the running Rafiq to show (and an explanation to say), through
+        its panel with the panel's token. This process has no screen or voice of its own."""
+        import httpx
+
+        host, port = self.cfg["panel"]["host"], int(self.cfg["panel"]["port"])
+        try:
+            resp = httpx.post(f"http://{host}:{port}/api/display", json={"kind": kind, "data": data},
+                              headers={"X-Rafiq-Token": config.panel_token()}, timeout=5)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            raise RuntimeError("Rafiq isn't running, so there is nothing to show it on") from exc
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"the running Rafiq didn't answer ({type(exc).__name__})") from exc
+        if resp.status_code != 200:
+            raise RuntimeError(f"the running Rafiq refused it ({resp.status_code})")
 
     def handle(self, message) -> dict | None:
         """Answer one JSON-RPC message; None for a notification."""
@@ -56,7 +72,8 @@ class Server:
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "rafiq", "version": __version__},
                 "instructions": "Rafiq's read-only tools: time, weather, web search and pages, system status, "
-                                "arithmetic and unit conversion."})
+                                "arithmetic and unit conversion. show_steps, explain and show_card put your work "
+                                "in the user's Rafiq widget; explain also reads it aloud."})
         if method == "ping":
             return _result(msg_id, {})
         if method == "tools/list":

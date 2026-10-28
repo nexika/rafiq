@@ -44,7 +44,7 @@ from .reader import Reader
 from .scheduler import Alarm, Scheduler
 from .stt import WAKE_SECONDS, SpeechToText, Transcriber
 from .tasks import ClaudeAgent, Task, Tasks
-from .tools import Tool, brief, dev, load_all, media
+from .tools import Tool, brief, dev, display, load_all, media
 from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
 
@@ -65,7 +65,8 @@ class Context:
     phone watcher when a phone is set up; for a scene, the other tools and a way to ask before one
     that changes something; the hand gestures; and, for a request from a satellite, its room;
     the spending so far; the language practice session; and a way to record the room (a song to
-    recognise) or to wait until Rafiq is quiet before recording this computer, only when Rafiq is running."""
+    recognise) or to wait until Rafiq is quiet before recording this computer, only when Rafiq is running;
+    and a way to show a plan, an explanation or a card in the dashboard and the widget (tools/display.py)."""
     cfg: dict
     scheduler: Scheduler
     tag: str = "en"
@@ -83,6 +84,7 @@ class Context:
     reader: Reader | None = None
     record: Callable[[float], np.ndarray] | None = None
     quiet: Callable[[], None] | None = None
+    show: Callable[[str, dict], None] | None = None
 
 
 @dataclass
@@ -124,11 +126,12 @@ class Events:
             self.publish("run", end)
             self.current.reset(token)
 
-    def publish(self, kind: str, data: dict, keep: bool = True) -> None:
+    def publish(self, kind: str, data: dict, keep: bool = True, own: bool = False) -> None:
         """Send an event to every open panel. Passing ones (keep=False, like the microphone level)
-        are not replayed to a panel opened later."""
+        are not replayed to a panel opened later. One of its own (own=True, from another program) never
+        takes the run it happens to be published in."""
         event = {"kind": kind, "time": time.time(), "version": EVENTS_VERSION, **data}
-        run_id = self.run_id()
+        run_id = None if own else self.run_id()
         if run_id is not None:
             event.setdefault("run_id", run_id)
         # The log is redacted (privacy.RedactFilter); the panel, on this computer only, is not.
@@ -221,7 +224,7 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
                            practice=self.practice, reader=self.reader, record=self.record,
-                           quiet=self.quiet)
+                           quiet=self.quiet, show=self.show)
         self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
@@ -230,6 +233,7 @@ class Assistant:
         self.models = Models(self.cfg, on_event=self.events.publish, on_whisper=self._use_whisper)
         self.keyboard = dictation.Keyboard()
         self.dictating = False
+        self.waiting_shows, self.show_lock = 0, threading.Lock()   # from other programs (offer_show)
         self.history = history_mod.History(config_mod.data_dir() / "history.json",
                                            self.cfg["history"]["retention_days"])
         self.tag = "en"                      # the language of the conversation so far
@@ -412,6 +416,39 @@ class Assistant:
         if not self.silent:
             self.speaker.rate = self.practice.rate()     # slower for beginners while practising
             self.speaker.say(text, tag)
+
+    def show(self, kind: str, data: dict, source: str | None = None) -> bool:
+        """A plan, an explanation or a card from tools/display.py, already checked. An explanation is also
+        said: during an answer, in turn with it, so the two never talk over each other. One from another
+        program (source "mcp") is said as coming from it, by the rule `rafiq notify` follows, and never
+        while Rafiq waits for a yes: there it could put words in the question, and its speech mutes the mic.
+        True when it was said aloud."""
+        self.events.publish(kind, {**data, **({"source": source} if source else {})}, own=source is not None)
+        if kind != "explain" or self.silent:
+            return False
+        text, tag = data["text"], data["tag"]
+        if source:
+            if self.confirming or not notify.should_speak(self.cfg, self.muted):
+                return False
+            text = f"{lang.phrase('from_program', tag)} {text}"
+        voice = getattr(getattr(self, "brain", None), "voice", None)
+        if voice is not None and voice.on_speech is not None:
+            voice.say_now(text, tag)          # in the answer's own voice, which then counts it as said
+        elif self.speech:
+            self.speech.put(text, tag)
+        else:
+            self.speaker.say(text, tag)
+        return True
+
+    def offer_show(self, kind: str, data: dict) -> bool:
+        """Queue what another program sent (POST /api/display); False when too much is already waiting, so
+        a program calling in a loop can't keep the loop busy for hours."""
+        with self.show_lock:
+            if self.waiting_shows >= display.MAX_WAITING:
+                return False
+            self.waiting_shows += 1
+        self.submit("show", what=kind, data=data)
+        return True
 
     def notify(self, text: str, event: str, tag: str | None, now: datetime | None = None) -> None:
         """A long job ended (`rafiq notify`): say so in the conversation's language, unless muted or
@@ -732,6 +769,10 @@ class Assistant:
                     self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "show":                  # from another program over MCP, through the panel
+                    with self.show_lock:
+                        self.waiting_shows -= 1
+                    self.show(data["what"], data["data"], source="mcp")
                 elif kind == "result":
                     self.say(privacy.redact(data["text"]), data["tag"])
                 elif kind == "show_again":

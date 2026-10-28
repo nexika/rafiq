@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
+from .tools import display
 
 EVENTS_VERSION = 1           # docs/events.md; fields are only added, a removal raises it
 
@@ -180,6 +181,13 @@ def make_handler(assistant, token: str, port: int):
                 if answer is None:
                     return self._send(504, b'{"error":"no answer in time"}')
                 return self._send(200, json.dumps({"answer": answer}, ensure_ascii=False).encode())
+            elif path == "/api/display":          # `rafiq mcp`: a plan, an explanation or a card
+                try:
+                    shown = display.clean(data.get("kind"), data.get("data"))
+                except ValueError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}).encode())
+                if not assistant.offer_show(data["kind"], shown):
+                    return self._send(429, b'{"error":"too much waiting to be shown"}')
             elif path == "/api/listen":
                 assistant.submit("listen")
             elif path == "/api/mute" and isinstance(data.get("muted", False), bool):

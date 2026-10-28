@@ -96,6 +96,9 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `confirmed` | `yes` | `{"yes": false}` |
 | `said` | `text`, `tag`; `cards` when there are some; `room` from a satellite | `{"text": "It's 31 degrees.", "tag": "en"}` |
 | `scene` | `id`, `steps`: `[tool, result]` pairs | `{"id": "film", "steps": [["lights", "dimmed"]]}` |
+| `plan` | `title`, `steps` (at most 12), `done` (how many are done); sent again as it progresses | `{"title": "Book a table", "steps": ["Find a place", "Call"], "done": 1}` |
+| `explain` | `text` (at most 1500 characters, also said aloud), `tag`; `source: "mcp"` from another program | `{"text": "This loop stops at the first even number.", "tag": "en"}` |
+| `card` | `card` (`music`, `news`, `weather`, `timer`), `data` (at most 8 short text fields) | `{"card": "weather", "data": {"city": "Cairo", "temperature": "31°C"}}` |
 | `task` | `id`, `goal`, `state` (`running`, `done`, `failed`), `cost`, `result` | `{"id": "ab12cd", "run_id": "task-ab12cd", "goal": "find a flight", "state": "running", "cost": null, "result": ""}` |
 | `brain` | `backend`; `mode` and `model` when changed in the panel | `{"backend": "claude"}` |
 | `spending` | `today`, `month`, `daily_cap`, `monthly_cap`, `currency`, `status` | `{"today": 0.012, "month": 0.41, "daily_cap": 1, "monthly_cap": 10, "currency": "USD", "status": "ok"}` |
@@ -139,3 +142,16 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `satellite` | `name`, `room`, `connected` | `{"name": "kitchen-pi", "room": "kitchen", "connected": true}` |
 | `phone` | `kind`, `text` | `{"kind": "note", "text": "buy bread"}` |
 | `forgotten` | `texts` (remove these from what is shown; not kept) | `{"texts": ["what time is it"]}` |
+
+## Showing from another program
+
+`plan`, `explain` and `card` come from the brain's `show_steps`, `explain` and `show_card` tools
+(`rafiq/tools/display.py`). In a request they carry its `run_id`. From a program using `rafiq mcp`
+they reach the running Rafiq through `POST /api/display` with the panel's token, as
+`{"kind": "explain", "data": {"text": "…", "tag": "en"}}`. They carry `"source": "mcp"` and no
+`run_id`. Anything else is refused with 400, and more than 5 waiting to be shown with 429. All text is
+shown as text: the panel never renders it as HTML.
+
+Rafiq says an explanation from another program after a short "Another program says:" in its language.
+It shows it without saying it while muted, in quiet hours (`[notify] quiet_hours`), or while it waits
+for a yes.

@@ -351,6 +351,9 @@ PHRASES = {
                  "de": "Fertig: {label}", "ar": "انتهى: {label}", "ar-EG": "خلص: {label}"},
     "job_failed": {"en": "Failed: {label}", "fr": "Échec : {label}", "es": "Falló: {label}",
                    "de": "Fehlgeschlagen: {label}", "ar": "فشل: {label}", "ar-EG": "فشل: {label}"},
+    # Before an explanation another program sent over MCP, so it isn't taken for Rafiq's own words.
+    "from_program": {"en": "Another program says:", "fr": "Un autre programme dit :", "es": "Otro programa dice:",
+                     "de": "Ein anderes Programm sagt:", "ar": "يقول برنامج آخر:", "ar-EG": "فيه برنامج تاني بيقول:"},
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},

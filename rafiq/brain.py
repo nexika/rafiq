@@ -179,6 +179,13 @@ class Voice:
         if rest:
             self._say(rest)
 
+    def say_now(self, text: str, tag: str) -> None:
+        """Something a tool says during the answer (an explanation): counted as said, so a backend that
+        fails after it doesn't start the answer over."""
+        if self.on_speech is not None:
+            self.said_anything = True
+            self.on_speech(text, tag)
+
     def wait(self, text: str | None) -> None:
         """Announce a slow tool with its waiting phrase, unless something was already said for this request."""
         if self.on_speech and not self.said_anything:
@@ -261,6 +268,7 @@ class Brain:
         self.memory = Memory()
         self.clock = clock
         self.steps = 0
+        self.voice: Voice | None = None     # the request's, while think() runs: tools/display.py speaks in it
         self.open_steps: dict[int, tuple[str, float]] = {}   # step_id: its tool and when it was asked for
         self._claude = None
         self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
@@ -284,6 +292,12 @@ class Brain:
     def think(self, text: str, tag: str, ctx=None, on_speech: Callable[[str, str], None] | None = None) -> str:
         """Answer one thing the user said. In auto mode, tries Claude, OpenAI, then Ollama. With on_speech,
         every word of the answer also goes to on_speech, sentence by sentence, as soon as it is known."""
+        try:
+            return self._think(text, tag, ctx, on_speech)
+        finally:
+            self.voice = None
+
+    def _think(self, text: str, tag: str, ctx, on_speech: Callable[[str, str], None] | None) -> str:
         history = self.memory.recent(self.clock(), tag)
         self.steps = 0                       # step_id counts the tool calls of this request, from 1
         if self.cfg["brain"].get("routing", True):
@@ -293,7 +307,7 @@ class Brain:
         limits = self.cfg["brain"]["limits"]
         deadline = self.clock() + limits["max_seconds"]
         errors = []
-        voice = Voice(on_speech, tag)
+        voice = self.voice = Voice(on_speech, tag)
         for backend in self.backends():
             try:
                 run = {"claude": self._claude_turn, "openai": self._openai_turn, "ollama": self._ollama_turn}[backend]
