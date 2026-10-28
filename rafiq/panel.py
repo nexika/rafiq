@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
+from .http_body import BodyError, body_length
 from .tools import display
 
 EVENTS_VERSION = 1           # docs/events.md; fields are only added, a removal raises it
@@ -157,9 +158,10 @@ def make_handler(assistant, token: str, port: int):
                 allowed = self._token_ok(self.headers.get("X-Rafiq-Token"))
             if not self._host_ok() or not allowed:
                 return self._send(403, b'{"error":"forbidden"}')
-            length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY:
-                return self._send(413, b'{"error":"too large"}')
+            try:
+                length = body_length(self.headers.get("Content-Length"), MAX_BODY)
+            except BodyError as exc:
+                return self._send(exc.status, json.dumps({"error": str(exc)}).encode())
             try:
                 data = json.loads(self.rfile.read(length) or b"{}")
             except ValueError:

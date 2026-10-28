@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 
 from . import lang
 from .brain import Brain
+from .http_body import BodyError, body_length
 from .remote import TAILSCALE, _private_ip, check_listen
 from .tools import Tool, lists
 
@@ -119,11 +120,9 @@ def make_handler(bridge: PhoneBridge, token: str):
             if urlparse(self.path).path != "/api/inbox":
                 return self._send(404, {"error": "not found"})
             try:
-                length = int(self.headers.get("Content-Length") or 0)
-            except ValueError:
-                return self._send(400, {"error": "bad length"})
-            if length > MAX_BODY:
-                return self._send(413, {"error": "too large"})
+                length = body_length(self.headers.get("Content-Length"), MAX_BODY)
+            except BodyError as exc:
+                return self._send(exc.status, {"error": str(exc)})
             try:
                 data = json.loads(self.rfile.read(length) or b"{}")
             except ValueError:

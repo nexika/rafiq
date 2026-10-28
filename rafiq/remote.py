@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import lang
+from .http_body import BodyError, body_length
 from .tools import Tool
 
 # The tools that act on the PC: on the server they run on the agent. Thinking (calculate, weather,
@@ -241,9 +242,10 @@ def make_handler(hub: Hub, tokens: AgentTokens, ask: Callable[[str, str], str]):
             token = auth[7:] if auth.startswith("Bearer ") else ""
             if not tokens.check(name, token):
                 return self._send(403, {"error": "forbidden"})
-            length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY:
-                return self._send(413, {"error": "too large"})
+            try:
+                length = body_length(self.headers.get("Content-Length"), MAX_BODY)
+            except BodyError as exc:
+                return self._send(exc.status, {"error": str(exc)})
             try:
                 data = json.loads(self.rfile.read(length) or b"{}")
             except ValueError:
