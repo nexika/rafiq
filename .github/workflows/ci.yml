@@ -44,12 +44,35 @@ jobs:
       - name: Test
         run: python -m pytest -q
 
+  # The widget (widget/): the page's logic with Node's own test runner, and the Tauri side with cargo.
+  widget:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: widget
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test the page
+        run: node --test
+      - name: Install WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            librsvg2-dev libxdo-dev libssl-dev build-essential
+      - name: Test the app
+        working-directory: widget/src-tauri
+        run: cargo test --locked
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [lint, test]
+    needs: [lint, test, widget]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed
         run: |
-          [ "${{ needs.lint.result }}" = success ] && [ "${{ needs.test.result }}" = success ]
+          [ "${{ needs.lint.result }}" = success ] && [ "${{ needs.test.result }}" = success ] \
+            && [ "${{ needs.widget.result }}" = success ]

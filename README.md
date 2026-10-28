@@ -524,6 +524,13 @@ on the same Wi-Fi). It refuses `0.0.0.0` and public addresses, and Rafiq then st
 token travels in plain HTTP, so only a private network may carry it. Public tunnels such as ngrok are
 not supported.
 
+## The widget
+
+A small window that shows what Rafiq is doing, step by step: the state and the step running now, or, made
+larger, the whole request with its plan, steps, explanations, cards and answer. It is a separate app built
+with Tauri, in `widget/`, and connects to the running Rafiq on this computer only. This first version shows
+and doesn't ask yet. [widget/README.md](widget/README.md) says how to build it.
+
 ## Rafiq's tools in other programs (MCP)
 
 `rafiq mcp` offers Rafiq's harmless tools to MCP clients such as Claude Desktop or Claude Code, over

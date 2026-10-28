@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rafiq</title>
+  <link rel="stylesheet" href="widget.css">
+  <script type="module" src="widget.js"></script>
+</head>
+<body data-view="small">
+  <header id="bar">
+    <span id="dot" aria-hidden="true"></span>
+    <span id="now" dir="auto" aria-live="polite"></span>
+    <button id="size" type="button">⤢</button>
+  </header>
+  <main id="more">
+    <p id="request" class="request" dir="auto" hidden></p>
+    <section id="plan" class="plan" hidden>
+      <h2 id="plan-title" dir="auto"></h2>
+      <ol id="plan-steps"></ol>
+    </section>
+    <ol id="steps" class="steps" aria-label="Steps"></ol>
+    <p id="confirm" class="confirm" dir="auto" hidden></p>
+    <section id="explain" class="explain" hidden>
+      <span id="explain-from" class="from"></span>
+      <p id="explain-text" dir="auto"></p>
+    </section>
+    <div id="cards" class="cards"></div>
+    <p id="answer" class="answer" dir="auto" hidden></p>
+  </main>
+</body>
+</html>
