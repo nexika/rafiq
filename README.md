@@ -22,6 +22,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Browser tabs | "what tabs are open?", "summarise this tab", "translate the Gmail tab into Arabic", "switch to the YouTube tab", in Rafiq's own Chrome or Firefox (see below) |
+| Videos | "explain this video" or "what is this lecture about?" while it plays on the computer: Rafiq listens to the computer's sound, transcribes it here with Whisper, and explains it when it ends or when you say stop (at most 20 minutes, `[video] max_minutes`). The sound never leaves the computer; only the transcript goes to the brain. Needs `pulseaudio-utils` |
 | Songs | "what's this song?" (listens to the room for 8 seconds), "what's playing on my computer?", "what song is ~/Music/track.mp3?", "which songs did you recognise?" (needs an [AudD](https://audd.io) token in `AUDD_API_TOKEN`, and `pulseaudio-utils` for the computer's sound) |
 | Clipboard | "translate what I copied into Arabic", "summarise my clipboard", "explain this error", "copy that" (needs `wl-clipboard` on Wayland, `xclip` on X11) |
 | Language practice | "let's practise French, level A2, about food": a simple conversation with short spoken corrections (the full list in the panel, slower voice for A1 and A2), then "let's stop" lists what to work on; common mistakes are kept in `data/practice.json` |

@@ -195,3 +195,25 @@ test("forgetting takes the screenshot off the screen", () => {
     { kind: "forgotten", texts: [], kinds: ["screen"] });
   assert.equal(s.screen, null);
 });
+
+test("while Rafiq listens to a video, the small view says so with the time, and stop is offered", () => {
+  let s = play({ kind: "state", state: "idle" }, { kind: "video", state: "listening", seconds: 95 });
+  assert.equal(now(s), t("video_listening", "en") + " 1:35");
+  assert.equal(busy(s), true);
+  s = reduce(s, { kind: "video", state: "explaining" });
+  assert.equal(now(s), t("video_explaining", "en"));
+  s = reduce(s, { kind: "video", state: "done", why: "ended" });
+  assert.equal(s.video, null);
+  assert.equal(busy(s), false);
+});
+
+test("a video listened to outside a request is shown during one", () => {
+  const s = play(started, { kind: "video", state: "listening", seconds: 30 });
+  assert.equal(s.video.state, "listening");
+});
+
+test("losing Rafiq drops a video it was listening to, since a new Rafiq knows nothing of it", () => {
+  const s = play({ kind: "video", state: "listening", seconds: 90 },
+    { kind: "connection", connected: false, problem: "stopped" });
+  assert.equal(s.video, null);
+});

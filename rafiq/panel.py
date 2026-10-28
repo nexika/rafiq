@@ -351,6 +351,13 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
                     brain.stop()                  # and no further step of the request being answered
                 if getattr(assistant, "confirming", False):
                     assistant.pending_answer.put(False)   # a question waiting: answered no
+                # A video being listened to ends too, but only when stop wasn't for something else: cutting an
+                # answer, ending a request, or saying no to a question.
+                video = getattr(assistant, "video", None)
+                busy = getattr(assistant, "confirming", False) or getattr(assistant, "state", "") in ("speaking",
+                                                                                                    "thinking")
+                if video is not None and not busy:
+                    video.stop()
             elif path == "/api/reading" and data.get("action") in ("pause", "skip", "stop"):
                 getattr(assistant.reader, data["action"])()
             elif path == "/api/reading" and data.get("action") == "resume":

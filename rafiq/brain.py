@@ -435,6 +435,11 @@ class Brain:
         offline with a weaker result."""
         names = lang_mod.NAMES
         system = TRANSLATE.format(source=names.get(source, "English"), target=names.get(target, "English"))
+        return self.complete(system, text) or lang_mod.phrase("brain_down", target)
+
+    def complete(self, system: str, text: str) -> str | None:
+        """One answer to `text` under `system`, with no tools and no memory: Claude first, then the others.
+        None when no backend answers. For interpreting and for explaining a video (rafiq/video.py)."""
         errors = []
         for backend in self.backends():
             try:
@@ -445,7 +450,7 @@ class Brain:
             except BrainError as exc:
                 errors.append(f"{backend}: {exc}")
         self.on_event("error", {"brain": errors})
-        return lang_mod.phrase("brain_down", target)
+        return None
 
     # ------------------------------------------------------------------ tools
 
