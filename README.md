@@ -190,7 +190,8 @@ or `speech.offline = true` keeps what you say on your computer.
 ## Use it
 
 ```bash
-rafiq run                 # listen for "Rafiq"; the panel opens at http://127.0.0.1:8765/
+rafiq run                 # listen for "Rafiq"
+rafiq panel               # open its panel in the browser (a one-time link; --print to copy it)
 rafiq ask "weather in Paris tomorrow"     # type instead of talking (add --speak to hear it)
 rafiq say --lang ar-EG "أهلًا، أنا رفيق"  # try a voice
 rafiq listen              # make the running Rafiq listen now
@@ -240,8 +241,7 @@ reading" or "stop reading" work once it is paused. The selection needs `wl-clipb
   with "Always", each with a Revoke button.
 
 
-Its **Subscriptions** page (http://127.0.0.1:8765/subscriptions) lists what you pay for again and
-again: monthly and yearly totals per currency, the charges of the next 30 days, alerts when one
+Its **Subscriptions** page (the link at the top of the panel) lists what you pay for again and again: monthly and yearly totals per currency, the charges of the next 30 days, alerts when one
 charges tomorrow or its amount changed, and a split by category. They are kept in
 `~/.config/rafiq/data/subscriptions.json` and reach the model only when you ask ("how much do my
 subscriptions cost?"). With Google set up, "Look for receipts in Gmail" searches recent receipts and

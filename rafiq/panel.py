@@ -4,22 +4,33 @@ of a reading aloud, the history of requests (searchable, with delete) and whethe
 this computer. A settings drawer switches the brain's mode and model and the voices; only the allowlist in
 config.py can be written, and keys never reach the page.
 
-Only this computer can reach it, and only the page it serves can drive it: every request must carry
-the random token embedded in that page, and the Host header must be the panel's own address (so a
-web site that rebinds its name to 127.0.0.1 is refused). The hand-gesture tracker posts labels to
-/api/gesture with a token of its own, made each time it starts, which opens nothing else.
+Only this computer can reach it, and the Host header must be the panel's own address (so a web site that
+rebinds its name to 127.0.0.1 is refused). The pages never carry the panel token (#222): any program here
+could load them, while only this user can read panel.token. `rafiq panel` reads it, asks for a one-time key
+(POST /api/panel-key) and opens /#key=..., after "#" so no server receives it. The page trades the key
+(POST /api/panel-key/redeem) for a session of its own, kept in that tab's sessionStorage, and sends it in the
+X-Rafiq-Session header on every request, the event stream included. No cookie: every port of 127.0.0.1 would
+see one. Rafiq's own programs (`rafiq ask`, the widget, `rafiq mcp`) send the token instead. On Linux a
+connection from another user's program is refused. The hand-gesture tracker posts labels to /api/gesture with
+a token of its own, made each time it starts, which opens nothing else.
 
 Besides the conversation, the page has three more: models (Ollama and Whisper), status (is each part
-up) and permissions (each tool's level, remembered approvals). They read with GET and the token in
-the X-Rafiq-Token header; changes are POSTs to the paths listed in WRITES, with names checked against
+up) and permissions (each tool's level, remembered approvals). They read with GET and the session (or the
+token) in a header; changes are POSTs to the paths listed in WRITES, with names checked against
 what is offered, so nothing else can be changed through the panel.
 """
 
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
+import os
 import queue
+import secrets
+import sys
+import threading
+import time
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -36,6 +47,9 @@ MAX_BODY = 10_000
 # How long `rafiq ask` waits for the running Rafiq: a request's own 120 s, a spoken yes, and one already
 # being answered ahead of it.
 ASK_SECONDS = 300
+KEY_SECONDS = 120            # how long a key from `rafiq panel` waits to be used, once
+SESSION_SECONDS = 12 * 3600  # how long a page opened with a key may drive Rafiq; then `rafiq panel` again
+MAX_KEYS = MAX_SESSIONS = 20
 
 # The panel's changes besides talking: path -> what it does with the name sent.
 WRITES = {
@@ -60,8 +74,84 @@ def page_data(assistant, path: str) -> dict | None:
     return None
 
 
+def same(given: str, secret: str) -> bool:
+    """A secret compared in constant time. Headers arrive as latin-1, and compare_digest raises on anything not
+    ASCII: such a value is simply not the secret."""
+    return given.isascii() and hmac.compare_digest(given, secret)
+
+
+def _endpoint(text: str) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, int] | None:
+    """An address:port as /proc/net/tcp writes it: hex, each 32-bit word in the machine's (little-endian)
+    order. An IPv4 address mapped into IPv6 is read as the IPv4 one."""
+    try:
+        address, port = text.rsplit(":", 1)
+        raw = bytes.fromhex(address)
+        if len(raw) not in (4, 16):
+            return None
+        words = b"".join(raw[i:i + 4][::-1] for i in range(0, len(raw), 4))
+        ip = ipaddress.ip_address(words)
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        return ip, int(port, 16)
+    except ValueError:
+        return None
+
+
+def peer_uid(table: str, client: tuple, server: tuple) -> int | None:
+    """The user id that owns the client's end of a connection to the panel, from /proc/net/tcp text. Both
+    addresses and both ports must match: a client on the panel's own port number (bound to another 127.x
+    address) must not be taken for the panel's own end of the connection."""
+    want = [(ipaddress.ip_address(host), port) for host, port in (client[:2], server[:2])]
+    for line in table.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) < 8 or not fields[7].isdigit():
+            continue
+        if [_endpoint(fields[1]), _endpoint(fields[2])] == want:
+            return int(fields[7])
+    return None
+
+
+def connection_owner(client: tuple, server: tuple) -> int | None:
+    """Whose program opened this connection (Linux); None when it can't be told."""
+    for name in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(name, encoding="ascii") as f:
+                owner = peer_uid(f.read(), client, server)
+        except (OSError, ValueError):
+            continue
+        if owner is not None:
+            return owner
+    return None
+
+
 def make_handler(assistant, token: str, port: int, screen_token: str = ""):
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    # One-time keys from `rafiq panel`, and the sessions they became, each with when it ends. In memory:
+    # Rafiq restarting ends them all. Not cookies, which every port of 127.0.0.1 would see.
+    keys: dict[str, float] = {}
+    sessions: dict[str, float] = {}
+    lock = threading.Lock()
+
+    def add(table: dict[str, float], seconds: float, limit: int) -> str:
+        now = time.monotonic()
+        with lock:
+            for old in [k for k, until in table.items() if until < now]:
+                del table[old]
+            if len(table) >= limit:
+                table.pop(next(iter(table)))     # the oldest
+            secret = secrets.token_urlsafe(32)
+            table[secret] = now + seconds
+        return secret
+
+    def use_key(given: str) -> bool:
+        with lock:
+            until = keys.pop(given, None)
+        return until is not None and time.monotonic() <= until
+
+    def session_ok(given: str) -> bool:
+        with lock:
+            until = next((t for s, t in sessions.items() if same(given, s)), None)
+        return until is not None and time.monotonic() <= until
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "Rafiq"
@@ -85,19 +175,34 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             return self.headers.get("Host", "") in allowed_hosts
 
         def _token_ok(self, given: str | None) -> bool:
-            return bool(given) and hmac.compare_digest(given, token)
+            return bool(given) and same(given, token)
+
+        def _session_ok(self) -> bool:
+            given = self.headers.get("X-Rafiq-Session") or ""
+            return bool(given) and session_ok(given)
+
+        def _allowed(self) -> bool:
+            """Rafiq's own programs, with the token; or the pages, with the session their key became."""
+            return self._token_ok(self.headers.get("X-Rafiq-Token")) or self._session_ok()
+
+        def _mine(self) -> bool:
+            """Not another user's program. On Linux the connection's other end must be this user's, and a
+            connection whose owner can't be found is refused; elsewhere there is no /proc to ask."""
+            if not sys.platform.startswith("linux"):
+                return True
+            return connection_owner(self.client_address, self.connection.getsockname()) == os.getuid()
 
         def do_GET(self):
-            if not self._host_ok():
+            if not self._host_ok() or not self._mine():
                 return self._send(403, b'{"error":"wrong host"}')
             url = urlparse(self.path)
-            pages = {"/": "panel.html", "/subscriptions": "subscriptions.html"}
-            if url.path in pages:
-                page = resources.files("rafiq").joinpath(pages[url.path]).read_text(encoding="utf-8")
-                return self._send(200, page.replace("__TOKEN__", token).encode(), "text/html; charset=utf-8")
             query = parse_qs(url.query)
+            pages = {"/": "panel.html", "/subscriptions": "subscriptions.html"}
+            if url.path in pages:                # nothing secret in them: the key comes after "#"
+                page = resources.files("rafiq").joinpath(pages[url.path]).read_text(encoding="utf-8")
+                return self._send(200, page.encode(), "text/html; charset=utf-8")
             if url.path in ("/events", "/api/subscriptions", "/api/history"):
-                if not self._token_ok((query.get("token") or [None])[0]):
+                if not (self._token_ok((query.get("token") or [None])[0]) or self._allowed()):
                     return self._send(403, b'{"error":"token"}')
                 if url.path == "/api/history":
                     entries = assistant.history.entries((query.get("q") or [""])[0][:200])
@@ -110,18 +215,18 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             if url.path == "/api/screen":       # the screenshot the widget shows with its marks (#201)
                 given = self.headers.get("X-Rafiq-Screen-Token") or ""
                 if not (self._token_ok(self.headers.get("X-Rafiq-Token")) and screen_token
-                        and hmac.compare_digest(given, screen_token)):
+                        and same(given, screen_token)):
                     return self._send(403, b'{"error":"token"}')
                 png = assistant.take_screen((query.get("id") or [""])[0][:32])
                 if png is None:
                     return self._send(404, b'{"error":"not found"}')
                 return self._send(200, png, "image/png")
             if url.path == "/api/settings":     # what the settings drawer shows
-                if not self._token_ok(self.headers.get("X-Rafiq-Token")):
+                if not self._allowed():
                     return self._send(403, b'{"error":"token"}')
                 return self._send(200, json.dumps(assistant.status(), ensure_ascii=False).encode())
             if url.path.startswith("/api/"):
-                if not self._token_ok(self.headers.get("X-Rafiq-Token")):
+                if not self._allowed():
                     return self._send(403, b'{"error":"token"}')
                 data = page_data(assistant, url.path)
                 if data is not None:
@@ -163,10 +268,16 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             # The gesture tracker has its own token, good for /api/gesture and nothing else.
             if path == "/api/gesture":
                 allowed = gestures is not None and gestures.token_ok(self.headers.get("X-Rafiq-Gesture-Token"))
-            else:
+            elif path == "/api/panel-key":       # only the token holder: a session can't make more sessions
                 allowed = self._token_ok(self.headers.get("X-Rafiq-Token"))
-            if not self._host_ok() or not allowed:
+            elif path == "/api/panel-key/redeem":   # the page, with the key it found after "#"
+                allowed = self.headers.get("X-Rafiq-Panel") == "1"
+            else:
+                allowed = self._allowed()
+            if not self._host_ok() or not self._mine() or not allowed:
                 return self._send(403, b'{"error":"forbidden"}')
+            if path == "/api/panel-key":
+                return self._send(200, json.dumps({"key": add(keys, KEY_SECONDS, MAX_KEYS)}).encode())
             try:
                 length = body_length(self.headers.get("Content-Length"), MAX_BODY)
             except BodyError as exc:
@@ -177,6 +288,10 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
                 return self._send(400, b'{"error":"bad json"}')
             if not isinstance(data, dict):
                 return self._send(400, b'{"error":"bad json"}')
+            if path == "/api/panel-key/redeem":
+                if not (isinstance(data.get("key"), str) and use_key(data["key"][:64])):
+                    return self._send(403, b'{"error":"key"}')
+                return self._send(200, json.dumps({"session": add(sessions, SESSION_SECONDS, MAX_SESSIONS)}).encode())
             if path == "/api/gesture":
                 gestures.handle(data.get("gesture"))
             elif path == "/api/gestures" and gestures is not None and isinstance(data.get("on"), bool):

@@ -36,7 +36,7 @@ def cmd_run(args) -> int:
         server = serve(assistant, host, port, config.panel_token())
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
         assistant.gestures.url = f"http://{host}:{server.server_address[1]}/api/gesture"
-        print(f"Panel: http://{host}:{port}/", flush=True)
+        print("Panel: open it with `rafiq panel`", flush=True)
     _start_hub(cfg, assistant)
     if cfg["phone"].get("enabled"):
         _start_phone(cfg, assistant)
@@ -463,6 +463,40 @@ def cmd_notify(args) -> int:
                                         "lang": args.lang})
 
 
+def _open_browser(url: str) -> None:
+    import webbrowser
+
+    webbrowser.open(url)
+
+
+def cmd_panel(args) -> int:
+    """Open the panel: a one-time key from the running Rafiq, after "#" so no server ever receives it, becomes the
+    page's session; the page itself never carries the panel token (#222). --print shows the address instead,
+    for an SSH tunnel."""
+    import httpx
+
+    cfg = config.load()
+    host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
+    try:
+        resp = httpx.post(f"http://{host}:{port}/api/panel-key", json={}, timeout=5,
+                          headers={"X-Rafiq-Token": config.panel_token()})
+    except httpx.HTTPError:
+        print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
+        return 1
+    if resp.status_code != 200:
+        print("The running Rafiq refused to open its panel; restart it (an older one has no rafiq panel).",
+              file=sys.stderr)
+        return 1
+    # The page's own name for this computer: the panel accepts only 127.0.0.1 and localhost as Host.
+    url = f"http://{'localhost' if host == '::1' else host}:{port}/#key={resp.json()['key']}"
+    if args.print:
+        print(url)
+        print("It works once, within two minutes.", file=sys.stderr)
+    else:
+        _open_browser(url)
+    return 0
+
+
 def cmd_hooks(args) -> int:
     from .notify import HOOKS
 
@@ -861,6 +895,9 @@ def main(argv=None) -> int:
     ask.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
+    panel_cmd = sub.add_parser("panel", help="open the running Rafiq's panel in the browser")
+    panel_cmd.add_argument("--print", action="store_true", help="show its one-time address instead (SSH tunnel)")
+    panel_cmd.set_defaults(fn=cmd_panel)
     say = sub.add_parser("say", help="say a sentence, to try a voice")
     say.add_argument("text", nargs="+")
     say.add_argument("--lang", choices=lang.TAGS, default="en")

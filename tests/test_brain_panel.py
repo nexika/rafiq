@@ -267,10 +267,10 @@ def request(port, path, body=None, token="t" * 40, host=None):
         return exc.code, exc.read().decode()
 
 
-def test_the_page_carries_its_token(panel):
+def test_the_page_never_carries_its_token(panel):
     _, port = panel
     status, page = request(port, "/")
-    assert status == 200 and "t" * 40 in page and "__TOKEN__" not in page
+    assert status == 200 and "t" * 40 not in page and "__TOKEN__" not in page
 
 
 def test_typed_text_is_queued_for_the_assistant(panel):

@@ -90,7 +90,30 @@ button:focus-visible, input:focus, select:focus { outline: 2px solid var(--accen
   <div id="status" role="status"></div>
 </main>
 <script>
-const TOKEN = "__TOKEN__";
+// The panel's session (#222): see panel.html. Opened from the panel, this tab already has it.
+let SESSION = "";
+try { SESSION = sessionStorage.getItem("rafiq-session") || ""; } catch (e) { /* storage off: memory only */ }
+async function openSession() {
+  const key = new URLSearchParams(location.hash.slice(1)).get("key");
+  if (key) {
+    history.replaceState(null, "", location.pathname);
+    const r = await fetch("/api/panel-key/redeem", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-Rafiq-Panel": "1" }, body: JSON.stringify({ key }) });
+    if (r.ok) {
+      SESSION = (await r.json()).session;
+      try { sessionStorage.setItem("rafiq-session", SESSION); } catch (e) { /* memory only */ }
+    }
+  }
+  if (!SESSION) closed();
+  return Boolean(SESSION);
+}
+function closed() {
+  try { sessionStorage.removeItem("rafiq-session"); } catch (e) { /* nothing kept */ }
+  const note = document.createElement("p");
+  note.style.cssText = "max-width:34em;margin:15vh auto;padding:0 16px;font:16px/1.5 system-ui,sans-serif";
+  note.textContent = "Open Rafiq's panel with: rafiq panel (or rafiq panel --print to copy its address).";
+  document.body.replaceChildren(note);
+}
 const $ = (id) => document.getElementById(id);
 const money = (n, c) => Number(n).toFixed(2) + " " + c;
 
@@ -119,7 +142,7 @@ function say(text, err) { $("status").textContent = text; $("status").className 
 
 async function send(body) {
   const r = await fetch("/api/subscriptions", { method: "POST",
-    headers: { "Content-Type": "application/json", "X-Rafiq-Token": TOKEN }, body: JSON.stringify(body) });
+    headers: { "Content-Type": "application/json", "X-Rafiq-Session": SESSION }, body: JSON.stringify(body) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) { say(data.error || "Something went wrong (" + r.status + ").", true); return null; }
   await load();
@@ -127,7 +150,7 @@ async function send(body) {
 }
 
 async function load() {
-  const r = await fetch("/api/subscriptions?token=" + encodeURIComponent(TOKEN));
+  const r = await fetch("/api/subscriptions", { headers: { "X-Rafiq-Session": SESSION } });
   if (!r.ok) { say("Could not reach Rafiq (" + r.status + ").", true); return; }
   const d = await r.json();
   const totals = Object.entries(d.totals).map(([c, t]) => {
@@ -182,7 +205,7 @@ $("scan").onclick = async () => {
   const r = await send({ action: "scan" });
   if (r) say(r.found ? r.found + " found: merge or ignore each one above." : "No new subscriptions found.");
 };
-load();
+openSession().then((open) => { if (open) load(); });
 </script>
 </body>
 </html>
