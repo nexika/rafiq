@@ -54,6 +54,8 @@ export const PHRASES = {
   hidden: { en: "(hidden)", fr: "(masqué)", es: "(oculto)", de: "(verborgen)", ar: "(مخفي)", "ar-EG": "(مستخبي)" },
   too_long: { en: "That's too long to send", fr: "C'est trop long à envoyer", es: "Es demasiado largo para enviar",
     de: "Das ist zu lang zum Senden", ar: "النص أطول من أن يُرسل", "ar-EG": "الكلام ده طويل قوي" },
+  screenshot: { en: "Screenshot", fr: "Capture d'écran", es: "Captura de pantalla", de: "Bildschirmfoto",
+    ar: "لقطة الشاشة", "ar-EG": "صورة الشاشة" },
   rafiq_explains: { en: "Rafiq explains", fr: "Rafiq explique", es: "Rafiq explica", de: "Rafiq erklärt",
     ar: "رفيق يشرح", "ar-EG": "رفيق بيشرح" },
   from_program: { en: "Another program, through Rafiq", fr: "Un autre programme, via Rafiq",

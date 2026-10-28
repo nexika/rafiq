@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import lang, modes, notify, permissions, persona, status, subscriptions
+from . import config, lang, modes, notify, permissions, persona, status, subscriptions
 from .brain import BrainError
 from .http_body import BodyError, body_length
 from .tools import display
@@ -60,7 +60,7 @@ def page_data(assistant, path: str) -> dict | None:
     return None
 
 
-def make_handler(assistant, token: str, port: int):
+def make_handler(assistant, token: str, port: int, screen_token: str = ""):
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
 
     class Handler(BaseHTTPRequestHandler):
@@ -107,6 +107,15 @@ def make_handler(assistant, token: str, port: int):
                     summary = subscriptions.summary(subscriptions.default_store())
                     return self._send(200, json.dumps(summary, ensure_ascii=False).encode())
                 return self._stream()
+            if url.path == "/api/screen":       # the screenshot the widget shows with its marks (#201)
+                given = self.headers.get("X-Rafiq-Screen-Token") or ""
+                if not (self._token_ok(self.headers.get("X-Rafiq-Token")) and screen_token
+                        and hmac.compare_digest(given, screen_token)):
+                    return self._send(403, b'{"error":"token"}')
+                png = assistant.take_screen((query.get("id") or [""])[0][:32])
+                if png is None:
+                    return self._send(404, b'{"error":"not found"}')
+                return self._send(200, png, "image/png")
             if url.path == "/api/settings":     # what the settings drawer shows
                 if not self._token_ok(self.headers.get("X-Rafiq-Token")):
                     return self._send(403, b'{"error":"token"}')
@@ -284,11 +293,12 @@ def make_handler(assistant, token: str, port: int):
     return Handler
 
 
-def serve(assistant, host: str, port: int, token: str) -> ThreadingHTTPServer:
+def serve(assistant, host: str, port: int, token: str, screen_token: str | None = None) -> ThreadingHTTPServer:
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("the panel only listens on this computer (127.0.0.1)")
     server = ThreadingHTTPServer((host, port), BaseHTTPRequestHandler)
     # The allowed Host names use the port actually bound (port 0 picks a free one).
-    server.RequestHandlerClass = make_handler(assistant, token, server.server_address[1])
+    screen_token = config.screen_token() if screen_token is None else screen_token
+    server.RequestHandlerClass = make_handler(assistant, token, server.server_address[1], screen_token)
     server.daemon_threads = True
     return server

@@ -25,6 +25,9 @@ shows as "(hidden)".
 - Before it sends the token, it checks in `/proc/net/tcp` that the program listening on the panel's port is
   yours. The token is kept between Rafiq's starts, so while Rafiq is stopped another program could take the
   port to collect it. While Rafiq is away it tries again after 2 seconds, then less often, up to every 30.
+- When Rafiq looks at the screen, the Rust side fetches the screenshot once with the panel's token and the
+  screen token (`screen.token`, readable only by you), and hands the page a `data:` URL. The page draws
+  numbered circles, highlights and arrows over it.
 - Its own words (the state, problems, labels) are in Rafiq's six languages, following the request's language.
 - On GNOME Wayland it is an ordinary window, since an app can't keep itself above the others there.
 
