@@ -343,6 +343,10 @@ function handle(e) {
       add("note", "Project folder: " + e.path); break;
     case "brain": stateEl.dataset.backend = e.backend; break;
     case "spending": showSpending(e); break;
+    case "video": if (e.state !== "listening" || !e.seconds) add("note", {
+      listening: "Listening to the video on this computer…", explaining: "Explaining the video…",
+      done: "Stopped listening to the video" + (["time", "stopped", "ended"].includes(e.why) ? "." : ": " + e.why),
+    }[e.state] || e.state); break;
     case "scene": add("tool", "▶ scene " + e.id + "\n" + e.steps.map(s => s[0] + " → " + s[1]).join("\n")); break;
     case "plan": {
       const text = "▤ " + e.title + "\n" + e.steps.map((s, i) => (i < e.done ? "✓ " : "○ ") + s).join("\n");

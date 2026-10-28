@@ -98,6 +98,7 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `confirm` | `action`, `tag`, `always` (whether "yes, always" may be remembered) | `{"action": "shut down the computer", "tag": "en", "always": true}` |
 | `confirmed` | `yes` | `{"yes": false}` |
 | `said` | `text`, `tag`; `cards` when there are some; `room` from a satellite | `{"text": "It's 31 degrees.", "tag": "en"}` |
+| `video` | `state` (`listening`, `explaining`, `done`); `seconds` listened so far while listening; `why` when done (`time`, `stopped`, `ended`, or what went wrong) | `{"state": "listening", "seconds": 90}` |
 | `scene` | `id`, `steps`: `[tool, result]` pairs | `{"id": "film", "steps": [["lights", "dimmed"]]}` |
 | `plan` | `title`, `steps` (at most 12), `done` (how many are done); sent again as it progresses | `{"title": "Book a table", "steps": ["Find a place", "Call"], "done": 1}` |
 | `explain` | `text` (at most 1500 characters, also said aloud), `tag`; `source: "mcp"` from another program | `{"text": "This loop stops at the first even number.", "tag": "en"}` |

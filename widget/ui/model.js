@@ -12,14 +12,19 @@ const HIDDEN = new Set(["(hidden)", "error (hidden)"]);   // what Rafiq sends fo
 
 export function initial() {
   return { problem: "connecting", state: "idle", run: null, request: "", tag: "en", steps: [], plan: null,
-    explain: null, cards: [], answer: "", confirm: null, screen: null };
+    explain: null, cards: [], answer: "", confirm: null, screen: null, video: null };
 }
 
 /** The state after one event. Events of another run (a background task), of a satellite or of the phone leave
  * the request on screen alone. */
 export function reduce(s, e) {
-  if (e.kind === "connection") return { ...s, problem: e.connected ? null : e.problem || "not_running" };
-  if (e.kind === "run" && e.status === "started") return { ...initial(), problem: s.problem, state: s.state, run: e.run_id };
+  if (e.kind === "connection") {
+    return { ...s, problem: e.connected ? null : e.problem || "not_running", video: e.connected ? s.video : null };
+  }
+  if (e.kind === "run" && e.status === "started") {
+    // A video being listened to goes on through the requests made meanwhile ("stop", "what did he say?").
+    return { ...initial(), problem: s.problem, state: s.state, run: e.run_id, video: s.video };
+  }
   if (e.run_id && s.run && e.run_id !== s.run) return s;
   if (e.room || (s.run && !e.run_id && OF_THE_REQUEST.has(e.kind))) return s;
   if (e.kind === "forgotten") {
@@ -29,6 +34,7 @@ export function reduce(s, e) {
   }
   switch (e.kind) {
     case "state": return { ...s, state: e.state };
+    case "video": return { ...s, video: e.state === "done" ? null : { state: e.state, seconds: e.seconds || 0 } };
     case "heard": case "typed": return { ...s, request: e.text, tag: e.tag || s.tag };
     case "step": {
       const known = s.steps.find((x) => x.id === e.step_id);
@@ -62,12 +68,18 @@ export function now(s) {
   if (s.problem) return t(s.problem, s.tag) || t("stopped", s.tag);
   if (s.confirm) return s.confirm.action + "?";
   const running = s.steps.find((x) => x.status === "running" || x.status === "asking");
-  return running ? label(running.name) : t("state_" + s.state, s.tag) || s.state;
+  if (running) return label(running.name);
+  if (s.video) {
+    if (s.video.state === "explaining") return t("video_explaining", s.tag);
+    const m = Math.floor(s.video.seconds / 60), sec = String(s.video.seconds % 60).padStart(2, "0");
+    return `${t("video_listening", s.tag)} ${m}:${sec}`;
+  }
+  return t("state_" + s.state, s.tag) || s.state;
 }
 
 /** Whether there is something to stop: Rafiq thinking or speaking, a step running, or a question waiting. */
 export function busy(s) {
-  return ["thinking", "speaking"].includes(s.state) || Boolean(s.confirm)
+  return ["thinking", "speaking"].includes(s.state) || Boolean(s.confirm) || s.video?.state === "listening"
     || s.steps.some((x) => x.status === "running" || x.status === "asking");
 }
 

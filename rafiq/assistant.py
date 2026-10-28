@@ -27,7 +27,17 @@ import numpy as np
 from . import config as config_mod
 from . import dictation, interpret, kws, lang, modes, notify, nudges, overlay, presence, privacy, timing, voiceid, wake
 from . import history as history_mod
-from .audio import RATE, Endpointer, Microphone, SileroVAD, calibrate, echo_cancel_source, level, measure_noise
+from .audio import (
+    RATE,
+    Endpointer,
+    Microphone,
+    SileroVAD,
+    calibrate,
+    echo_cancel_source,
+    level,
+    measure_noise,
+    system_audio,
+)
 from .bargein import BargeIn
 from .brain import Brain
 from .budget import Budget
@@ -47,6 +57,7 @@ from .tasks import ClaudeAgent, Task, Tasks
 from .tools import Tool, brief, dev, display, load_all, media
 from .tools import scenes as scenes_mod
 from .tts import Speaker, SpeechStream
+from .video import VideoWatch
 
 MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
@@ -87,6 +98,7 @@ class Context:
     quiet: Callable[[], None] | None = None
     show: Callable[[str, dict], None] | None = None
     keep_screen: Callable[[bytes], str] | None = None
+    video: VideoWatch | None = None
 
 
 @dataclass
@@ -242,6 +254,11 @@ class Assistant:
         self.dictating = False
         self.waiting_shows, self.show_lock = 0, threading.Lock()   # from other programs (offer_show)
         self.screens: dict[str, tuple[bytes, float]] = {}           # the latest screenshot shown (#201)
+        self.video = VideoWatch(self.cfg, system_audio, self._transcribe_here,
+                                lambda system, text: self.brain.complete(system, text),
+                                on_event=self.events.publish, on_done=self._video_done,
+                                speaking=lambda: self.state == "speaking")
+        self.ctx.video = self.video
         self.clock = time.monotonic
         self.events.on_run.append(lambda: self.brain.clear_stop())    # self.brain changes with the backend
         self.history = history_mod.History(config_mod.data_dir() / "history.json",
@@ -449,6 +466,15 @@ class Assistant:
         else:
             self.speaker.say(text, tag)
         return True
+
+    def _transcribe_here(self, clip: np.ndarray) -> str:
+        """A video's sound, transcribed by Whisper on this computer: never the cloud fallback (#202)."""
+        with self.stt_lock:              # no hotwords or prompt: they would nudge the video toward Rafiq's words
+            return self.stt.local.transcribe(clip, hotwords=None, prompt="").text
+
+    def _video_done(self, text: str, tag: str) -> None:
+        """The video's explanation, from its thread: shown and said on this one, between requests."""
+        self.submit("video_done", text=text, tag=tag)
 
     def keep_screen(self, png: bytes) -> str:
         """Keep the screenshot the widget is about to show, for the panel to serve (GET /api/screen); only the
@@ -794,6 +820,8 @@ class Assistant:
                     self.notify(data["text"], data["event"], data["lang"])
                 elif kind == "say":
                     self.say(data["text"], data["tag"], data.get("cards"))
+                elif kind == "video_done":            # cut to size like any explanation (tools/display.py)
+                    self.show("explain", display.clean("explain", {"text": data["text"], "tag": data["tag"]}))
                 elif kind == "show":                  # from another program over MCP, through the panel
                     with self.show_lock:
                         self.waiting_shows -= 1

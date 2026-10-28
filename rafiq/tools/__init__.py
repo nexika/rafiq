@@ -136,6 +136,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         screen,
         spending,
         style,
+        video,
         web,
     )
 

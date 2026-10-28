@@ -190,6 +190,8 @@ DEFAULTS: dict = {
     "discord": {"enabled": False, "bot_token": "", "user_id": ""},
     # "What's this song?": an AudD token (AUDD_API_TOKEN, https://audd.io); how long to listen; how many to keep.
     "songs": {"audd_token": "", "seconds": 8, "keep": 20},
+    # Explaining a video that plays on this computer (#202): listened to in chunks, for at most max_minutes.
+    "video": {"max_minutes": 20, "chunk_seconds": 30},
     "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault
     # accounts: usernames to report on; empty for every account linked to the token.
     "instagram": {"enabled": False, "app_id": "", "app_secret": "", "accounts": []},
