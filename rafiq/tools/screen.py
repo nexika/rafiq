@@ -29,6 +29,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from .. import lang as lang_mod
+from .. import prof
 from . import tool
 
 CLOUD_NOTICE = "send a picture of your screen to Claude, in the cloud"
@@ -240,7 +241,7 @@ def look(cfg: dict, question: str, tag: str, capture=capture, vision=None, shrin
     if vision is None:
         vision = claude_vision(cfg) if where == "claude" else ollama_vision(cfg)
     prompt = PROMPT.format(question=question or "What is on the screen?",
-                           language=lang_mod.NAMES.get(tag, "English"))
+                           language=lang_mod.NAMES.get(tag, "English")) + prof.note()
     return vision(png, prompt) or "error: the vision model gave no answer"
 
 
@@ -260,7 +261,7 @@ def look_marked(cfg: dict, question: str, tag: str, keep, show) -> str:
     width, height = size
     vision = claude_vision(cfg) if where == "claude" else ollama_vision(cfg)
     prompt = PROMPT.format(question=question or "What is on the screen?",
-                           language=lang_mod.NAMES.get(tag, "English"))
+                           language=lang_mod.NAMES.get(tag, "English")) + prof.note()
     reply = vision(png, prompt + MARKED.format(width=width, height=height, max_marks=MAX_MARKS))
     if not reply:
         return "error: the vision model gave no answer"
