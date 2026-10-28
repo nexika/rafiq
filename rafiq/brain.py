@@ -14,6 +14,7 @@ from __future__ import annotations
 import inspect
 import json
 import re
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -100,6 +101,10 @@ class BrainError(Exception):
 
 class LimitReached(Exception):
     """A request went past one of its limits (brain.limits): it is stopped, not retried elsewhere."""
+
+
+class Stopped(Exception):
+    """The user pressed stop (the panel or the widget): no further step runs, and no other backend tries."""
 
 
 @dataclass
@@ -269,6 +274,7 @@ class Brain:
         self.clock = clock
         self.steps = 0
         self.voice: Voice | None = None     # the request's, while think() runs: tools/display.py speaks in it
+        self.stopping = threading.Event()   # set from the panel's thread by stop(), read between steps
         self.open_steps: dict[int, tuple[str, float]] = {}   # step_id: its tool and when it was asked for
         self._claude = None
         self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
@@ -297,6 +303,16 @@ class Brain:
         finally:
             self.voice = None
 
+    def stop(self) -> None:
+        """Stop the request being answered after the step running now: a tool already running finishes, since
+        cutting it off halfway could leave a half-done change."""
+        self.stopping.set()
+
+    def clear_stop(self) -> None:
+        """A new request starts (its run opens, before it is even transcribed): an older stop isn't for it.
+        Cleared there, not in think(), so a stop pressed while Rafiq still transcribes counts."""
+        self.stopping.clear()
+
     def _think(self, text: str, tag: str, ctx, on_speech: Callable[[str, str], None] | None) -> str:
         history = self.memory.recent(self.clock(), tag)
         self.steps = 0                       # step_id counts the tool calls of this request, from 1
@@ -309,6 +325,8 @@ class Brain:
         errors = []
         voice = self.voice = Voice(on_speech, tag)
         for backend in self.backends():
+            if self.stopping.is_set():       # before the first backend, or instead of trying the next one
+                return self._last_words(voice, lang_mod.phrase("request_stopped", tag))
             try:
                 run = {"claude": self._claude_turn, "openai": self._openai_turn, "ollama": self._ollama_turn}[backend]
                 # A local model gets its smaller set when the router kept every tool.
@@ -321,6 +339,8 @@ class Brain:
                 self.memory.add(text, answer, self.clock(), tag)
                 self.on_event("brain", {"backend": backend, "route": route.name})
                 return answer
+            except Stopped:
+                return self._last_words(voice, lang_mod.phrase("request_stopped", tag))
             except LimitReached as exc:
                 self.on_event("error", {"error": f"{backend} stopped: {exc}"})
                 return self._last_words(voice, lang_mod.phrase("limit", tag))
@@ -450,7 +470,7 @@ class Brain:
         `started` is when the model asked for it; a step that ends says when."""
         name, started = self.open_steps[step]
         event = {"step_id": step, "name": name, "status": status, "started": started}
-        if status in ("done", "failed", "declined"):
+        if status in ("done", "failed", "declined", "stopped"):
             del self.open_steps[step]
             event["ended"] = self.clock()
         self.on_event("step", event)
@@ -458,13 +478,15 @@ class Brain:
     def _end_open_steps(self) -> None:
         """A turn that stopped early (an error, a second broken call) leaves no step looking unfinished."""
         for step in list(self.open_steps):
-            self._step(step, "failed")
+            self._step(step, "stopped" if self.stopping.is_set() else "failed")
 
     def _run_tool(self, name: str, args: dict, tag: str, ctx, tools: dict[str, Tool],
                   voice: Voice | None = None, budget: Budget | None = None, step: int | None = None) -> str:
         """Run a tool the model asked for; only the ones it was offered for this request."""
         if step is None:
             step = self._queue([name])[0]
+        if self.stopping.is_set():           # left open: think() ends it, and the steps after it, as stopped
+            raise Stopped()
         tool = tools.get(name)
         if tool is None:
             self._step(step, "failed")
@@ -477,6 +499,8 @@ class Brain:
         if action and not (can_remember and self.approvals.allowed(name)):
             self._step(step, "asking")
             answer = self._ask(action, tag, can_remember)
+            if self.stopping.is_set():       # stop pressed while asking: not even a yes runs it now
+                raise Stopped()
             if not answer:
                 self._step(step, "declined")
                 self.on_event("tool", {"name": name, "args": "(hidden)" if tool.private else args, "result": "declined",
@@ -505,6 +529,8 @@ class Brain:
             self.on_event("tool", {"name": name, "args": args, "result": result[:500], "card": tool.card,
                                    "step_id": step})
         self._step(step, "failed" if result.startswith("error") else "done")
+        if self.stopping.is_set():           # pressed while it ran: the model isn't asked what to do next
+            raise Stopped()
         return result[:8000]
 
     def spend(self) -> dict:

@@ -5,6 +5,7 @@
 
 mod owner;
 mod panel;
+mod post;
 mod sse;
 
 use std::time::Duration;
@@ -21,6 +22,35 @@ const LAST_RETRY: Duration = Duration::from_secs(30);
 fn set_large(window: WebviewWindow, large: bool) -> Result<(), String> {
     let (w, h) = if large { LARGE } else { SMALL };
     window.set_size(LogicalSize::new(w, h)).map_err(|e| e.to_string())
+}
+
+/// Send one of the three things the widget may ask, away from the window's thread. Errors are problem codes.
+async fn send(action: Result<post::Action, String>) -> Result<(), String> {
+    let action = action?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = panel::home().ok_or("no_token".to_string()).and_then(|h| panel::find(&h))?;
+        post::send(&found, &action, || owner::check(found.port, found.ipv6))
+    })
+    .await
+    .map_err(|_| "stopped".to_string())?
+}
+
+/// A typed request, answered like one typed in the panel.
+#[tauri::command]
+async fn ask(text: String) -> Result<(), String> {
+    send(post::Action::ask(&text)).await
+}
+
+/// Yes, no, or yes and don't ask again for this tool, to the question Rafiq is asking.
+#[tauri::command]
+async fn answer(yes: bool, always: bool) -> Result<(), String> {
+    send(Ok(post::Action::Answer { yes, always })).await
+}
+
+/// Stop speaking, and run no further step of the request being answered.
+#[tauri::command]
+async fn stop() -> Result<(), String> {
+    send(Ok(post::Action::Stop)).await
 }
 
 /// Follow the running Rafiq for as long as the widget is open, connecting again when it restarts: soon at
@@ -53,7 +83,7 @@ fn follow(app: tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![set_large])
+        .invoke_handler(tauri::generate_handler![set_large, ask, answer, stop])
         .setup(|app| {
             let handle = app.handle().clone();
             std::thread::spawn(move || follow(handle));

@@ -7,7 +7,7 @@ import urllib.request
 import pytest
 
 from rafiq import brain as brain_mod
-from rafiq import config
+from rafiq import config, lang
 from rafiq.assistant import Events
 from rafiq.brain import Brain
 from rafiq.panel import serve
@@ -513,3 +513,84 @@ def test_a_tool_can_reach_the_voice_of_the_request_it_runs_in(ollama):
     brain.cfg["brain"]["ollama_tools"] = "all"
     brain.think("peek", "en", on_speech=lambda text, tag: None)
     assert seen[0] is not None and brain.voice is None
+
+
+# ---------------------------------------------------------------------- stop
+
+def test_stop_runs_no_further_step_and_says_it_stopped(ollama):
+    script, _ = ollama
+    events, ran = [], []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "first", "arguments": {}}},
+                                                    {"function": {"name": "second", "arguments": {}}}]},
+               {"role": "assistant", "content": "should not be reached"}]
+    brain = make_brain()
+
+    def first():
+        ran.append("first")
+        brain.stop()                     # the user pressed stop while it ran
+        return "ok"
+
+    brain.tools["first"] = Tool("first", "first", first)
+    brain.tools["second"] = Tool("second", "second", lambda: ran.append("second") or "ok")
+    brain.cfg["brain"]["routing"] = False
+    brain.cfg["brain"]["ollama_tools"] = "all"
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    answer = brain.think("do both", "fr")
+    assert ran == ["first"] and answer == lang.phrase("request_stopped", "fr")
+    last = {d["step_id"]: d["status"] for k, d in events if k == "step"}
+    assert last == {1: "done", 2: "stopped"}
+
+
+def test_a_stop_is_forgotten_once_the_next_request_starts(ollama):
+    script, _ = ollama
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "get_time", "arguments": {}}}]},
+               {"role": "assistant", "content": "Noon."}]
+    events = []
+    brain = make_brain()
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    brain.stop()
+    brain.clear_stop()                   # what the assistant does when the next request's run opens
+    assert brain.think("what time is it", "en") == "Noon."
+    assert [d["status"] for k, d in events if k == "step"][-1] == "done"
+
+
+def test_a_stop_pressed_before_the_brain_starts_ends_the_request_at_once(ollama):
+    """Pressed while Rafiq was still transcribing: the stop belongs to this request."""
+    script, requests = ollama
+    script += [{"role": "assistant", "content": "the whole answer"}]
+    brain = make_brain()
+    brain.stop()
+    assert brain.think("delete all my reminders", "en") == lang.phrase("request_stopped", "en")
+    assert requests == []
+
+
+def test_stop_during_a_question_runs_nothing_even_after_a_yes(ollama):
+    script, _ = ollama
+    events, ran = [], []
+    script += [{"role": "assistant", "tool_calls": [{"function": {"name": "power", "arguments": "{}"}}]},
+               {"role": "assistant", "content": "should not be reached"}]
+    brain = make_brain(log=ran)
+
+    def confirm(action, tag):
+        brain.stop()                     # stop pressed while Rafiq asked; then a yes came in anyway
+        return True
+
+    brain.confirm = confirm
+    brain.on_event = lambda kind, data: events.append((kind, data))
+    assert brain.think("shut down", "en") == lang.phrase("request_stopped", "en")
+    assert ran == [] and [d["status"] for k, d in events if k == "step"][-1] == "stopped"
+
+
+def test_the_panel_s_stop_also_stops_the_request(panel):
+    assistant, port = panel
+    stopped = []
+    assistant.brain = type("B", (), {"stop": lambda self: stopped.append(True)})()
+    assert request(port, "/api/stop", {})[0] == 200
+    assert stopped == [True]
+
+
+def test_the_panel_s_stop_answers_no_to_a_question_waiting(panel):
+    assistant, port = panel
+    assistant.confirming = True
+    assert request(port, "/api/stop", {})[0] == 200
+    assert assistant.pending_answer.get_nowait() is False

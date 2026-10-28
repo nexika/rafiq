@@ -100,6 +100,7 @@ class Events:
     # thread and the background tasks never pick up the request running on the loop, even where a new
     # thread inherits its parent's context (free-threaded Python).
     current: contextvars.ContextVar = field(default_factory=lambda: contextvars.ContextVar("rafiq_run", default=None))
+    on_run: list = field(default_factory=list)      # called as each new request starts
 
     def run_id(self) -> str | None:
         run = self.current.get()
@@ -113,6 +114,8 @@ class Events:
             yield outer
             return
         run_id = uuid.uuid4().hex[:8]
+        for starting in list(self.on_run):
+            starting()
         token = self.current.set((run_id, threading.get_ident()))
         self.publish("run", {"status": "started"})
         end: dict = {"status": "failed"}
@@ -234,6 +237,7 @@ class Assistant:
         self.keyboard = dictation.Keyboard()
         self.dictating = False
         self.waiting_shows, self.show_lock = 0, threading.Lock()   # from other programs (offer_show)
+        self.events.on_run.append(lambda: self.brain.clear_stop())    # self.brain changes with the backend
         self.history = history_mod.History(config_mod.data_dir() / "history.json",
                                            self.cfg["history"]["retention_days"])
         self.tag = "en"                      # the language of the conversation so far

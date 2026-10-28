@@ -215,9 +215,14 @@ def make_handler(assistant, token: str, port: int):
             elif path == "/api/persona" and data.get("name") in persona.PERSONAS:
                 persona.choose(data["name"])
                 assistant.events.publish("persona", {"persona": data["name"]})
-            elif path == "/api/stop":
+            elif path == "/api/stop":             # the panel's and the widget's stop button
                 assistant.reader.stop()
                 assistant.speaker.stop()
+                brain = getattr(assistant, "brain", None)
+                if brain is not None:
+                    brain.stop()                  # and no further step of the request being answered
+                if getattr(assistant, "confirming", False):
+                    assistant.pending_answer.put(False)   # a question waiting: answered no
             elif path == "/api/reading" and data.get("action") in ("pause", "skip", "stop"):
                 getattr(assistant.reader, data["action"])()
             elif path == "/api/reading" and data.get("action") == "resume":

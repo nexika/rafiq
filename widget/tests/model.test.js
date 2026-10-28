@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { direction, initial, label, now, reduce } from "../ui/model.js";
+import { busy, direction, initial, label, now, reduce } from "../ui/model.js";
 import { PHRASES, TAGS, t } from "../ui/phrases.js";
 
 const connected = { kind: "connection", connected: true };
@@ -53,8 +53,9 @@ test("another program's explanation says so", () => {
 });
 
 test("a question waiting for a yes is shown until it is answered", () => {
-  let s = play(started, { kind: "confirm", action: "shut down the computer", tag: "en", run_id: "r1" });
-  assert.equal(s.confirm, "shut down the computer");
+  let s = play(started, { kind: "confirm", action: "shut down the computer", tag: "en", always: false, run_id: "r1" });
+  assert.deepEqual(s.confirm, { action: "shut down the computer", always: false });
+  assert.equal(now(s), "shut down the computer?");
   s = reduce(s, { kind: "confirmed", yes: false, run_id: "r1" });
   assert.equal(s.confirm, null);
 });
@@ -126,4 +127,39 @@ test("a tool name reads as words", () => {
 test("an event it doesn't know leaves the state as it was", () => {
   const before = play(started);
   assert.deepEqual(reduce(before, { kind: "level", level: 0.2 }), before);
+});
+
+test("a step's result is shown under it, and a private one only as hidden", () => {
+  const s = play(started,
+    { kind: "step", run_id: "r1", step_id: 1, name: "weather", status: "running" },
+    { kind: "tool", run_id: "r1", step_id: 1, name: "weather", args: {}, result: "31°C, sunny" },
+    { kind: "step", run_id: "r1", step_id: 1, name: "weather", status: "done" },
+    { kind: "step", run_id: "r1", step_id: 2, name: "email_read", status: "running" },
+    { kind: "tool", run_id: "r1", step_id: 2, name: "email_read", args: "(hidden)", result: "(hidden)" });
+  assert.deepEqual(s.steps.map((x) => [x.status, x.result, x.hidden]),
+    [["done", "31°C, sunny", false], ["running", null, true]]);
+});
+
+test("a long result is cut", () => {
+  const s = play(started, { kind: "step", run_id: "r1", step_id: 1, name: "web_search", status: "done" },
+    { kind: "tool", run_id: "r1", step_id: 1, name: "web_search", result: "x".repeat(900) });
+  assert.equal(s.steps[0].result.length, 160);
+});
+
+test("Rafiq is busy while it thinks, speaks or runs a step, so stop is offered", () => {
+  assert.equal(busy(play({ kind: "state", state: "idle" })), false);
+  assert.equal(busy(play({ kind: "state", state: "speaking" })), true);
+  assert.equal(busy(play(started, { kind: "step", run_id: "r1", step_id: 1, name: "x", status: "running" })), true);
+});
+
+test("stop is offered while Rafiq waits for an answer, since stopping then answers no", () => {
+  const s = play({ kind: "state", state: "listening" }, started,
+    { kind: "step", run_id: "r1", step_id: 1, name: "power", status: "asking" },
+    { kind: "confirm", action: "shut down", tag: "en", always: false, run_id: "r1" });
+  assert.equal(busy(s), true);
+});
+
+test("Always is offered only when Rafiq may remember the answer", () => {
+  const ask = (always) => play(started, { kind: "confirm", action: "x", tag: "en", always, run_id: "r1" }).confirm.always;
+  assert.deepEqual([ask(true), ask(false), ask(undefined)], [true, false, false]);
 });

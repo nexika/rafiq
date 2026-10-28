@@ -35,6 +35,16 @@ fn read_line(reader: &mut impl BufRead, line: &mut String) -> Result<usize, Stri
     Ok(n)
 }
 
+/// A connection to the panel, on IPv6 when that is where it listens. Nothing is sent yet.
+pub fn connect(panel: &Panel) -> Result<TcpStream, String> {
+    let address: SocketAddr = if panel.ipv6 {
+        (std::net::Ipv6Addr::LOCALHOST, panel.port).into()
+    } else {
+        (std::net::Ipv4Addr::LOCALHOST, panel.port).into()
+    };
+    TcpStream::connect_timeout(&address, Duration::from_secs(2)).map_err(|_| "not_running".to_string())
+}
+
 /// Connect to the panel and read the stream until it ends. `check` runs before anything is sent (whose
 /// program listens there), `on_open` once the panel has accepted, and `on_event` for each event.
 pub fn follow(
@@ -43,13 +53,7 @@ pub fn follow(
     on_open: impl FnOnce(),
     mut on_event: impl FnMut(serde_json::Value),
 ) -> Result<(), String> {
-    let address: SocketAddr = if panel.ipv6 {
-        (std::net::Ipv6Addr::LOCALHOST, panel.port).into()
-    } else {
-        (std::net::Ipv4Addr::LOCALHOST, panel.port).into()
-    };
-    let mut conn = TcpStream::connect_timeout(&address, Duration::from_secs(2))
-        .map_err(|_| "not_running".to_string())?;
+    let mut conn = connect(panel)?;
     check()?;
     // The panel sends a keep-alive every 15 seconds; 40 seconds of silence means it is gone.
     conn.set_read_timeout(Some(Duration::from_secs(40))).ok();

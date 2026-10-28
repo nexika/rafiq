@@ -179,3 +179,14 @@ def test_a_thread_given_the_run_context_still_starts_without_a_run():
         t.start()
         t.join()
     assert "run_id" not in next(e for e in kept(events) if e["kind"] == "persona")
+
+
+def test_a_new_request_calls_what_waits_for_one_but_a_run_inside_it_does_not():
+    events, started = Events(), []
+    events.on_run.append(lambda: started.append(True))
+    with events.run():
+        with events.run():
+            pass
+    with events.run():
+        pass
+    assert started == [True, True]
