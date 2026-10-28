@@ -12,7 +12,7 @@ const HIDDEN = new Set(["(hidden)", "error (hidden)"]);   // what Rafiq sends fo
 
 export function initial() {
   return { problem: "connecting", state: "idle", run: null, request: "", tag: "en", steps: [], plan: null,
-    explain: null, cards: [], answer: "", confirm: null };
+    explain: null, cards: [], answer: "", confirm: null, screen: null };
 }
 
 /** The state after one event. Events of another run (a background task), of a satellite or of the phone leave
@@ -24,7 +24,8 @@ export function reduce(s, e) {
   if (e.room || (s.run && !e.run_id && OF_THE_REQUEST.has(e.kind))) return s;
   if (e.kind === "forgotten") {
     const gone = new Set(e.texts || []);
-    return { ...s, request: gone.has(s.request) ? "" : s.request, answer: gone.has(s.answer) ? "" : s.answer };
+    return { ...s, request: gone.has(s.request) ? "" : s.request, answer: gone.has(s.answer) ? "" : s.answer,
+      screen: (e.kinds || []).includes("screen") ? null : s.screen };
   }
   switch (e.kind) {
     case "state": return { ...s, state: e.state };
@@ -42,6 +43,12 @@ export function reduce(s, e) {
     }
     case "plan": return { ...s, plan: { title: e.title, steps: e.steps, done: e.done } };
     case "explain": return { ...s, explain: { text: e.text, tag: e.tag, source: e.source || null } };
+    case "screen": return { ...s, screen: { id: e.id, width: e.width, height: e.height, marks: e.marks || [], src: null } };
+    case "screen-image": {
+      // From the Rust side, which fetched it with the token: only a PNG data: URL for the screenshot on screen.
+      const fits = s.screen && s.screen.id === e.id && typeof e.src === "string" && e.src.startsWith("data:image/png;");
+      return fits ? { ...s, screen: { ...s.screen, src: e.src } } : s;
+    }
     case "card": return { ...s, cards: [{ card: e.card, data: e.data }, ...s.cards].slice(0, MAX_CARDS) };
     case "confirm": return { ...s, confirm: { action: e.action, always: e.always === true } };
     case "confirmed": return { ...s, confirm: null };
@@ -62,6 +69,11 @@ export function now(s) {
 export function busy(s) {
   return ["thinking", "speaking"].includes(s.state) || Boolean(s.confirm)
     || s.steps.some((x) => x.status === "running" || x.status === "asking");
+}
+
+/** The ellipse drawn around a mark's box: centred on it, 15 pixels larger each way. */
+export function ellipse([left, top, right, bottom]) {
+  return { cx: (left + right) / 2, cy: (top + bottom) / 2, rx: (right - left) / 2 + 15, ry: (bottom - top) / 2 + 15 };
 }
 
 export function direction(tag) {

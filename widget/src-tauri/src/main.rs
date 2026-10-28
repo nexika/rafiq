@@ -3,6 +3,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod image;
 mod owner;
 mod panel;
 mod post;
@@ -53,6 +54,19 @@ async fn stop() -> Result<(), String> {
     send(Ok(post::Action::Stop)).await
 }
 
+/// Fetch the screenshot a `screen` event names, away from the stream's thread, and hand it to the page.
+fn show_screen(app: tauri::AppHandle, found: panel::Panel, id: String) {
+    std::thread::spawn(move || {
+        let screen_token = panel::home().and_then(|h| panel::screen_token(&h));
+        let fetched = image::fetch(&found, screen_token.as_deref(), &id, || owner::check(found.port, found.ipv6));
+        let payload = match fetched {
+            Ok(png) => serde_json::json!({"id": id, "src": image::data_url(&png)}),
+            Err(problem) => serde_json::json!({"id": id, "problem": problem}),
+        };
+        let _ = app.emit("rafiq-screen", payload);
+    });
+}
+
 /// Follow the running Rafiq for as long as the widget is open, connecting again when it restarts: soon at
 /// first, then every 30 seconds while it stays away.
 fn follow(app: tauri::AppHandle) {
@@ -68,6 +82,11 @@ fn follow(app: tauri::AppHandle) {
                     let _ = app.emit("rafiq-connection", serde_json::json!({"connected": true}));
                 },
                 |event| {
+                    if event["kind"] == "screen" {
+                        if let Some(id) = event["id"].as_str() {
+                            show_screen(app.clone(), found.clone(), id.to_string());
+                        }
+                    }
                     let _ = app.emit("rafiq-event", event);
                 },
             )

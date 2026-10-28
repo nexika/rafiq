@@ -168,6 +168,17 @@ body[data-view="small"] .ask { display: none; }
 .card dd { margin: 0; }
 .answer { padding-top: 8px; border-top: 1px solid var(--line); }
 
+.screen { margin: 0; }
+.shot { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
+.shot img { display: block; width: 100%; height: auto; }
+.shot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mark ellipse, .mark rect, .mark line { fill: none; stroke: #e5482f; }
+.mark rect.area { fill: rgba(255, 214, 0, .28); stroke: #e0a800; }
+.mark .head { fill: #e5482f; }
+.mark .badge { fill: #e5482f; }
+.mark text { fill: #fff; font-weight: 700; font-family: system-ui, sans-serif; }
+.screen ol { margin: 8px 0 0; padding-inline-start: 22px; color: var(--muted); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }

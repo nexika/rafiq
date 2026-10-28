@@ -409,6 +409,12 @@ def panel_token() -> str:
     return _token("panel.token")
 
 
+def screen_token() -> str:
+    """The token for the screenshot the widget shows (GET /api/screen). The panel's token is in its page,
+    which any program on this computer can load; this one is only in a file only this user can read."""
+    return _token("screen.token")
+
+
 def phone_token() -> str:
     """The phone's own token, so it can be changed (by deleting phone.token) without the panel's."""
     return _token("phone.token")

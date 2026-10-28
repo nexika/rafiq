@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 pub const DEFAULT_PORT: u16 = 8765;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Panel {
     pub port: u16,
     pub token: String,
@@ -33,6 +33,14 @@ pub fn find(home: &Path) -> Result<Panel, String> {
     }
     let (port, ipv6) = settings(home)?;
     Ok(Panel { port, token, ipv6 })
+}
+
+/// screen.token: needed for the screenshot (GET /api/screen) beside the panel token, which any program on this
+/// computer can read from the panel's page. None until Rafiq has made one.
+pub fn screen_token(home: &Path) -> Option<String> {
+    let token = std::fs::read_to_string(home.join("screen.token")).ok()?.trim().to_string();
+    let rafiqs = token.len() >= 32 && token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    rafiqs.then_some(token)
 }
 
 /// `[panel] port` and `host` from config.toml. The panel only ever listens on this computer, so another
@@ -77,6 +85,14 @@ mod tests {
     fn finds_the_token_and_the_default_port() {
         let home = folder("default", &[("panel.token", &format!("{TOKEN}\n"))]);
         assert_eq!(find(&home), Ok(Panel { port: DEFAULT_PORT, token: TOKEN.to_string(), ipv6: false }));
+    }
+
+    #[test]
+    fn reads_the_screen_token_once_rafiq_has_made_one() {
+        let home = folder("screen", &[("screen.token", &format!("{TOKEN}\n"))]);
+        assert_eq!(screen_token(&home).as_deref(), Some(TOKEN));
+        assert_eq!(screen_token(&folder("noscreen", &[])), None);
+        assert_eq!(screen_token(&folder("oddscreen", &[("screen.token", "short")])), None);
     }
 
     #[test]

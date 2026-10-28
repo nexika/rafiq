@@ -52,6 +52,7 @@ MIN_UTTERANCE_SECONDS = 0.35
 LISTEN_SECONDS = 8.0
 CONFIRM_SECONDS = 10.0
 LEVEL_SECONDS = 0.2          # how often the panel's microphone meter moves
+SCREEN_SECONDS = 300         # how long a screenshot waits to be fetched by the widget, once
 MUTED_RECORDING = "Rafiq is muted, so it does not record anything"
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class Context:
     record: Callable[[float], np.ndarray] | None = None
     quiet: Callable[[], None] | None = None
     show: Callable[[str, dict], None] | None = None
+    keep_screen: Callable[[bytes], str] | None = None
 
 
 @dataclass
@@ -165,21 +167,23 @@ class Events:
             if q in self.listeners:
                 self.listeners.remove(q)
 
-    def drop(self, texts: set[str]) -> None:
-        """Forget what was heard, typed or said with these texts, here and in the open panels. What was
-        heard counts with the name before it too ("Rafiq, what time is it?")."""
+    def drop(self, texts: set[str], kinds: set[str] | frozenset = frozenset()) -> None:
+        """Forget what was heard, typed or said with these texts, and every event of these kinds, here and in
+        the open panels. What was heard counts with the name before it too ("Rafiq, what time is it?")."""
         def gone(e: dict) -> bool:
+            if e["kind"] in kinds:
+                return True
             text = e.get("text")
             return e["kind"] in ("heard", "typed", "said") and isinstance(text, str) and (
                 text in texts or (e["kind"] == "heard" and wake.find(text)[1] in texts))
 
         with self.lock:
-            dropped = [e["text"] for e in self.history if gone(e)]
+            dropped = [e["text"] for e in self.history if gone(e) and e["kind"] not in kinds]
             kept = [e for e in self.history if not gone(e)]
             self.history.clear()
             self.history.extend(kept)
         # Open panels remove these from the page; not kept, so the texts are not replayed later.
-        self.publish("forgotten", {"texts": sorted(texts | set(dropped))}, keep=False)
+        self.publish("forgotten", {"texts": sorted(texts | set(dropped)), "kinds": sorted(kinds)}, keep=False)
 
 
 class Assistant:
@@ -227,7 +231,7 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
                            practice=self.practice, reader=self.reader, record=self.record,
-                           quiet=self.quiet, show=self.show)
+                           quiet=self.quiet, show=self.show, keep_screen=self.keep_screen)
         self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
@@ -237,6 +241,8 @@ class Assistant:
         self.keyboard = dictation.Keyboard()
         self.dictating = False
         self.waiting_shows, self.show_lock = 0, threading.Lock()   # from other programs (offer_show)
+        self.screens: dict[str, tuple[bytes, float]] = {}           # the latest screenshot shown (#201)
+        self.clock = time.monotonic
         self.events.on_run.append(lambda: self.brain.clear_stop())    # self.brain changes with the backend
         self.history = history_mod.History(config_mod.data_dir() / "history.json",
                                            self.cfg["history"]["retention_days"])
@@ -443,6 +449,20 @@ class Assistant:
         else:
             self.speaker.say(text, tag)
         return True
+
+    def keep_screen(self, png: bytes) -> str:
+        """Keep the screenshot the widget is about to show, for the panel to serve (GET /api/screen); only the
+        latest, in memory, so an older one is gone as soon as there is a new one."""
+        screen_id = uuid.uuid4().hex[:12]
+        self.screens = {screen_id: (png, self.clock())}
+        return screen_id
+
+    def take_screen(self, screen_id: str) -> bytes | None:
+        """The screenshot, once, and only within SCREEN_SECONDS of being taken: then it is gone."""
+        kept = self.screens.pop(screen_id, None)      # a wrong id takes nothing away
+        if kept is None or self.clock() - kept[1] > SCREEN_SECONDS:
+            return None
+        return kept[0]
 
     def offer_show(self, kind: str, data: dict) -> bool:
         """Queue what another program sent (POST /api/display); False when too much is already waiting, so
@@ -661,7 +681,8 @@ class Assistant:
             return
         for entry in entries:
             self.brain.memory.forget(entry.heard, entry.said)
-        self.events.drop({e.heard for e in entries} | {e.said for e in entries})
+        self.screens = {}                    # and the screenshot it may have looked at, with its event
+        self.events.drop({e.heard for e in entries} | {e.said for e in entries}, kinds={"screen"})
 
     def privacy(self) -> dict:
         return history_mod.privacy(self.brain.backends(), self.speaker.engines())

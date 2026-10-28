@@ -101,6 +101,7 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `scene` | `id`, `steps`: `[tool, result]` pairs | `{"id": "film", "steps": [["lights", "dimmed"]]}` |
 | `plan` | `title`, `steps` (at most 12), `done` (how many are done); sent again as it progresses | `{"title": "Book a table", "steps": ["Find a place", "Call"], "done": 1}` |
 | `explain` | `text` (at most 1500 characters, also said aloud), `tag`; `source: "mcp"` from another program | `{"text": "This loop stops at the first even number.", "tag": "en"}` |
+| `screen` | `id`, `width`, `height`, `text` (the answer), `marks`: `n` (the number the text uses, as `[n]`), `label`, `box` (`[left, top, right, bottom]` in the screenshot's pixels), `shape` (`circle`, `box`, `arrow`) | `{"id": "a1b2c3d4e5f6", "width": 1568, "height": 980, "text": "Close the dialog [1].", "marks": [{"n": 1, "label": "the dialog", "box": [610, 300, 960, 520], "shape": "circle"}]}` |
 | `card` | `card` (`music`, `news`, `weather`, `timer`), `data` (at most 8 short text fields) | `{"card": "weather", "data": {"city": "Cairo", "temperature": "31°C"}}` |
 | `task` | `id`, `goal`, `state` (`running`, `done`, `failed`, `cancelled`), `cost` (so far, when cancelled), `result` | `{"id": "ab12cd", "run_id": "task-ab12cd", "goal": "find a flight", "state": "running", "cost": null, "result": ""}` |
 | `brain` | `backend`; `mode` and `model` when changed in the panel | `{"backend": "claude"}` |
@@ -144,7 +145,17 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `gesture` | `gesture`, `action` | `{"gesture": "palm", "action": "pause"}` |
 | `satellite` | `name`, `room`, `connected` | `{"name": "kitchen-pi", "room": "kitchen", "connected": true}` |
 | `phone` | `kind`, `text` | `{"kind": "note", "text": "buy bread"}` |
-| `forgotten` | `texts` (remove these from what is shown; not kept) | `{"texts": ["what time is it"]}` |
+| `forgotten` | `texts` (remove these from what is shown; not kept), `kinds` (remove every event of these kinds, such as `screen`) | `{"texts": ["what time is it"], "kinds": ["screen"]}` |
+
+## The screenshot
+
+A `screen` event names its screenshot by `id`; the picture itself is never on the stream or in the logs.
+`GET /api/screen?id=<id>` answers the PNG (`Cache-Control: no-store`). It needs the panel's token in
+`X-Rafiq-Token` and the screen token in `X-Rafiq-Screen-Token`, with the usual Host check. The screen token
+is in `screen.token`, readable only by this user: the panel's token alone isn't enough, since any program
+on this computer can read it from the panel's page. Rafiq keeps only the latest screenshot, in memory, and
+hands it out once, within 5 minutes; after that, or after "forget that", the answer is 404. Marks outside the picture, upside down or of no size were dropped before the event,
+so the numbers that remain match the text.
 
 ## Showing from another program
 

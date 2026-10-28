@@ -10,6 +10,13 @@ from rafiq.tools import REGISTRY, Tool, load_all, screen
 PNG = b"\x89PNG\r\n\x1a\nfake"
 
 
+@pytest.fixture(autouse=True)
+def never_the_real_screen(monkeypatch, tmp_path):
+    """No test here may reach the portal or a screenshot command of the computer it runs on."""
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+
 class Ctx:
     def __init__(self, cfg, tag="en"):
         self.cfg, self.tag = cfg, tag

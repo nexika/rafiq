@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { busy, direction, initial, label, now, reduce } from "../ui/model.js";
+import { busy, direction, ellipse, initial, label, now, reduce } from "../ui/model.js";
 import { PHRASES, TAGS, t } from "../ui/phrases.js";
 
 const connected = { kind: "connection", connected: true };
@@ -162,4 +162,36 @@ test("stop is offered while Rafiq waits for an answer, since stopping then answe
 test("Always is offered only when Rafiq may remember the answer", () => {
   const ask = (always) => play(started, { kind: "confirm", action: "x", tag: "en", always, run_id: "r1" }).confirm.always;
   assert.deepEqual([ask(true), ask(false), ask(undefined)], [true, false, false]);
+});
+
+test("a screenshot with its marks is shown, and its picture added when it comes", () => {
+  const marks = [{ n: 1, label: "the dialog", box: [100, 100, 300, 200], shape: "circle" }];
+  let s = play(started, { kind: "screen", id: "a1", width: 640, height: 400, text: "Close [1].", marks, run_id: "r1" });
+  assert.deepEqual(s.screen, { id: "a1", width: 640, height: 400, marks, src: null });
+  s = reduce(s, { kind: "screen-image", id: "old", src: "data:image/png;base64,AAA" });
+  assert.equal(s.screen.src, null);
+  s = reduce(s, { kind: "screen-image", id: "a1", src: "data:image/png;base64,BBB" });
+  assert.equal(s.screen.src, "data:image/png;base64,BBB");
+});
+
+test("a picture that isn't a data: PNG is never shown", () => {
+  let s = play(started, { kind: "screen", id: "a1", width: 10, height: 10, marks: [], run_id: "r1" });
+  s = reduce(s, { kind: "screen-image", id: "a1", src: "https://example.com/x.png" });
+  assert.equal(s.screen.src, null);
+});
+
+test("a new request clears the screenshot", () => {
+  const s = play(started, { kind: "screen", id: "a1", width: 10, height: 10, marks: [], run_id: "r1" },
+    { kind: "run", status: "started", run_id: "r2" });
+  assert.equal(s.screen, null);
+});
+
+test("a mark's circle goes around its box, a little larger", () => {
+  assert.deepEqual(ellipse([100, 100, 300, 200]), { cx: 200, cy: 150, rx: 115, ry: 65 });
+});
+
+test("forgetting takes the screenshot off the screen", () => {
+  const s = play(started, { kind: "screen", id: "a1", width: 10, height: 10, marks: [], run_id: "r1" },
+    { kind: "forgotten", texts: [], kinds: ["screen"] });
+  assert.equal(s.screen, null);
 });
