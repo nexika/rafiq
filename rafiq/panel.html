@@ -353,9 +353,18 @@ function handle(e) {
       + " · " + (LANG[e.tag] || e.tag)); break;
     case "card": add("tool", "▣ " + e.card + "\n" + Object.entries(e.data).map(([k, v]) => k + ": " + v).join("\n"));
       break;
-    case "task": add(e.state === "failed" ? "note err" : "note", "Background task “" + e.goal + "”: " + e.state
-      + (e.state === "running" ? "" : " (" + (e.cost == null ? "cost unknown" : "$" + e.cost.toFixed(4)) + ")\n"
-      + e.result)); break;
+    case "task": {
+      add(e.state === "failed" ? "note err" : "note", "Background task “" + e.goal + "”: " + e.state
+        + (e.state === "running" ? "" : " (" + (e.cost == null ? "cost unknown" : "$" + e.cost.toFixed(4)) + ")\n"
+        + e.result));
+      if (e.state === "running") {            // it ends after the step it is running
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.textContent = "Cancel";
+        cancel.onclick = () => { cancel.disabled = true; post("/api/task/cancel", { id: e.id }); };
+        log.lastElementChild.append(" ", cancel);
+      }
+    } break;
     case "calibrated": add("note", "Listened to the room: speech above " + e.threshold + ", "
       + e.end_seconds + " s of silence ends a request (microphone at " + e.rate + " Hz)"); break;
     case "mode": modeEl.value = e.mode; break;

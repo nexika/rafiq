@@ -72,7 +72,9 @@ early is ended as `failed`, or `stopped` after a stop. Both are Unix times. The
 `tool_start`, `waiting` and `tool` events of a step carry its `step_id` too.
 
 A **background task** runs apart from the request that started it, so its `task` events carry
-their own run: `"run_id": "task-<id>"`.
+their own run: `"run_id": "task-<id>"`. Stop doesn't end a task; cancelling it does
+(`POST /api/task/cancel {"id": "<id>"}`, answered `{"cancelled": true}` or `false`). It then ends after the
+step it is running, as `cancelled`.
 
 Not in a run yet: requests from a satellite speaker (`heard` and `said` with a `room`) and from the
 phone bridge. Their `step`, `tool_start` and `tool` events have no `run_id`, so two of them at once
@@ -100,7 +102,7 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `plan` | `title`, `steps` (at most 12), `done` (how many are done); sent again as it progresses | `{"title": "Book a table", "steps": ["Find a place", "Call"], "done": 1}` |
 | `explain` | `text` (at most 1500 characters, also said aloud), `tag`; `source: "mcp"` from another program | `{"text": "This loop stops at the first even number.", "tag": "en"}` |
 | `card` | `card` (`music`, `news`, `weather`, `timer`), `data` (at most 8 short text fields) | `{"card": "weather", "data": {"city": "Cairo", "temperature": "31°C"}}` |
-| `task` | `id`, `goal`, `state` (`running`, `done`, `failed`), `cost`, `result` | `{"id": "ab12cd", "run_id": "task-ab12cd", "goal": "find a flight", "state": "running", "cost": null, "result": ""}` |
+| `task` | `id`, `goal`, `state` (`running`, `done`, `failed`, `cancelled`), `cost` (so far, when cancelled), `result` | `{"id": "ab12cd", "run_id": "task-ab12cd", "goal": "find a flight", "state": "running", "cost": null, "result": ""}` |
 | `brain` | `backend`; `mode` and `model` when changed in the panel | `{"backend": "claude"}` |
 | `spending` | `today`, `month`, `daily_cap`, `monthly_cap`, `currency`, `status` | `{"today": 0.012, "month": 0.41, "daily_cap": 1, "monthly_cap": 10, "currency": "USD", "status": "ok"}` |
 | `error` | `error`, or `brain` (each backend's error), or `satellite` | `{"error": "TimeoutError: timed out"}` |

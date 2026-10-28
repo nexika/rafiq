@@ -190,6 +190,10 @@ def make_handler(assistant, token: str, port: int):
                     return self._send(400, json.dumps({"error": str(exc)}).encode())
                 if not assistant.offer_show(data["kind"], shown):
                     return self._send(429, b'{"error":"too much waiting to be shown"}')
+            elif path == "/api/task/cancel" and isinstance(data.get("id"), str):
+                tasks = getattr(getattr(assistant, "ctx", None), "tasks", None)
+                cancelled = tasks is not None and tasks.cancel(data["id"][:20])
+                return self._send(200, json.dumps({"cancelled": cancelled}).encode())
             elif path == "/api/listen":
                 assistant.submit("listen")
             elif path == "/api/mute" and isinstance(data.get("muted", False), bool):
