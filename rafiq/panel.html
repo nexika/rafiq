@@ -197,6 +197,7 @@ button.danger { color: var(--err); }
       <select id="backend">
         <option value="auto">Auto</option><option value="claude">Claude</option>
         <option value="openai">OpenAI</option><option value="ollama">Ollama</option>
+        <option value="off">Off</option>
       </select>
       <select id="model" aria-label="Model" hidden></select>
       <button type="button" id="use" hidden>Use</button>
@@ -694,7 +695,8 @@ function note(text, err) { pickerNote.textContent = text; pickerNote.className =
 async function loadBrain() {
   try { brain = await ask("/api/brain"); } catch (e) { return note(e.message, true); }
   backendEl.value = brain.mode;
-  note(brain.mode === "auto" ? "Claude, then OpenAI, then Ollama" : brain.models[brain.mode]);
+  note(brain.mode === "auto" ? "Claude, then OpenAI, then Ollama"
+    : brain.mode === "off" ? "Off: your AI app (rafiq plugin) is the brain" : brain.models[brain.mode]);
 }
 backendEl.onchange = async () => {
   const backend = backendEl.value;

@@ -584,6 +584,30 @@ claude mcp add rafiq -- /path/to/rafiq/.venv/bin/rafiq mcp
 For Claude Desktop, add to `claude_desktop_config.json`:
 `"mcpServers": {"rafiq": {"command": "/path/to/rafiq/.venv/bin/rafiq", "args": ["mcp"]}}`.
 
+### As a plugin, under your nickname
+
+`rafiq plugin` packages all of this for the AI app you already pay for, named after the first of your
+`[wake] names` ("Jarvis" makes the plugin `jarvis`; with none, or one with no Latin letters, it is `rafiq`).
+Each package runs this install of Rafiq, so keep `rafiq run` running: it asks before anything changes,
+shows the work in its widget and rings your reminders.
+
+- **Claude Code:** `rafiq plugin claude-code` writes a plugin to `~/.config/rafiq/plugin/`, with Rafiq's tools
+  and a skill that gives Claude your nickname and Rafiq's rules. It prints the two commands that install it:
+  `claude plugin marketplace add ~/.config/rafiq/plugin` and `claude plugin install jarvis@jarvis-local`.
+  `--notify` adds a hook that has Rafiq say when Claude stops, which is after every reply. `--out` writes
+  elsewhere, but only to an empty folder or one `rafiq plugin` made.
+- **Claude Desktop:** `rafiq plugin claude-desktop` writes `~/.config/rafiq/jarvis.mcpb`, an extension you
+  open with Claude Desktop (or drag to Settings > Extensions) to install in one step.
+- **Codex:** `rafiq plugin codex` prints the lines to add to `~/.codex/config.toml`. They raise Codex's tool
+  timeout (60 seconds by default) so it waits for your yes.
+
+"Look at my screen" from one of these apps sends the screenshot itself over the internet to that app's model,
+after a yes that Rafiq asks for every time, so it works on your plan without a key or a local vision model.
+To let the app be the only brain, set `[brain] mode = "off"` (or pick Off in the panel). When you talk to
+Rafiq, it then tells you to ask in the app; the timers and reminders you already set still ring, and its
+questions and the widget keep working. Interpreting and explaining a video need Rafiq's own brain, so they
+are off too.
+
 ## Voice ID: only your voice confirms
 
 After `rafiq enroll`, run `rafiq voiceid` once. It turns your recordings into a voice print (speaker

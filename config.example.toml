@@ -4,6 +4,7 @@ user_name = ""                  # how Rafiq refers to you
 
 [brain]
 mode = "auto"                   # auto: Claude, then OpenAI, for each whose key is set; then Ollama
+                                # "off": your AI app is the brain (rafiq plugin); what you say is pointed to it
 profile = "everyday"            # the mode at start: everyday, quality or offline (switch by voice or in the panel)
 claude_model = "claude-haiku-5-5"
 quality_model = "claude-opus-5-5"   # quality mode's model

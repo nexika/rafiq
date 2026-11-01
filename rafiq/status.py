@@ -17,6 +17,8 @@ def check_all(cfg: dict, models, speaker) -> list[dict]:
 
     if brain.get("mode") == "claude":
         parts.append(_part("ollama", None, "not used: the brain is set to Claude"))
+    elif brain.get("mode") == "off":
+        parts.append(_part("ollama", None, "not used: the brain is off, your AI app thinks (rafiq plugin)"))
     else:
         installed = models.installed()
         model = brain["ollama_model"]

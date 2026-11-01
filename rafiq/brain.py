@@ -284,6 +284,8 @@ class Brain:
     # ------------------------------------------------------------------ choosing a backend
 
     def backends(self) -> list[str]:
+        if self.cfg["brain"].get("mode") == "off":     # plugin mode (#204): the AI app the user has is the brain
+            return []
         if self.budget and not self.budget.allows_paid():
             return ["ollama"]
         if modes.offline(self.cfg):
@@ -316,6 +318,8 @@ class Brain:
         self.stopping.clear()
 
     def _think(self, text: str, tag: str, ctx, on_speech: Callable[[str, str], None] | None) -> str:
+        if self.cfg["brain"].get("mode") == "off":
+            return self._last_words(Voice(on_speech, tag), lang_mod.phrase("brain_off", tag))
         history = self.memory.recent(self.clock(), tag)
         self.steps = 0                       # step_id counts the tool calls of this request, from 1
         if self.cfg["brain"].get("routing", True):
@@ -435,6 +439,8 @@ class Brain:
         """What was said in one language, in the other: for interpreter mode. No tools and no memory,
         so nothing said in the conversation is acted on. Claude translates best; a local model works
         offline with a weaker result."""
+        if self.cfg["brain"].get("mode") == "off":
+            return lang_mod.phrase("brain_off", target)
         names = lang_mod.NAMES
         system = TRANSLATE.format(source=names.get(source, "English"), target=names.get(target, "English"))
         return self.complete(system, text) or lang_mod.phrase("brain_down", target)
@@ -443,7 +449,10 @@ class Brain:
         """One answer to `text` under `system`, with no tools and no memory: Claude first, then the others.
         None when no backend answers. For interpreting and for explaining a video (rafiq/video.py)."""
         errors = []
-        for backend in self.backends():
+        backends = self.backends()
+        if not backends:                     # the brain is off: nothing is broken
+            return None
+        for backend in backends:
             try:
                 run = {"claude": self._claude_text, "openai": self._openai_text, "ollama": self._ollama_text}[backend]
                 answer = run(system, text)

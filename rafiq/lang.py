@@ -398,6 +398,29 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "brain_off": {"en": "I'm working inside your AI app now, so ask me there. The timers and reminders you "
+                        "already set still ring here.",
+                  "fr": "Je travaille maintenant dans ton application d'IA, demande-moi là-bas. Les minuteurs et "
+                        "les rappels déjà réglés sonnent toujours ici.",
+                  "es": "Ahora trabajo dentro de tu aplicación de IA, así que pregúntame allí. Los temporizadores y "
+                        "recordatorios que ya pusiste siguen sonando aquí.",
+                  "de": "Ich arbeite jetzt in deiner KI-App, frag mich also dort. Timer und Erinnerungen, die du "
+                        "schon gestellt hast, klingeln hier weiter.",
+                  "ar": "أعمل الآن داخل تطبيق الذكاء الاصطناعي لديك، فاسألني هناك. المؤقتات والتذكيرات التي "
+                        "ضبطتها من قبل ما زالت ترن هنا.",
+                  "ar-EG": "أنا شغال دلوقتي جوه تطبيق الذكاء الاصطناعي بتاعك، فاسألني هناك. التايمرات والتذكيرات "
+                           "اللي ظبطتها قبل كده لسه هترن هنا."},
+    "mcp_screen": {"en": 'send a picture of your whole screen over the internet to your AI app, to answer '
+                         '"{question}"',
+                   "fr": "envoyer une image de tout ton écran par Internet à ton application d'IA, pour répondre à "
+                         "« {question} »",
+                   "es": 'enviar una imagen de toda tu pantalla por Internet a tu aplicación de IA, para responder '
+                         '"{question}"',
+                   "de": 'ein Bild deines ganzen Bildschirms über das Internet an deine KI-App schicken, um '
+                         '"{question}" zu beantworten',
+                   "ar": 'إرسال صورة لشاشتك كلها عبر الإنترنت إلى تطبيق الذكاء الاصطناعي لديك، ليجيب عن "{question}"',
+                   "ar-EG": 'أبعت صورة لشاشتك كلها على الإنترنت لتطبيق الذكاء الاصطناعي بتاعك، عشان يرد على '
+                            '"{question}"'},
     "forgotten": {"en": "Done, I've forgotten it.", "fr": "C'est fait, je l'ai oublié.", "es": "Hecho, lo he olvidado.",
                   "de": "Erledigt, ich habe es vergessen.", "ar": "تم، لقد نسيته.", "ar-EG": "خلاص، نسيته."},
     "nothing_to_forget": {"en": "There's nothing to forget.", "fr": "Il n'y a rien à oublier.",

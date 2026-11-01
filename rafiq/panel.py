@@ -326,7 +326,11 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
                 result = assistant.call_tool(data["name"][:64], data.get("arguments", {}), ASK_SECONDS)
                 if result is None:
                     return self._send(504, b'{"error":"no answer in time"}')
-                return self._send(200, json.dumps({"result": result}, ensure_ascii=False).encode())
+                if isinstance(result, dict):       # a picture of the screen, with its text (#204)
+                    body = {"result": result.get("text", ""), "image": result.get("image", "")}
+                else:
+                    body = {"result": result}
+                return self._send(200, json.dumps(body, ensure_ascii=False).encode())
             elif path == "/api/listen":
                 assistant.submit("listen")
             elif path == "/api/mute" and isinstance(data.get("muted", False), bool):

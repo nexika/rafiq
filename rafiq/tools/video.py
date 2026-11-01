@@ -19,6 +19,8 @@ def explain_video(question: str = "", ctx=None) -> str:
 
     if getattr(ctx, "room", ""):
         return "error: a satellite can't listen to this computer's sound; ask on the computer itself"
+    if getattr(ctx, "cfg", {}).get("brain", {}).get("mode") == "off":
+        return "error: Rafiq's own brain is off, so it can't explain a video; it was not started"
     video = getattr(ctx, "video", None)
     if video is None:
         return OFF
