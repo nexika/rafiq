@@ -56,7 +56,9 @@ export function reduce(s, e) {
       return fits ? { ...s, screen: { ...s.screen, src: e.src } } : s;
     }
     case "card": return { ...s, cards: [{ card: e.card, data: e.data }, ...s.cards].slice(0, MAX_CARDS) };
-    case "confirm": return { ...s, confirm: { action: e.action, always: e.always === true } };
+    // The id goes back with the answer, so a late click can't answer the next question.
+    case "confirm": return { ...s, confirm: { action: e.action, always: e.always === true,
+                                              id: typeof e.id === "string" ? e.id : "" } };
     case "confirmed": return { ...s, confirm: null };
     case "said": return { ...s, answer: e.text, tag: e.tag || s.tag };
     default: return s;

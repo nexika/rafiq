@@ -318,12 +318,24 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
                 tasks = getattr(getattr(assistant, "ctx", None), "tasks", None)
                 cancelled = tasks is not None and tasks.cancel(data["id"][:20])
                 return self._send(200, json.dumps({"cancelled": cancelled}).encode())
+            elif path == "/api/tool":             # `rafiq mcp`: Rafiq's own programs only, with the token
+                if not (self._token_ok(self.headers.get("X-Rafiq-Token")) and isinstance(data.get("name"), str)
+                        and isinstance(data.get("arguments", {}), dict)):
+                    return self._send(400 if self._token_ok(self.headers.get("X-Rafiq-Token")) else 403,
+                                      b'{"error":"a tool name and its arguments"}')
+                result = assistant.call_tool(data["name"][:64], data.get("arguments", {}), ASK_SECONDS)
+                if result is None:
+                    return self._send(504, b'{"error":"no answer in time"}')
+                return self._send(200, json.dumps({"result": result}, ensure_ascii=False).encode())
             elif path == "/api/listen":
                 assistant.submit("listen")
             elif path == "/api/mute" and isinstance(data.get("muted", False), bool):
                 assistant.set_muted(data.get("muted"))      # no value: a toggle
-            elif path == "/api/confirm" and isinstance(data.get("yes"), bool):
-                assistant.pending_answer.put("always" if data["yes"] and data.get("always") is True else data["yes"])
+            elif (path == "/api/confirm" and isinstance(data.get("yes"), bool)
+                  and isinstance(data.get("id", ""), str)):
+                # With the id of the question it answers (the confirm event's): a yes for another doesn't count.
+                answer = "always" if data["yes"] and data.get("always") is True else data["yes"]
+                assistant.pending_answer.put((data.get("id", "")[:32], answer))
             elif path == "/api/dictate":
                 assistant.submit("dictate")
             elif path == "/api/project" and isinstance(data.get("path"), str):

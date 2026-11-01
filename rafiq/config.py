@@ -192,6 +192,9 @@ DEFAULTS: dict = {
     "songs": {"audd_token": "", "seconds": 8, "keep": 20},
     # Explaining a video that plays on this computer (#202): listened to in chunks, for at most max_minutes.
     "video": {"max_minutes": 20, "chunk_seconds": 30},
+    # `rafiq mcp` (#203): every tool is offered to other AI apps, act and critical ones asking first; these not.
+    # Recording a lesson is for what Rafiq taught; another program could fill the prof notes later sessions read.
+    "mcp": {"off": ["record_learning"]},
     # Nexika's prof (#205): empty finds the newest prof installed for Claude Code; or the path to its prof_store.py.
     "prof": {"helper": ""},
     "notes": {"folder": ""},             # empty: data/notes; or any folder, such as an Obsidian vault

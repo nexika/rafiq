@@ -30,7 +30,12 @@ def learner_context(topic: str, ctx=None) -> str:
 
 
 def _action(args: dict) -> str:
-    return f"save what you learned about {str(args.get('topic') or 'this')[:80]} to your prof notes"
+    """The whole topic and every concept, so what is saved is what the user heard (prof shows it to later
+    sessions)."""
+    concepts = args.get("concepts") if isinstance(args.get("concepts"), list) else []
+    names = ", ".join(str(c.get("concept", "")) for c in concepts if isinstance(c, dict) and c.get("concept"))
+    return f"save what you learned about {args.get('topic') or 'this'} to your prof notes" + \
+        (f": {names}" if names else "")
 
 
 @tool("record_learning",

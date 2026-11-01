@@ -13,8 +13,10 @@ and what. Email text is data for the model, never instructions.
 from __future__ import annotations
 
 import base64
+import unicodedata
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from email.utils import getaddresses
 
 from .. import config
 from . import tool
@@ -137,13 +139,20 @@ def upcoming(calendar_id: str, start: datetime, end: datetime) -> list[dict]:
         orderBy="startTime", maxResults=50).execute().get("items", [])
 
 
+def calendar_add_action(args: dict) -> str:
+    """Everything the event will hold, so nothing goes to the calendar unheard (another program could put an
+    email's text in the location)."""
+    said = f"add '{args.get('title', '')}' to your calendar on {str(args.get('start', '')).replace('T', ' at ')}"
+    said += f" for {int(args.get('minutes') or 60)} minutes"
+    return said + (f" at '{args['location']}'" if args.get("location") else "")
+
+
 @tool("calendar_add", "Add an event to the user's Google Calendar. Rafiq asks the user first.",
       {"title": {"type": "string"}, "start": {"type": "string", "description": "local YYYY-MM-DDTHH:MM"},
        "minutes": {"type": "integer", "description": "length in minutes, default 60"},
        "location": {"type": "string"}},
       required=("title", "start"),
-      confirm=lambda a: f"add '{a.get('title', '')}' to your calendar on {a.get('start', '').replace('T', ' at ')}",
-      level="critical")
+      confirm=lambda a: calendar_add_action(a), level="critical")
 def calendar_add(title: str, start: str, minutes: int = 60, location: str = "") -> str:
     begin = datetime.fromisoformat(start)
     if begin.tzinfo is None:
@@ -240,21 +249,43 @@ def _send(message: EmailMessage, thread: str = "") -> dict:
                         f"saying {_draft(a.get('body', ''))}",
       level="critical", always_asks=True)
 def email_send(to: str, subject: str, body: str) -> str:
-    if "@" not in to or any(c in to for c in "\r\n,;"):
-        return "error: one plain email address, please"
+    found = getaddresses([to])
+    if (len(found) != 1 or found[0][0] or found[0][1] != to.strip() or "@" not in to
+            or any(unicodedata.category(c) in ("Cc", "Cf") for c in to)):
+        return "error: one plain email address, please, with no name in front"
     message = EmailMessage()
     message["To"], message["Subject"] = to, subject
     message.set_content(body)
     return f"sent (id {_send(message).get('id')})"
 
 
+def _shown(text: str) -> str:
+    """A header as a question may show it: without the invisible characters that reorder or hide text."""
+    return "".join(c for c in text if unicodedata.category(c) not in ("Cc", "Cf"))
+
+
+def _addresses(header: str) -> str:
+    """Only the addresses a header sends to: the name in front ("sara@example.com" <x@evil.example>) is
+    whatever the sender wrote."""
+    return ", ".join(_shown(addr) for _name, addr in getaddresses([header]) if addr)
+
+
+def _reply_action(args: dict) -> str:
+    """Name who the reply goes to from the email itself, not from what the model says (a page or another
+    program could have it say "Sara" for an attacker's address)."""
+    try:
+        original = service("gmail", "v1").users().messages().get(
+            userId="me", id=str(args.get("id", "")), format="metadata", metadataHeaders=["From", "Reply-To"]).execute()
+        to = _addresses(_header(original, "reply-to") or _header(original, "from"))
+    except Exception:  # still ask; the reply itself will report what went wrong
+        to = ""
+    return f"reply to {to or 'that email'} saying {_draft(args.get('body', ''))}"
+
+
 @tool("email_reply", "Reply to an email by its id (from email_list), in the same conversation. Rafiq reads "
-      "the draft to the user and sends it only after a yes.",
-      {"id": {"type": "string"}, "body": {"type": "string", "description": "the reply text"},
-       "to_name": {"type": "string", "description": "who it goes to, as the user would say it (e.g. Sara)"}},
-      required=("id", "body"),
-      confirm=lambda a: f"reply to {a.get('to_name') or 'that email'} saying {_draft(a.get('body', ''))}",
-      level="critical", always_asks=True)
+      "who it goes to and the draft to the user, and sends it only after a yes.",
+      {"id": {"type": "string"}, "body": {"type": "string", "description": "the reply text"}},
+      required=("id", "body"), confirm=_reply_action, level="critical", always_asks=True)
 def email_reply(id: str, body: str) -> str:  # noqa: A002
     original = service("gmail", "v1").users().messages().get(
         userId="me", id=id, format="metadata",
@@ -275,14 +306,20 @@ def email_reply(id: str, body: str) -> str:  # noqa: A002
     return f"reply sent (id {_send(message, original.get('threadId', '')).get('id')})"
 
 
+def _trash_action(args: dict) -> str:
+    """Name the email from its sender and subject, not from what the model says it is."""
+    try:
+        msg = service("gmail", "v1").users().messages().get(
+            userId="me", id=str(args.get("id", "")), format="metadata", metadataHeaders=["From", "Subject"]).execute()
+    except Exception:  # still ask; the trash itself will report what went wrong
+        return "move that email to the trash"
+    return f"move the email from {_shown(_header(msg, 'from')) or 'an unknown sender'} about " \
+           f"'{_shown(_header(msg, 'subject'))}' to the trash"
+
+
 @tool("email_trash", "Move an email to the Gmail trash by its id (from email_list); it can still be restored "
-      "from there. Rafiq asks first.",
-      {"id": {"type": "string"},
-       "about": {"type": "string", "description": "which email, as the user would say it "
-                                                  "(e.g. Sara's email about dinner)"}},
-      required=("id",),
-      confirm=lambda a: f"move {a.get('about') or 'that email'} to the trash",
-      level="critical", always_asks=True)
+      "from there. Rafiq names its sender and subject to the user and asks first.",
+      {"id": {"type": "string"}}, required=("id",), confirm=_trash_action, level="critical", always_asks=True)
 def email_trash(id: str) -> str:  # noqa: A002
     service("gmail", "v1").users().messages().trash(userId="me", id=id).execute()
     return "moved to the trash"

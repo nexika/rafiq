@@ -12,7 +12,7 @@ pub const MAX_TEXT: usize = 2000;
 #[derive(Debug, PartialEq)]
 pub enum Action {
     Ask(String),
-    Answer { yes: bool, always: bool },
+    Answer { yes: bool, always: bool, id: String },
     Stop,
 }
 
@@ -29,6 +29,11 @@ impl Action {
         Ok(Action::Ask(text.to_string()))
     }
 
+    /// An answer to the question with this id, cut to what the panel keeps (rafiq/panel.py keeps 32).
+    pub fn answer(yes: bool, always: bool, id: &str) -> Action {
+        Action::Answer { yes, always, id: id.chars().take(32).collect() }
+    }
+
     fn path(&self) -> &'static str {
         match self {
             Action::Ask(_) => "/api/text",
@@ -41,7 +46,9 @@ impl Action {
         match self {
             Action::Ask(text) => serde_json::json!({"text": text}),
             // "Always" is only a yes that is remembered; a no is never "always".
-            Action::Answer { yes, always } => serde_json::json!({"yes": yes, "always": *yes && *always}),
+            Action::Answer { yes, always, id } => {
+                serde_json::json!({"yes": yes, "always": *yes && *always, "id": id})
+            }
             Action::Stop => serde_json::json!({}),
         }
     }
@@ -110,10 +117,11 @@ mod tests {
 
     #[test]
     fn answers_and_stop_go_where_the_panel_takes_them() {
-        let yes = request(&panel(1), &Action::Answer { yes: true, always: true });
-        assert!(yes.starts_with("POST /api/confirm ") && yes.ends_with("{\"always\":true,\"yes\":true}"));
-        let no = request(&panel(1), &Action::Answer { yes: false, always: true });
-        assert!(no.ends_with("{\"always\":false,\"yes\":false}"));
+        let yes = request(&panel(1), &Action::answer(true, true, "q1"));
+        assert!(yes.starts_with("POST /api/confirm ")
+            && yes.ends_with("{\"always\":true,\"id\":\"q1\",\"yes\":true}"));
+        let no = request(&panel(1), &Action::answer(false, true, "q1"));
+        assert!(no.ends_with("{\"always\":false,\"id\":\"q1\",\"yes\":false}"));
         assert!(request(&panel(1), &Action::Stop).starts_with("POST /api/stop "));
     }
 

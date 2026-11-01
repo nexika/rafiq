@@ -536,11 +536,39 @@ with numbered circles, highlights and arrows on what its answer talks about. [wi
 
 ## Rafiq's tools in other programs (MCP)
 
-`rafiq mcp` offers Rafiq's harmless tools to MCP clients such as Claude Desktop or Claude Code, over
-stdio: the time, the weather, web search and reading a page, how the computer is doing, arithmetic and
-unit conversion. Nothing that changes anything is offered (no power, email, apps, volume, or setting
-timers), and never a tool that would ask you first. Every call is logged to
-`~/.config/rafiq/data/mcp.log`.
+`rafiq mcp` offers Rafiq's tools to MCP clients on this computer, such as Claude Code, Claude Desktop or
+Codex, over stdio, so Rafiq works as a plugin on the subscription you already have. Every tool is offered:
+the time, the web, the computer, media, timers, home, mail and more.
+
+- A tool that changes something (a timer, the volume, sending mail, shutting down) asks you first, out loud
+  and in the widget, as "Should I let another program ...?", naming first anything that would leave the
+  computer. The other program waits for your answer and can't give it for you. "Yes, always" is offered for
+  small changes only (timers, volume, media), and kept apart from the ones you gave Rafiq itself.
+- Without a voice print (`rafiq enroll`), only the widget's Yes answers another program, since a video or a
+  song it started could say "yes" through your speakers; with one, a spoken yes must be in your voice. While
+  Rafiq is muted or in quiet hours, the question is shown in the widget and not said out loud. After you say
+  no, or don't answer, other programs can't ask anything for three minutes.
+- A tool that reads your own data (mail, calendar, reminders, open tabs) asks once, "Should I let another
+  program read your data with email read for the next hour?", and that data then goes to the other program's
+  model. For an hour after such a read, anything another program would send out (a search, a page's address,
+  a message) is read back to you first. Looking at your screen counts as such a read.
+- An address is read out with the site it really reaches whenever its text doesn't plainly start with it: a
+  Cyrillic о in gооgle.com, or google.com@evil.example. An address with spaces, hidden characters or a name
+  before an @ isn't opened or read at all, and an email goes only to one bare address, never "Name <address>".
+- Arguments a tool doesn't take, or of the wrong type, are refused before anything is asked.
+- Rafiq reads every value in its question out whole. A value over 300 characters (a long email, a long
+  address) is refused instead of cut, so the end of a text can't hide a code. A question isn't started
+  in a call's last 30 seconds, and a yes that comes then is turned down out loud. Text with invisible format
+  characters, which can make the widget show something else than what is sent, is refused.
+- `rafiq mcp --list` shows what is offered and which tools ask first. `[mcp] off = ["email_read", ...]` in
+  the settings turns tools off. `record_learning` is off unless you remove it from that list: it writes the
+  prof notes that later sessions read.
+- Without `rafiq run`, only the harmless tools that send nothing out (the time, weather, arithmetic) work; web
+  search and reading pages need it, since only it knows whether something private was read before.
+- Every call is logged to `~/.config/rafiq/data/mcp.log`, with what private and critical tools were given and
+  answered left out. The ChatGPT app only connects to remote servers, which Rafiq doesn't open (#226).
+- An app like Claude Code also has a shell of its own: it could read Rafiq's settings and token directly.
+  Rafiq's questions guard what goes through Rafiq, not what such an app can do by itself.
 
 Three more tools let the other program show its work in Rafiq's panel (and the widget, later):
 `show_steps` shows its plan and how far it got, `show_card` shows music, news, weather or a timer,

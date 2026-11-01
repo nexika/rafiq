@@ -288,7 +288,7 @@ def _confirm(args: dict, ctx=None) -> str | None:
       "asks the user before it goes to the cloud.",
       {"question": {"type": "string", "description": "what the user wants to know about the screen, "
                                                      "e.g. 'what does this error mean?'"}},
-      required=("question",), confirm=_confirm, level="critical")
+      required=("question",), confirm=_confirm, level="critical", reads_private=True)
 def look_at_screen(question: str, ctx=None) -> str:
     keep, show = getattr(ctx, "keep_screen", None), getattr(ctx, "show", None)
     if keep is not None and show is not None:

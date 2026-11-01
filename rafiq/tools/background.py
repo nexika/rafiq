@@ -12,7 +12,7 @@ OFF = "error: background tasks need Claude (an Anthropic API key) and the runnin
       "returns at once; tell the user briefly that you are on it. The answer is said aloud when it is "
       "ready. Each task is a paid model call, so use it only for work that needs it.",
       {"goal": {"type": "string", "description": "the task, complete and self-contained, in the user's words"}},
-      required=("goal",), level="act")
+      required=("goal",), level="act", sends=("goal",))
 def start_background_task(goal: str, ctx=None) -> str:
     from ..tasks import TooManyTasks
 

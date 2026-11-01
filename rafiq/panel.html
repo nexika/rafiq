@@ -402,7 +402,7 @@ function handle(e) {
       + e.threshold + ")"); break;
     case "voice": add("note", (e.match ? "Your voice" : "Not sure it was your voice") + " (similarity " + e.score
       + ", needs " + e.threshold + ")"); break;
-    case "confirm": document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
+    case "confirm": questionId = e.id || ""; document.getElementById("confirm-text").textContent = "Rafiq asks: " + e.action + "?";
       document.getElementById("always").hidden = e.always === false;   // this tool asks every time
       confirmBox.classList.add("on"); document.getElementById("yes").focus(); break;
     case "interrupted": add("note", "Stopped: you said stop"); break;
@@ -608,9 +608,11 @@ pauseBtn.onclick = () => post("/api/reading", { action: pauseBtn.dataset.action 
 document.getElementById("skip").onclick = () => post("/api/reading", { action: "skip" });
 document.getElementById("reading-stop").onclick = () => post("/api/reading", { action: "stop" });
 muteBtn.onclick = () => post("/api/mute", { muted: muteBtn.getAttribute("aria-pressed") !== "true" });
-document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true });
-document.getElementById("always").onclick = () => post("/api/confirm", { yes: true, always: true });
-document.getElementById("no").onclick = () => post("/api/confirm", { yes: false });
+// Each answer names the question it is for (the confirm event's id): a late click can't answer the next one.
+let questionId = "";
+document.getElementById("yes").onclick = () => post("/api/confirm", { yes: true, id: questionId });
+document.getElementById("always").onclick = () => post("/api/confirm", { yes: true, always: true, id: questionId });
+document.getElementById("no").onclick = () => post("/api/confirm", { yes: false, id: questionId });
 
 // ---------------------------------------------------------------- the settings drawer
 const drawer = document.getElementById("drawer"), meter = document.querySelector("#meter div");

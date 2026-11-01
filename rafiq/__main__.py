@@ -780,9 +780,16 @@ def cmd_phone(_args) -> int:
     return 0
 
 
-def cmd_mcp(_args) -> int:
+def cmd_mcp(args) -> int:
     from . import mcp_server
 
+    if getattr(args, "list", False):
+        server = mcp_server.Server(config.load())
+        for name, tool in sorted(server.tools.items()):
+            where = "here" if name in server.local else ("asks first" if tool.level in ("act", "critical")
+                                                       else "in the running Rafiq")
+            print(f"{name:28} {tool.level:9} {where}")
+        return 0
     return mcp_server.run()
 
 
@@ -981,8 +988,9 @@ def main(argv=None) -> int:
     update.set_defaults(fn=cmd_update)
     sub.add_parser("phone", help="show how to set up a phone shortcut for the phone bridge").set_defaults(
         fn=cmd_phone)
-    sub.add_parser("mcp", help="offer the harmless tools to MCP clients such as Claude Desktop (stdio)").set_defaults(
-        fn=cmd_mcp)
+    mcp = sub.add_parser("mcp", help="offer Rafiq's tools to MCP clients such as Claude Code and Claude Desktop")
+    mcp.add_argument("--list", action="store_true", help="show the tools offered, and which ask first")
+    mcp.set_defaults(fn=cmd_mcp)
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)

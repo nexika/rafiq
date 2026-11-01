@@ -17,7 +17,7 @@ SOURCES = ("selection", "clipboard", "page", "pdf")
       {"source": {"type": "string", "enum": list(SOURCES)},
        "url": {"type": "string", "description": "the page's address, for source 'page'"},
        "path": {"type": "string", "description": "the PDF's path, for source 'pdf'"}},
-      required=("source",), level="private")
+      required=("source",), level="private", sends=("url",))
 def read_aloud(source: str, url: str = "", path: str = "", ctx=None) -> str:
     if source == "page" and not url:
         return "error: reading a page needs its address"

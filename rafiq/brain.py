@@ -24,6 +24,7 @@ from . import lang as lang_mod
 from . import modes, persona, prof, router, timing
 from .facts import Facts
 from .tools import Tool, claude_schemas, local_tools, ollama_schemas, openai_schemas
+from .tools.web import spelled
 from .tts import Sentences
 
 HISTORY_TURNS = 10
@@ -501,7 +502,7 @@ class Brain:
         can_remember = self.approvals is not None and not tool.always_asks
         unsaid = budget.unsaid(tool, args) if budget else None
         if unsaid:
-            action, can_remember = f'send "{unsaid}" out to the internet, though you didn\'t say it', False
+            action, can_remember = f'send "{spelled(unsaid)}" out to the internet, though you didn\'t say it', False
         if action and not (can_remember and self.approvals.allowed(name)):
             self._step(step, "asking")
             answer = self._ask(action, tag, can_remember)
@@ -525,7 +526,7 @@ class Brain:
                 result = tool.run(args, ctx)
         except Exception as exc:
             result = f"error: {type(exc).__name__}: {exc}"
-        if budget and tool.level == "private":
+        if budget and tool.private_read():
             budget.read_private = True
         if tool.private:
             hidden = "error (hidden)" if result.startswith("error") else "(hidden)"
