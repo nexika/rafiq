@@ -793,6 +793,33 @@ def cmd_mcp(args) -> int:
     return mcp_server.run()
 
 
+def cmd_plugin(args) -> int:
+    """Package Rafiq for the AI app the user has, under their nickname, and say how to install it."""
+    from . import plugin
+
+    cfg = config.load()
+    slug, nick = plugin.name(cfg)
+    if args.host == "claude-code":
+        try:
+            root = plugin.claude_code(cfg, Path(args.out) if args.out else config.home() / "plugin", args.notify)
+        except plugin.NotOurs as exc:
+            print(f"{exc}: give rafiq plugin an empty folder, or the one it made before", file=sys.stderr)
+            return 1
+        print(f"{nick} for Claude Code is in {root}. Install it with:\n"
+              f"  claude plugin marketplace add {root}\n  claude plugin install {slug}@{slug}-local\n"
+              "Then keep `rafiq run` running: it asks before anything changes and shows the work in its widget.")
+    elif args.host == "claude-desktop":
+        path = plugin.claude_desktop(cfg, Path(args.out) if args.out else config.home())
+        print(f"{nick} for Claude Desktop: {path}\nOpen it with Claude Desktop (or drag it to Settings > "
+              "Extensions) to install it, and keep `rafiq run` running.")
+    else:
+        print("# Add to ~/.codex/config.toml; the long tool_timeout_sec lets Codex wait for your yes.")
+        print(plugin.codex(cfg), end="")
+    hint = 'To let the app be the brain, set [brain] mode = "off": Rafiq then points what you say to it.'
+    print(("# " if args.host == "codex" else "") + hint)    # Codex's lines may be pasted as they are
+    return 0
+
+
 def cmd_google_setup(_args) -> int:
     from .tools.google import setup
 
@@ -891,14 +918,14 @@ def main(argv=None) -> int:
     wizard.set_defaults(fn=cmd_setup)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
-    run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
+    run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama", "off"))
     run.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     run.add_argument("--server", action="store_true", help="the brain only, for `rafiq agent` on another PC")
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
     ask.add_argument("--lang", choices=lang.TAGS)
-    ask.add_argument("--brain", choices=("auto", "claude", "openai", "ollama"))
+    ask.add_argument("--brain", choices=("auto", "claude", "openai", "ollama", "off"))
     ask.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
@@ -991,6 +1018,12 @@ def main(argv=None) -> int:
     mcp = sub.add_parser("mcp", help="offer Rafiq's tools to MCP clients such as Claude Code and Claude Desktop")
     mcp.add_argument("--list", action="store_true", help="show the tools offered, and which ask first")
     mcp.set_defaults(fn=cmd_mcp)
+    plug = sub.add_parser("plugin", help="package Rafiq, under your nickname, for Claude Code, Claude Desktop or Codex")
+    plug.add_argument("host", choices=("claude-code", "claude-desktop", "codex"))
+    plug.add_argument("--out", help="the folder to write it to")
+    plug.add_argument("--notify", action="store_true",
+                      help="Claude Code: have Rafiq say each time Claude stops (after every reply)")
+    plug.set_defaults(fn=cmd_plugin)
     sub.add_parser("toolcheck", help="measure how well the local model picks tools").set_defaults(
         fn=cmd_toolcheck)
     sub.add_parser("google-setup", help="connect your Google calendar and Gmail").set_defaults(fn=cmd_google_setup)

@@ -321,7 +321,8 @@ def _token(name: str) -> str:
 # ---------------------------------------------------------------------- what the panel may change
 
 # The only settings the panel can read or write. Keys, addresses and everything else stay out of the page.
-CHOICES = {"brain.mode": ["auto", "claude", "openai", "ollama"], "voice.engine": ["auto", "azure", "piper", "edge"]}
+CHOICES = {"brain.mode": ["auto", "claude", "openai", "ollama", "off"],
+           "voice.engine": ["auto", "azure", "piper", "edge"]}
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}")
 PATTERNS = {"brain.claude_model": _NAME, "brain.ollama_model": _NAME, "voice.rate": re.compile(r"[+-]\d{1,3}%"),
             **{f"voice.voices.{tag}": _NAME for tag in TAGS}}

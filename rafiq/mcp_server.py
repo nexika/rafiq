@@ -49,7 +49,7 @@ class Server:
         self.tools = offered(tools if tools is not None else load_all(cfg), cfg)
         self.local = safe_tools(self.tools)
 
-    def forward(self, name: str, args: dict) -> str:
+    def forward(self, name: str, args: dict) -> str | tuple[str, str]:
         """Run a tool in the running Rafiq, which asks first when it must; its result, or an error."""
         import httpx
 
@@ -65,7 +65,10 @@ class Server:
             return "error: no result came in time; it may or may not have been done, so check before trying again"
         if resp.status_code != 200:
             return f"error: the running Rafiq refused it ({resp.status_code})"
-        return str(resp.json().get("result", ""))
+        data = resp.json()
+        if data.get("image"):                     # the screen, for this program's model to look at (#204)
+            return str(data.get("result", "")), str(data["image"])
+        return str(data.get("result", ""))
 
     def context(self) -> SimpleNamespace:
         # Read the saved timers afresh on each call; nothing here adds, cancels or rings them, so the
@@ -130,22 +133,28 @@ class Server:
         # text, the facts forget deleted) stays out of the log.
         hidden = found.private_read() or found.level == "critical"
         shown = "(hidden)" if hidden else _short(args)
+        image = ""
         try:
             text = self.run_tool(found, args)
+            if isinstance(text, tuple):
+                text, image = text
         except Exception as exc:  # a broken tool answers with an error, the server keeps running
             logger.exception("%s %s failed", name, shown)
             return _result(msg_id, _content(f"error: {type(exc).__name__}: {exc}", True))
         logger.info("%s %s -> %s", name, shown, "(hidden)" if hidden else _short(text))
-        return _result(msg_id, _content(text, text.startswith("error")))
+        content = _content(text, text.startswith("error"))
+        if image:
+            content["content"].insert(0, {"type": "image", "data": image, "mimeType": "image/png"})
+        return _result(msg_id, content)
 
-    def run_tool(self, tool: Tool, args: dict) -> str:
+    def run_tool(self, tool: Tool, args: dict) -> str | tuple[str, str]:
         """In the running Rafiq whenever it is up, so a value sent out after a private read is asked about
         (#187); the display tools reach it their own way (POST /api/display). Without Rafiq, the harmless
         tools that send nothing out run here: only the running Rafiq knows whether a private read came before."""
         if tool.name in DISPLAY:
             return tool.run(args, self.context())
         text = self.forward(tool.name, args)
-        if text.startswith(NOT_RUNNING) and tool.name in self.local and not tool.sends:
+        if isinstance(text, str) and text.startswith(NOT_RUNNING) and tool.name in self.local and not tool.sends:
             return tool.run(args, self.context())
         return text
 
