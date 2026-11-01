@@ -49,6 +49,9 @@ class Tool:
     # The parameters whose values leave this computer (an address, a search). After a private read in the
     # same request, a value the user didn't say is read back and asked about first (#187).
     sends: tuple = ()
+    # Answers with the user's data although its level isn't private (the screen, a forgotten fact): it starts the
+    # same watch on what is sent out next.
+    reads_private: bool = False
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -59,6 +62,10 @@ class Tool:
         if "ctx" in inspect.signature(self.confirm).parameters:
             return self.confirm(args, ctx=ctx)
         return self.confirm(args)
+
+    def private_read(self) -> bool:
+        """Its result may hold the user's data, which a page or another program could then have sent out."""
+        return self.level == "private" or self.private or self.reads_private
 
     def waiting(self, tag: str) -> str | None:
         if not self.slow:
@@ -99,10 +106,11 @@ def check(t: Tool) -> None:
 
 def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None, *,
          level: str, slow: bool = False, waiting_phrase: dict | None = None, expose: bool = False,
-         card: str = "text", private: bool = False, always_asks: bool = False, sends: tuple = ()):
+         card: str = "text", private: bool = False, always_asks: bool = False, sends: tuple = (),
+         reads_private: bool = False):
     def register(fn: Callable) -> Callable:
         t = Tool(name, description, fn, params or {}, tuple(required), confirm, level, slow,
-                 dict(waiting_phrase or {}), expose, card, private, always_asks, tuple(sends))
+                 dict(waiting_phrase or {}), expose, card, private, always_asks, tuple(sends), reads_private)
         check(t)
         REGISTRY[name] = t
         return fn

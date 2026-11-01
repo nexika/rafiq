@@ -334,7 +334,7 @@ def _api(ctx) -> Api:
       {"query": {"type": "string", "description": "what to play, e.g. 'so what miles davis' or 'jazz'"},
        "kind": {"type": "string", "enum": list(KINDS), "description": "default track; playlist for a genre"},
        "device": {"type": "string", "description": "name of the device to play on (see spotify_devices)"}},
-      level="act")
+      level="act", sends=("query",))
 def spotify_play(query: str = "", kind: str = "track", device: str = "", ctx=None) -> str:
     return play(_api(ctx), query, kind, device)
 

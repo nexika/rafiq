@@ -14,20 +14,29 @@ def rpc(server, method, params=None, id=1):
     return server.handle(message)
 
 
+@pytest.fixture(autouse=True)
+def no_running_rafiq(monkeypatch):
+    """`rafiq mcp` asks the running Rafiq first: here none answers, and no test reaches a real one."""
+    import httpx
+
+    def refused(*args, **kwargs):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(httpx, "post", refused)
+
+
 @pytest.fixture
 def server():
     return mcp_server.Server(config.load())
 
 
-def test_only_safe_tools_are_exposed(server):
+def test_every_tool_is_offered_since_203(server):
     names = set(server.tools)
-    assert {"get_time", "weather", "system_status", "calculate", "convert_units"} <= names
-    for name in ("power", "email_send", "calendar_add", "open_app", "volume", "lock_screen", "set_timer",
-                 "cancel_timer", "list_timers", "email_read"):
-        assert name not in names, name
+    assert {"get_time", "weather", "calculate", "power", "set_timer", "list_timers", "open_app"} <= names
 
 
-def test_a_tool_that_asks_first_is_never_exposed_even_if_marked():
+def test_only_safe_tools_marked_expose_run_in_this_process():
+    """The rest go to the running Rafiq, which asks before an act or critical one (#203)."""
     load_all({"google": {"enabled": True}})
     marked = dict(REGISTRY, risky=Tool("risky", "x", lambda: "done", expose=True, confirm="do something"))
     assert "risky" not in mcp_server.safe_tools(marked)
@@ -84,21 +93,20 @@ def test_a_tool_that_raises_does_not_stop_the_server(server, monkeypatch):
     assert result["isError"] is True and "sensor gone" in result["content"][0]["text"]
 
 
-@pytest.mark.parametrize("name", ["power", "email_send", "nope"])
-def test_calling_a_tool_that_is_not_exposed_is_refused(server, name, caplog):
+@pytest.mark.parametrize("name", ["nope", "rm_rf"])
+def test_calling_a_tool_that_does_not_exist_is_refused(server, name, caplog):
     caplog.set_level("INFO", logger="rafiq.mcp_server")
     reply = rpc(server, "tools/call", {"name": name, "arguments": {"action": "shutdown"}})
     assert reply["error"]["code"] == -32602
     assert any(name in r.getMessage() for r in caplog.records)
 
 
-def test_list_timers_is_private_and_not_offered(server, rafiq_home):
-    # Since #106 the pending timers are the user's own data (level "private"), so MCP clients don't get them.
-    from rafiq.scheduler import Scheduler
-
-    Scheduler(config.data_dir() / "alarms.json", lambda a: None).add(4102444800, "tea", "timer", "en")
-    reply = rpc(server, "tools/call", {"name": "list_timers", "arguments": {}})
-    assert "error" in reply and "tea" not in json.dumps(reply)
+def test_a_tool_turned_off_in_the_settings_is_neither_offered_nor_called():
+    cfg = config.load()
+    cfg["mcp"]["off"] = ["power", "list_timers"]
+    server = mcp_server.Server(cfg)
+    assert "power" not in server.tools and "list_timers" not in server.tools
+    assert rpc(server, "tools/call", {"name": "power", "arguments": {"action": "shutdown"}})["error"]["code"] == -32602
 
 
 def test_unknown_methods_are_a_json_rpc_error(server):

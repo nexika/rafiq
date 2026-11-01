@@ -292,5 +292,5 @@ def test_revoke_from_the_panel(pages):
 
 def test_always_from_the_panel_answers_yes_and_remembers(pages):
     assistant, port = pages
-    assert request(port, "/api/confirm", {"yes": True, "always": True})[0] == 200
-    assert assistant.pending_answer.get_nowait() == "always"
+    assert request(port, "/api/confirm", {"yes": True, "always": True, "id": "q1"})[0] == 200
+    assert assistant.pending_answer.get_nowait() == ("q1", "always")

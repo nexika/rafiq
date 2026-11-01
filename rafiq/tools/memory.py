@@ -43,7 +43,7 @@ def recall(query: str = "", ctx=None) -> str:
 
 @tool("forget", "Delete remembered facts for good, by id (from recall) or by words in them.",
       {"id": {"type": "string"}, "words": {"type": "string", "description": "words the facts contain"}},
-      level="act")
+      level="act", reads_private=True)
 def forget(id: str = "", words: str = "", ctx=None) -> str:  # noqa: A002 (the model's word)
     facts = _facts(ctx)
     if facts is None:

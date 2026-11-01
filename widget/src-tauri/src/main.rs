@@ -42,10 +42,11 @@ async fn ask(text: String) -> Result<(), String> {
     send(post::Action::ask(&text)).await
 }
 
-/// Yes, no, or yes and don't ask again for this tool, to the question Rafiq is asking.
+/// Yes, no, or yes and don't ask again for this tool, to the question Rafiq is asking (its id, from the
+/// confirm event: a late click can't answer the next question).
 #[tauri::command]
-async fn answer(yes: bool, always: bool) -> Result<(), String> {
-    send(Ok(post::Action::Answer { yes, always })).await
+async fn answer(yes: bool, always: bool, id: String) -> Result<(), String> {
+    send(Ok(post::Action::answer(yes, always, &id))).await
 }
 
 /// Stop speaking, and run no further step of the request being answered.

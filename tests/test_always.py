@@ -126,13 +126,15 @@ def asking(heard):
 def test_saying_yes_always_remembers_when_the_tool_allows_it():
     a = asking("yes, always")
     assert a.confirm("shut down the computer", "en", can_remember=True) == "always"
-    assert ("confirm", {"action": "shut down the computer", "tag": "en", "always": True}) in a.events.seen
+    asked = [{k: v for k, v in data.items() if k != "id"} for kind, data in a.events.seen if kind == "confirm"]
+    assert asked == [{"action": "shut down the computer", "tag": "en", "always": True}]
 
 
 def test_saying_yes_always_to_a_blocklisted_tool_is_a_yes():
     a = asking("yes, always")
     assert a.confirm("send the mail", "en", can_remember=False) is True
-    assert ("confirm", {"action": "send the mail", "tag": "en", "always": False}) in a.events.seen
+    asked = [{k: v for k, v in data.items() if k != "id"} for kind, data in a.events.seen if kind == "confirm"]
+    assert asked == [{"action": "send the mail", "tag": "en", "always": False}]
 
 
 def test_the_panel_hides_always_when_the_tool_cannot_be_remembered():

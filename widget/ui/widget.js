@@ -142,9 +142,10 @@ function call(command, args) {
   });
 }
 
-$("yes").addEventListener("click", () => call("answer", { yes: true, always: false }));
-$("always").addEventListener("click", () => call("answer", { yes: true, always: true }));
-$("no").addEventListener("click", () => call("answer", { yes: false, always: false }));
+const question = () => (state.confirm && state.confirm.id) || "";
+$("yes").addEventListener("click", () => call("answer", { yes: true, always: false, id: question() }));
+$("always").addEventListener("click", () => call("answer", { yes: true, always: true, id: question() }));
+$("no").addEventListener("click", () => call("answer", { yes: false, always: false, id: question() }));
 $("stop").addEventListener("click", () => call("stop", {}));
 $("ask").addEventListener("submit", (e) => {
   e.preventDefault();

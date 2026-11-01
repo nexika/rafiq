@@ -53,8 +53,9 @@ test("another program's explanation says so", () => {
 });
 
 test("a question waiting for a yes is shown until it is answered", () => {
-  let s = play(started, { kind: "confirm", action: "shut down the computer", tag: "en", always: false, run_id: "r1" });
-  assert.deepEqual(s.confirm, { action: "shut down the computer", always: false });
+  let s = play(started, { kind: "confirm", action: "shut down the computer", tag: "en", always: false, run_id: "r1",
+                          id: "q1" });
+  assert.deepEqual(s.confirm, { action: "shut down the computer", always: false, id: "q1" });
   assert.equal(now(s), "shut down the computer?");
   s = reduce(s, { kind: "confirmed", yes: false, run_id: "r1" });
   assert.equal(s.confirm, null);
