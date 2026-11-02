@@ -1,7 +1,7 @@
 """rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
-gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | spotify-setup | instagram-setup |
-hue-setup | browser | install-service | uninstall-service | wake-pc | backup | stt-score |
-enroll | voiceid | listen"""
+gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | chatgpt-login | chatgpt-logout |
+spotify-setup | instagram-setup | hue-setup | browser | install-service | uninstall-service | wake-pc | backup |
+stt-score | enroll | voiceid | listen"""
 
 from __future__ import annotations
 
@@ -398,6 +398,12 @@ def cmd_doctor(_args) -> int:
     for check in doctor.integrations(cfg):
         _check(check.label, check.ok, check.detail, check.fix, check.optional)
     brain = cfg["brain"]
+    from . import chatgpt
+
+    plan = chatgpt.status()
+    _check("ChatGPT plan", plan["signed_in"] and plan["plan"],
+           ("signed in, plan usage allowed" if plan["plan"] else "signed in, but plan usage wasn't allowed: "
+            "run rafiq chatgpt-login") if plan["signed_in"] else "run rafiq chatgpt-login (Plus or Pro)", optional=True)
     _check("OpenAI API key", bool(cfg.get("openai_api_key")),
            brain["openai_model"] if cfg.get("openai_api_key") else "set OPENAI_API_KEY to use OpenAI")
     from .tts import Speaker
@@ -841,6 +847,21 @@ def cmd_backup(args) -> int:
     return 0
 
 
+def cmd_chatgpt_login(args) -> int:
+    from . import chatgpt
+
+    said = chatgpt.login(config.load(), new=getattr(args, "new", False))
+    print(said)
+    return 0 if said.startswith("Signed in") and chatgpt.signed_in() else 1
+
+
+def cmd_chatgpt_logout(_args) -> int:
+    from . import chatgpt
+
+    print(chatgpt.logout())
+    return 0
+
+
 def cmd_spotify_setup(_args) -> int:
     from .tools.spotify import setup
 
@@ -918,14 +939,14 @@ def main(argv=None) -> int:
     wizard.set_defaults(fn=cmd_setup)
     run = sub.add_parser("run", help="listen for 'Rafiq' and answer; opens the panel")
     run.add_argument("--no-panel", action="store_true")
-    run.add_argument("--brain", choices=("auto", "claude", "openai", "ollama", "off"))
+    run.add_argument("--brain", choices=("auto", "chatgpt", "claude", "openai", "ollama", "off"))
     run.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     run.add_argument("--server", action="store_true", help="the brain only, for `rafiq agent` on another PC")
     run.set_defaults(fn=cmd_run)
     ask = sub.add_parser("ask", help="type a request instead of saying it")
     ask.add_argument("text", nargs="+")
     ask.add_argument("--lang", choices=lang.TAGS)
-    ask.add_argument("--brain", choices=("auto", "claude", "openai", "ollama", "off"))
+    ask.add_argument("--brain", choices=("auto", "chatgpt", "claude", "openai", "ollama", "off"))
     ask.add_argument("--mode", choices=modes.MODES, help="everyday (fast), quality or offline")
     ask.add_argument("--speak", action="store_true", help="also say the answer")
     ask.set_defaults(fn=cmd_ask)
@@ -1035,6 +1056,10 @@ def main(argv=None) -> int:
     wake.add_argument("--broadcast", default="255.255.255.255", help="the network's broadcast address")
     wake.add_argument("--port", type=int, default=9)
     wake.set_defaults(fn=cmd_wake_pc)
+    login = sub.add_parser("chatgpt-login", help="sign in with ChatGPT, so Rafiq runs on your ChatGPT plan")
+    login.add_argument("--new", action="store_true", help="register again, to use another ChatGPT account")
+    login.set_defaults(fn=cmd_chatgpt_login)
+    sub.add_parser("chatgpt-logout", help="sign Rafiq out of ChatGPT").set_defaults(fn=cmd_chatgpt_logout)
     sub.add_parser("spotify-setup", help="connect your Spotify account").set_defaults(fn=cmd_spotify_setup)
     insta = sub.add_parser("instagram-setup", help="connect your Instagram Business or Creator accounts")
     insta.add_argument("token", help="a user token from the Graph API Explorer of your Meta app")

@@ -1,4 +1,4 @@
-"""The thinking part: Claude, OpenAI or a local Ollama model, with Rafiq's tools.
+"""The thinking part: the user's ChatGPT plan, Claude, OpenAI or a local Ollama model, with Rafiq's tools.
 
 Every backend gets the same system prompt and the same tools. A turn loops: the model asks for tools,
 Rafiq runs them (asking the user first for any that change something), the model answers in words.
@@ -16,12 +16,12 @@ import json
 import re
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from . import chatgpt, modes, persona, prof, router, timing
 from . import lang as lang_mod
-from . import modes, persona, prof, router, timing
 from .facts import Facts
 from .tools import Tool, claude_schemas, local_tools, ollama_schemas, openai_schemas
 from .tools.web import spelled
@@ -29,9 +29,10 @@ from .tts import Sentences
 
 HISTORY_TURNS = 10
 HISTORY_IDLE_SECONDS = 300
-BACKENDS = ("claude", "openai", "ollama")
+BACKENDS = ("chatgpt", "claude", "openai", "ollama")
 KEYS = {"claude": "anthropic_api_key", "openai": "openai_api_key"}
 ANTHROPIC_URL = "https://api.anthropic.com/v1"
+PLAN_PAUSE_SECONDS = 1800   # after the ChatGPT plan's limit; OpenAI doesn't say when it resets
 
 SYSTEM = """You are Rafiq (رفيق, "companion"), a voice assistant on {user}'s Linux computer. {place}
 Each request starts with a note in brackets: the current time, the room it was said in when it came
@@ -100,6 +101,10 @@ class BrainError(Exception):
     pass
 
 
+class PlanLimit(BrainError):
+    """The ChatGPT plan's usage limit, or the weekly limit the user set for Rafiq, is used up."""
+
+
 class LimitReached(Exception):
     """A request went past one of its limits (brain.limits): it is stopped, not retried elsewhere."""
 
@@ -153,6 +158,20 @@ class Budget:
             raise LimitReached(f"over {self.limits['max_tool_calls']} tool calls")
         self.left()
         self.calls += count
+
+
+def _sse(lines) -> Iterator[dict]:
+    """The JSON events of a server-sent event stream (the data: lines), one at a time."""
+    for line in lines:
+        if line.startswith("data:"):
+            data = line[5:].strip()
+            if data and data != "[DONE]":
+                try:
+                    event = json.loads(data)
+                except ValueError:
+                    continue
+                if isinstance(event, dict):
+                    yield event
 
 
 def said_by_user(value: str, said: str) -> bool:
@@ -278,6 +297,7 @@ class Brain:
         self.voice: Voice | None = None     # the request's, while think() runs: tools/display.py speaks in it
         self.stopping = threading.Event()   # set from the panel's thread by stop(), read between steps
         self.open_steps: dict[int, tuple[str, float]] = {}   # step_id: its tool and when it was asked for
+        self.plan_paused_until = 0.0         # after the ChatGPT plan's limit, auto skips it until then
         self._claude = None
         self.tokens = {"input_tokens": 0, "output_tokens": 0}   # Claude's, since Rafiq started
 
@@ -293,7 +313,10 @@ class Brain:
         mode = self.cfg["brain"].get("mode", "auto")
         if mode in BACKENDS:
             return [mode]
-        return [b for b, key in KEYS.items() if self.cfg.get(key)] + ["ollama"]
+        # The ChatGPT plan first: the user pays for it already, where a key is billed per use. After its limit,
+        # it is left out for a while (OpenAI: pause requests on the plan; it gives no time when it resets).
+        plan = ["chatgpt"] if chatgpt.signed_in() and self.clock() >= self.plan_paused_until else []
+        return plan + [b for b, key in KEYS.items() if self.cfg.get(key)] + ["ollama"]
 
     def claude_model(self) -> str:
         brain = self.cfg["brain"]
@@ -328,13 +351,14 @@ class Brain:
             route = router.Route("all", self.tools)
         limits = self.cfg["brain"]["limits"]
         deadline = self.clock() + limits["max_seconds"]
-        errors = []
+        errors, limited = [], False
         voice = self.voice = Voice(on_speech, tag)
         for backend in self.backends():
             if self.stopping.is_set():       # before the first backend, or instead of trying the next one
                 return self._last_words(voice, lang_mod.phrase("request_stopped", tag))
             try:
-                run = {"claude": self._claude_turn, "openai": self._openai_turn, "ollama": self._ollama_turn}[backend]
+                run = {"chatgpt": self._chatgpt_turn, "claude": self._claude_turn, "openai": self._openai_turn,
+                       "ollama": self._ollama_turn}[backend]
                 # A local model gets its smaller set when the router kept every tool.
                 tools = self.local_tools() if backend == "ollama" and route.name == "all" else route.tools
                 try:
@@ -351,14 +375,20 @@ class Brain:
                 self.on_event("error", {"error": f"{backend} stopped: {exc}"})
                 return self._last_words(voice, lang_mod.phrase("limit", tag))
             except BrainError as exc:
+                if isinstance(exc, PlanLimit):   # told now: the next backend may answer, on the user's key
+                    limited = True
+                    self.plan_paused_until = self.clock() + PLAN_PAUSE_SECONDS
+                    self.on_event("error", {"error": f"{backend}: {exc}"})
                 if self.clock() >= deadline:
                     self.on_event("error", {"error": f"{backend} stopped: {exc}, over {limits['max_seconds']} seconds"})
                     return self._last_words(voice, lang_mod.phrase("limit", tag))
                 errors.append(f"{backend}: {exc}")
-                if voice.said_anything:      # the next backend would start the answer over
+                # The next backend would start the answer over: say it again, or run its tools again (an email
+                # sent twice, a timer set twice).
+                if voice.said_anything or self.steps:
                     break
         self.on_event("error", {"brain": errors})
-        return self._last_words(voice, lang_mod.phrase("brain_down", tag))
+        return self._last_words(voice, lang_mod.phrase("chatgpt_limit" if limited else "brain_down", tag))
 
     @staticmethod
     def _last_words(voice: Voice, text: str) -> str:
@@ -375,7 +405,8 @@ class Brain:
         brain = self.cfg["brain"]
         return {"mode": brain.get("mode", "auto"),
                 "models": {b: brain[self._model_key(b)] for b in BACKENDS},
-                "ready": {b: bool(self.cfg.get(KEYS[b])) if b in KEYS else True for b in BACKENDS}}
+                "ready": {b: chatgpt.signed_in() if b == "chatgpt" else bool(self.cfg.get(KEYS[b])) if b in KEYS
+                          else True for b in BACKENDS}}
 
     def _catalogue(self, backend: str) -> tuple[str, dict, str, str]:
         """Where a backend lists its models: the URL, the headers, the list's field and the name's field."""
@@ -397,6 +428,8 @@ class Brain:
         provider itself, so a model on the list really answers."""
         import httpx
 
+        if backend == "chatgpt":
+            return sorted(self._chatgpt_models())
         url, headers, listed, name = self._catalogue(backend)
         try:
             resp = httpx.get(url, headers=headers, timeout=10)
@@ -454,7 +487,8 @@ class Brain:
             return None
         for backend in backends:
             try:
-                run = {"claude": self._claude_text, "openai": self._openai_text, "ollama": self._ollama_text}[backend]
+                run = {"chatgpt": self._chatgpt_text, "claude": self._claude_text, "openai": self._openai_text,
+                       "ollama": self._ollama_text}[backend]
                 answer = run(system, text)
                 self.on_event("brain", {"backend": backend})
                 return answer
@@ -660,6 +694,151 @@ class Brain:
         except httpx.HTTPError as exc:
             raise BrainError(type(exc).__name__) from exc
         return ((resp.json().get("message") or {}).get("content") or "").strip()
+
+    # ------------------------------------------------------------------ the ChatGPT plan
+
+    def _chatgpt_models(self) -> list[str]:
+        """The models the signed-in account may use, in OpenAI's order: those it shows (visibility "list")."""
+        import httpx
+
+        try:
+            token = chatgpt.Session(httpx).token()
+            resp = httpx.get(f"{chatgpt.RESOURCE}/models", headers={"Authorization": f"Bearer {token}"}, timeout=10)
+            resp.raise_for_status()
+            found = resp.json().get("models") or []
+        except chatgpt.SignedOut as exc:
+            raise BrainError(str(exc)) from exc
+        except httpx.HTTPStatusError as exc:
+            raise BrainError(f"chatgpt answered {exc.response.status_code}") from exc
+        except (httpx.HTTPError, ConnectionError, ValueError, AttributeError) as exc:
+            raise BrainError(f"chatgpt is not reachable ({type(exc).__name__})") from exc
+        return [m["slug"] for m in found if isinstance(m, dict) and m.get("visibility") == "list"
+                and isinstance(m.get("slug"), str)]
+
+    def _chatgpt_model(self) -> str:
+        """The model set in [brain] chatgpt_model, or else the first one the account lists, asked once."""
+        brain = self.cfg["brain"]
+        if not brain.get("chatgpt_model"):
+            listed = self._chatgpt_models()
+            if not listed:
+                raise BrainError("this ChatGPT account lists no model")
+            brain["chatgpt_model"] = listed[0]
+        return brain["chatgpt_model"]
+
+    @staticmethod
+    def _chatgpt_failure(status: int, error) -> BrainError:
+        """A refusal from the plan route as a BrainError that says what to do; never the token."""
+        code = ""
+        while isinstance(error, dict) and not code:   # {"error": {...}}, a stream's error event, or nested once more
+            inner = error.get("error")
+            code = str(error.get("code") or (error.get("detail") if not isinstance(inner, dict) else "") or "")[:80]
+            error = inner
+        if code == "subscription_sharing_usage_limit_exceeded":
+            return PlanLimit(f"the ChatGPT plan's limit is used up for now; see {chatgpt.USAGE_URL}")
+        if code == "subscription_sharing_user_not_eligible":
+            return BrainError("this ChatGPT account can't use its plan in other apps: that needs Plus or Pro")
+        if code in ("subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable"):
+            return BrainError("ChatGPT plan usage is unavailable right now")
+        return BrainError(f"chatgpt answered {status or 'an error'}{f' ({code})' if code else ''}")
+
+    def _chatgpt_round(self, body: dict, wait: float, voice: Voice | None) -> tuple[list[dict], str]:
+        """One streamed request: (the completed response's output items, its text). The text goes to the voice
+        as it comes. Only response.completed counts: a stream that ends before it is a failure."""
+        import httpx
+
+        session = chatgpt.Session(httpx)
+        try:
+            token = session.token()
+            for attempt in range(2):
+                text = ""
+                with httpx.stream("POST", f"{chatgpt.RESOURCE}/responses", json=body, timeout=wait,
+                                  headers={"Authorization": f"Bearer {token}"}) as resp:
+                    if resp.status_code == 401 and attempt == 0:   # revoked or expired early: refresh once
+                        token = session.token(force=True)
+                        continue
+                    if resp.status_code >= 400:
+                        resp.read()
+                        try:
+                            error = resp.json()
+                        except ValueError:
+                            error = {}
+                        raise self._chatgpt_failure(resp.status_code, error)
+                    for event in _sse(resp.iter_lines()):
+                        kind = event.get("type")
+                        if kind == "response.output_text.delta" and isinstance(event.get("delta"), str):
+                            text += event["delta"]
+                            if voice is not None:
+                                voice.text(event["delta"])
+                        elif kind == "response.completed":
+                            output = (event.get("response") or {}).get("output")
+                            return (output if isinstance(output, list) else []), text
+                        elif kind in ("response.failed", "error"):
+                            error = (event.get("response") or {}).get("error") if kind == "response.failed" else event
+                            raise self._chatgpt_failure(0, {"error": error})
+                        elif kind == "response.incomplete":
+                            reason = ((event.get("response") or {}).get("incomplete_details") or {}).get("reason", "")
+                            raise BrainError(f"chatgpt stopped before the end ({str(reason)[:40] or 'incomplete'})")
+                raise BrainError("chatgpt's answer ended before it was complete")
+        except chatgpt.SignedOut as exc:
+            raise BrainError(str(exc)) from exc
+        except (httpx.HTTPError, ConnectionError) as exc:
+            raise BrainError(type(exc).__name__) from exc
+        raise BrainError("chatgpt refused the sign-in twice")
+
+    @staticmethod
+    def _chatgpt_tools(tools: dict[str, Tool]) -> list[dict]:
+        """The plan route takes function tools grouped in a namespace."""
+        return [{"type": "namespace", "name": "rafiq", "description": "Rafiq's tools on the user's computer",
+                 "tools": [{"type": "function", **s["function"]} for s in openai_schemas(tools)]}]
+
+    def _chatgpt_turn(self, history: list[Turn], text: str, tag: str, ctx, tools: dict[str, Tool],
+                      budget: Budget, voice: Voice) -> str:
+        """The Responses API on the user's ChatGPT plan, streamed. Nothing is stored at OpenAI (store false),
+        so each round sends the whole conversation, without reasoning items or ids that would point at
+        stored ones."""
+        brain = self.cfg["brain"]
+        items: list[dict] = ([{"role": t.role, "content": t.content} for t in history]
+                             + [{"role": "user",
+                                 "content": self._note(text, tag, getattr(ctx, "room", ""), practice_note(ctx))}])
+        body = {"model": self._chatgpt_model(), "instructions": system_prompt(self.cfg), "input": items,
+                "store": False, "stream": True}
+        if tools:
+            body["tools"] = self._chatgpt_tools(tools)
+        while True:
+            wait = budget.next_round(brain.get("chatgpt_wait_seconds", 30))
+            with timing.Timer("model", backend="chatgpt"):
+                output, said = self._chatgpt_round(body, wait, voice)
+            voice.end()
+            found = [o for o in output if isinstance(o, dict) and o.get("type") == "function_call"]
+            if not found:
+                if said.strip():
+                    return said.strip()
+                # No text came streamed: the words are in the completed message only, and still said.
+                answer = " ".join(part.get("text", "") for o in output if isinstance(o, dict)
+                                  and o.get("type") == "message" for part in o.get("content") or []
+                                  if isinstance(part, dict)).strip()
+                voice.text(answer)
+                return answer
+            for item in output:
+                if isinstance(item, dict) and item.get("type") in ("message", "function_call"):
+                    items.append({k: v for k, v in item.items() if k not in ("id", "status")})
+            budget.tool_calls(len(found))
+            names = [str(c.get("name", "")).removeprefix("rafiq.") for c in found]
+            steps = self._queue(names)
+            for call, name, step in zip(found, names, steps, strict=True):
+                try:
+                    args = json.loads(call.get("arguments") or "{}")
+                except (TypeError, ValueError):
+                    args = {}
+                items.append({"type": "function_call_output", "call_id": call.get("call_id", ""),
+                              "output": self._run_tool(name, args if isinstance(args, dict) else {}, tag, ctx, tools,
+                                                       voice, budget, step)})
+
+    def _chatgpt_text(self, system: str, text: str) -> str:
+        body = {"model": self._chatgpt_model(), "instructions": system, "input": [{"role": "user", "content": text}],
+                "store": False, "stream": True}
+        _output, said = self._chatgpt_round(body, self.cfg["brain"].get("chatgpt_wait_seconds", 30), None)
+        return said.strip()
 
     def _openai_text(self, system: str, text: str) -> str:
         import httpx

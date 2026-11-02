@@ -398,6 +398,17 @@ PHRASES = {
     "brain_down": {"en": "I can't reach my brain right now.", "fr": "Je n'arrive pas à réfléchir pour le moment.",
                    "es": "Ahora mismo no puedo pensar.", "de": "Ich kann gerade nicht nachdenken.",
                    "ar": "لا أستطيع التفكير الآن.", "ar-EG": "مش قادر أفكر دلوقتي."},
+    "chatgpt_limit": {"en": "I've used up your ChatGPT plan's limit for now. You can check it in ChatGPT's settings, "
+                            "under Usage.",
+                      "fr": "J'ai atteint la limite de ton forfait ChatGPT pour le moment. Tu peux la voir dans les "
+                            "réglages de ChatGPT, sous Utilisation.",
+                      "es": "Por ahora he llegado al límite de tu plan de ChatGPT. Puedes verlo en los ajustes de "
+                            "ChatGPT, en Uso.",
+                      "de": "Das Limit deines ChatGPT-Abos ist vorerst aufgebraucht. Du siehst es in den "
+                            "ChatGPT-Einstellungen unter Nutzung.",
+                      "ar": "وصلتُ إلى حد اشتراكك في ChatGPT الآن. تجده في إعدادات ChatGPT، في قسم الاستخدام.",
+                      "ar-EG": "خلّصت الحد بتاع اشتراكك في ChatGPT دلوقتي. تقدر تشوفه في إعدادات ChatGPT، في جزء "
+                               "الاستخدام."},
     "brain_off": {"en": "I'm working inside your AI app now, so ask me there. The timers and reminders you "
                         "already set still ring here.",
                   "fr": "Je travaille maintenant dans ton application d'IA, demande-moi là-bas. Les minuteurs et "

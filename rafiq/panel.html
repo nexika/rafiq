@@ -195,7 +195,8 @@ button.danger { color: var(--err); }
     <div id="picker">
       <label for="backend">Brain</label>
       <select id="backend">
-        <option value="auto">Auto</option><option value="claude">Claude</option>
+        <option value="auto">Auto</option><option value="chatgpt">ChatGPT plan</option>
+        <option value="claude">Claude</option>
         <option value="openai">OpenAI</option><option value="ollama">Ollama</option>
         <option value="off">Off</option>
       </select>
@@ -695,14 +696,16 @@ function note(text, err) { pickerNote.textContent = text; pickerNote.className =
 async function loadBrain() {
   try { brain = await ask("/api/brain"); } catch (e) { return note(e.message, true); }
   backendEl.value = brain.mode;
-  note(brain.mode === "auto" ? "Claude, then OpenAI, then Ollama"
-    : brain.mode === "off" ? "Off: your AI app (rafiq plugin) is the brain" : brain.models[brain.mode]);
+  note(brain.mode === "auto" ? "ChatGPT plan when signed in, then Claude, OpenAI, Ollama"
+    : brain.mode === "off" ? "Off: your AI app (rafiq plugin) is the brain"
+    : brain.models[brain.mode] || "the account's first model");
 }
 backendEl.onchange = async () => {
   const backend = backendEl.value;
   modelEl.hidden = useEl.hidden = true;
-  if (backend === "auto") { useEl.hidden = false; return note("Claude, then OpenAI, then Ollama"); }
-  note("Asking " + backend + " which models this key can use…");
+  if (backend === "auto") { useEl.hidden = false; return note("ChatGPT plan when signed in, then Claude, OpenAI, Ollama"); }
+  note(backend === "chatgpt" ? "Asking ChatGPT which models your plan can use…"
+    : "Asking " + backend + " which models this key can use…");
   try {
     const { models } = await ask("/api/models", { backend });
     modelEl.replaceChildren(...models.map((m) => new Option(m, m, false, brain && m === brain.models[backend])));
