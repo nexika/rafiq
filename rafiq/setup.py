@@ -27,7 +27,7 @@ import numpy as np
 from . import config, lang
 from .tts import PIPER_FILES
 
-MODES = ("auto", "claude", "ollama")
+MODES = ("auto", "chatgpt", "claude", "ollama")
 QUIET = 0.01              # a peak below this over a few seconds of talking: the microphone is muted or far
 WELCOME = {
     "en": "Hello{name}, I'm Rafiq. Say my name whenever you need me.",
@@ -133,6 +133,12 @@ def _enroll() -> int:
     return enroll.run()
 
 
+def _chatgpt_login(cfg: dict) -> str:
+    from . import chatgpt
+
+    return chatgpt.login(cfg)
+
+
 def _speak(cfg: dict, text: str, tag: str) -> bool:
     from .tts import Speaker
 
@@ -150,6 +156,7 @@ class Actions:
     check: Callable[[], object] = _check
     enroll: Callable[[], int] = _enroll
     speak: Callable[[dict, str, str], bool] = _speak
+    chatgpt_login: Callable[[dict], str] = _chatgpt_login
 
 
 # ---------------------------------------------------------------- the wizard
@@ -181,11 +188,12 @@ def questions(ask, ask_secret, say, settings: dict) -> str:
     name = _text(ask, "What should I call you?", settings.get("user_name", ""))
     if name:
         settings["user_name"] = name
-    say("The brain: Claude (fast, needs an API key) or Ollama (free and private, on this computer). "
-        "auto uses Claude when a key is set and Ollama otherwise.")
+    say("The brain: your ChatGPT plan (Plus or Pro: you sign in, no key and no second bill), Claude (fast, needs "
+        "an API key) or Ollama (free and private, on this computer). auto uses ChatGPT when you are signed in, "
+        "Claude when a key is set, and Ollama otherwise.")
     brain = settings.setdefault("brain", {})
     brain["mode"] = _choose(ask, "Brain", MODES, brain.get("mode", "auto"))
-    if brain["mode"] != "ollama":
+    if brain["mode"] in ("auto", "claude"):
         if os.environ.get("ANTHROPIC_API_KEY"):
             say("  Claude API key: using ANTHROPIC_API_KEY from the environment.")
         else:
@@ -222,6 +230,9 @@ def run(ask=input, ask_secret=getpass.getpass, say=print, actions: Actions | Non
     save(settings, path)
     say(f"Saved {path}.")
     cfg = config.load(path)
+    if cfg["brain"]["mode"] == "chatgpt":
+        say("Signing in with ChatGPT in your browser...")
+        _step(say, "ChatGPT sign-in", lambda: say(f"  {actions.chatgpt_login(cfg)}"))
 
     folder = config.data_dir() / "piper"
     folder.mkdir(parents=True, exist_ok=True)
@@ -234,7 +245,7 @@ def run(ask=input, ask_secret=getpass.getpass, say=print, actions: Actions | Non
         say(f"Downloading the speech model {size} (once)...")
         _step(say, f"speech model {size}", lambda size=size: actions.download_whisper(size))
 
-    if cfg["brain"]["mode"] != "claude":
+    if cfg["brain"]["mode"] not in ("claude", "chatgpt"):
         model = cfg["brain"]["ollama_model"]
         if actions.pull_ollama is None:
             say(f"  Ollama is not installed: get it from https://ollama.com, then run: ollama pull {model}")

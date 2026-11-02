@@ -101,8 +101,18 @@ it fails, and logs to the journal (`journalctl --user -u rafiq -f`). Running it 
 Rafiq. The service does not see keys exported in your shell, so put them in
 `~/.config/rafiq/rafiq.env` as `ANTHROPIC_API_KEY=...` lines. `rafiq uninstall-service` removes it.
 
-## The brain: Claude, with Ollama as the fallback
+## The brain: your ChatGPT plan, Claude or Ollama
 
+- **Your ChatGPT plan**: if you pay for ChatGPT Plus or Pro, `rafiq chatgpt-login` signs Rafiq in with your
+  ChatGPT account, and its brain runs on your plan: no API key and no second bill. It opens the browser;
+  allow Rafiq to use your plan there. Rafiq keeps its own voice, tools and confirmations; only the model
+  comes from the plan, and nothing is stored at OpenAI (`store: false`). On Plus, the five-hour limit is
+  shared with ChatGPT and your other apps; at [chatgpt.com/settings/usage](https://chatgpt.com/settings/usage)
+  you see Rafiq's use and can set a weekly limit for it. When the limit is reached, Rafiq says so and auto
+  mode goes on with the next brain. `rafiq chatgpt-logout` signs out and revokes the sign-in, and
+  `rafiq chatgpt-login --new` signs in to another ChatGPT account instead. This is an
+  OpenAI preview for open-source apps that run locally; the tokens are kept in `~/.config/rafiq/chatgpt/`,
+  readable only by you, and never logged. Free ChatGPT accounts can sign in but not use the plan.
 - **Claude** (recommended): fast, good at tools and at all six languages. Set an API key from
   [console.anthropic.com](https://console.anthropic.com): `export ANTHROPIC_API_KEY=...`. The default
   model is `claude-haiku-5-5`, chosen for speed; change `brain.claude_model` for a stronger one.
@@ -117,8 +127,8 @@ Rafiq. The service does not see keys exported in your shell, so put them in
   to it once to fix. `rafiq toolcheck` measures how often it picks the right tool, with every tool
   and with its set.
 
-In auto mode Rafiq tries Claude, then OpenAI (each only when its key is set), then Ollama.
-`rafiq run --brain claude|openai|ollama|auto` picks one for a session; `brain.mode` in the config
+In auto mode Rafiq tries your ChatGPT plan (when signed in), then Claude, then OpenAI (each only when its key
+is set), then Ollama. `rafiq run --brain chatgpt|claude|openai|ollama|auto` picks one for a session; `brain.mode` in the config
 sets it. In the panel, the Brain menu lists the models your key can really use, asked of the
 provider itself, and switches to one after asking again; the choice lasts until Rafiq stops.
 

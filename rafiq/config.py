@@ -21,13 +21,17 @@ from .lang import TAGS
 
 DEFAULTS: dict = {
     "brain": {
-        # "auto": Claude, then OpenAI, for each that has an API key and answers; else Ollama.
+        # "auto": the ChatGPT plan when signed in (rafiq chatgpt-login), then Claude, then OpenAI, for each that
+        # has an API key and answers; else Ollama.
         "mode": "auto",
         # everyday: claude_model, fast and cheap; quality: quality_model; offline: Ollama and Piper only.
         "profile": "everyday",
         "claude_model": "claude-haiku-5-5",
         "quality_model": "claude-opus-5-5",
         "openai_model": "gpt-5-mini",
+        # On the ChatGPT plan: empty takes the first model the account lists (the panel lists them all).
+        "chatgpt_model": "",
+        "chatgpt_wait_seconds": 30,
         # Any server that speaks OpenAI's chat completions works here (DeepSeek, Gemini, a local one).
         "openai_url": "https://api.openai.com/v1",
         # How long the OpenAI-compatible server may stay silent before Rafiq gives up on it (auto mode then
@@ -321,7 +325,7 @@ def _token(name: str) -> str:
 # ---------------------------------------------------------------------- what the panel may change
 
 # The only settings the panel can read or write. Keys, addresses and everything else stay out of the page.
-CHOICES = {"brain.mode": ["auto", "claude", "openai", "ollama", "off"],
+CHOICES = {"brain.mode": ["auto", "chatgpt", "claude", "openai", "ollama", "off"],
            "voice.engine": ["auto", "azure", "piper", "edge"]}
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}")
 PATTERNS = {"brain.claude_model": _NAME, "brain.ollama_model": _NAME, "voice.rate": re.compile(r"[+-]\d{1,3}%"),

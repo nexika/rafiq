@@ -181,7 +181,7 @@ def test_choosing_a_model_the_key_cannot_use_changes_nothing(catalogue):
 def test_status_names_the_mode_and_each_backends_model():
     status = make_brain("auto", openai_api_key="k").status()
     assert status["mode"] == "auto"
-    assert status["ready"] == {"claude": False, "openai": True, "ollama": True}
+    assert status["ready"] == {"chatgpt": False, "claude": False, "openai": True, "ollama": True}
     assert status["models"]["openai"] == config.DEFAULTS["brain"]["openai_model"]
 
 

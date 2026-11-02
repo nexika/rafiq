@@ -50,10 +50,15 @@ class Fake:
         self.log.append(("speak", text, tag))
         return True
 
+    def chatgpt_login(self, cfg):
+        self.log.append(("chatgpt",))
+        return "Signed in to ChatGPT."
+
     def actions(self, ollama=True):
         return setup.Actions(download_voices=self.download_voices, download_whisper=self.download_whisper,
                              pull_ollama=self.pull_ollama if ollama else None, record=self.record,
-                             check=self.check, enroll=self.enroll, speak=self.speak)
+                             check=self.check, enroll=self.enroll, speak=self.speak,
+                             chatgpt_login=self.chatgpt_login)
 
     def steps(self):
         return [entry[0] for entry in self.log]
@@ -128,6 +133,23 @@ def test_the_config_with_keys_is_readable_only_by_the_user():
     run(Fake(), secrets=("sk-ant-test",))
     mode = stat.S_IMODE((config.home() / "config.toml").stat().st_mode)
     assert mode == 0o600
+
+
+def test_the_chatgpt_plan_is_offered_first_and_signs_in_without_a_key():
+    fake = Fake()
+    _code, said = run(fake, "Sam", "chatgpt", secrets=("sk-should-not-be-asked",))
+    assert setup.MODES.index("chatgpt") == 1          # after auto, before the paid key
+    assert saved()["brain"]["mode"] == "chatgpt"
+    assert "anthropic_api_key" not in saved()
+    assert ("chatgpt",) in fake.log
+    assert not any(step[0] == "ollama" for step in fake.log)
+    assert any("Signed in to ChatGPT" in line for line in said)
+
+
+def test_other_brains_dont_sign_in_to_chatgpt():
+    fake = Fake()
+    run(fake, "", "claude")
+    assert ("chatgpt",) not in fake.log
 
 
 def test_a_wrong_choice_is_asked_again():

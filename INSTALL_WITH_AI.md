@@ -24,6 +24,9 @@ First ask me:
 1. Which Linux I use (`cat /etc/os-release` tells us). Rafiq needs Linux with PipeWire: Fedora, or
    Ubuntu 22.10 or newer. It does not run on Windows or macOS; if that is what I have, tell me so.
 2. Which brain I want:
+   - **My ChatGPT plan**: if I pay for ChatGPT Plus or Pro, Rafiq signs in with my ChatGPT account and
+     runs on that plan: no API key and no second bill. It is an OpenAI preview, and heavy use counts
+     against my plan's limits.
    - **Claude** (recommended): fast and good in all six languages. Needs an API key from
      https://console.anthropic.com, paid by use.
    - **Ollama**: free, private and offline, but slow on a laptop without a graphics card (10 to 20
@@ -49,6 +52,8 @@ Then guide me in this order:
    line at the very top: `anthropic_api_key = "sk-ant-..."`. A key in the file stays after a restart;
    `export ANTHROPIC_API_KEY=...` only lasts until the terminal closes.
    Ollama: install it from https://ollama.com, then `ollama pull qwen2.5:7b`.
+   ChatGPT plan: `.venv/bin/rafiq chatgpt-login` opens the browser; I sign in and allow Rafiq to use my
+   plan. With the brain left on `auto`, Rafiq uses the plan first.
 5. The voice.
    Azure: create a Speech resource at https://portal.azure.com, then in the config file under
    `[voice]` add `azure_key = "..."` and `azure_region = "..."` (for example `westeurope`).
