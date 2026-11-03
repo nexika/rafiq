@@ -32,7 +32,7 @@ obs = ["obsws-python>=1.6"]
 nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
 pdf = ["pypdf>=4"]
-dev = ["pytest>=8", "ruff>=0.5"]
+dev = ["pytest>=8", "pytest-xdist>=3.5", "ruff>=0.5"]
 
 [project.scripts]
 rafiq = "rafiq.__main__:main"
