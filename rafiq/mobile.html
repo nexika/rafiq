@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rafiq">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Rafiq</title>
+<style>
+:root { --bg: #101418; --card: #1a2027; --line: #2a323b; --text: #e8eef3; --muted: #8b98a5; --accent: #4fb3a9;
+        --err: #e57373; --ok: #81c784; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", sans-serif;
+       background: var(--bg); color: var(--text); min-height: 100dvh; display: flex; flex-direction: column;
+       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+       env(safe-area-inset-left); }
+header { padding: 14px 16px 6px; display: flex; align-items: center; gap: 10px; }
+header h1 { font-size: 18px; margin: 0; flex: 1; }
+#state { color: var(--muted); font-size: 14px; }
+main { flex: 1; overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.you { align-self: flex-end; max-width: 85%; background: #23303a; }
+.rafiq { max-width: 92%; }
+.step { color: var(--muted); font-size: 14px; padding: 4px 2px; }
+.step.done::before { content: "✓ "; color: var(--ok); }
+.step.failed::before { content: "✕ "; color: var(--err); }
+.step.running::before { content: "… "; color: var(--accent); }
+.ask { border-color: var(--accent); }
+.ask .buttons { display: flex; gap: 10px; margin-top: 10px; }
+button { font: inherit; border-radius: 12px; border: 1px solid var(--line); background: #222a33; color: var(--text);
+         padding: 12px 16px; min-height: 48px; }
+button.primary { background: var(--accent); color: #062421; border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--err); }
+footer { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 8px;
+         border-top: 1px solid var(--line); background: var(--bg); }
+footer input { flex: 1; font: inherit; min-height: 48px; border-radius: 12px; border: 1px solid var(--line);
+               background: var(--card); color: var(--text); padding: 0 14px; }
+#talk { min-width: 64px; }
+#talk.on { background: var(--err); color: #fff; border-color: var(--err); }
+#pair { margin: auto; max-width: 420px; padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
+#pair input { font: 600 26px/1 ui-monospace, monospace; letter-spacing: 4px; text-transform: uppercase;
+              text-align: center; min-height: 56px; border-radius: 12px; border: 1px solid var(--line);
+              background: var(--card); color: var(--text); }
+.muted { color: var(--muted); font-size: 14px; }
+.err { color: var(--err); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<section id="pair" hidden>
+  <h1>Pair this phone with Rafiq</h1>
+  <p class="muted">On the computer, run <code>rafiq mobile pair "My phone"</code> and type the code it shows.</p>
+  <input id="code" inputmode="text" autocomplete="one-time-code" maxlength="9" aria-label="Pairing code"
+    autocapitalize="characters" spellcheck="false">
+  <button class="primary" id="pair-go">Pair</button>
+  <p id="pair-note" role="status" class="muted"></p>
+</section>
+<header id="top" hidden>
+  <h1>Rafiq</h1><span id="state" role="status"></span>
+  <button id="stop" class="danger" aria-label="Stop">Stop</button>
+</header>
+<main id="feed" hidden aria-live="polite"></main>
+<footer id="bar" hidden>
+  <input id="text" placeholder="Ask Rafiq at home…" dir="auto" autocomplete="off" aria-label="Message">
+  <button id="talk" aria-label="Hold to talk">🎤</button>
+</footer>
+<audio id="voice" hidden></audio>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const feed = $("feed"), voice = $("voice");
+let token = localStorage.getItem("rafiq-phone-token") || "";
+
+function show(paired) {
+  $("pair").hidden = paired;
+  for (const id of ["top", "feed", "bar"]) $(id).hidden = !paired;
+}
+function add(kind, text) {
+  const el = document.createElement("div");
+  el.className = kind;
+  el.textContent = text;
+  el.dataset.text = text;
+  el.dir = "auto";
+  feed.append(el);
+  feed.scrollTop = feed.scrollHeight;
+  return el;
+}
+async function api(path, body, raw) {
+  const r = await fetch(path, { method: "POST", headers: {
+    Authorization: "Bearer " + token, "Content-Type": raw ? raw.type || "application/octet-stream" : "application/json" },
+    body: raw || JSON.stringify(body || {}) });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 403 && path !== "/api/pair") { forget(); throw new Error(data.error || "pair again"); }
+  if (!r.ok) throw new Error(data.error || "error " + r.status);
+  return data;
+}
+function forget() { token = ""; localStorage.removeItem("rafiq-phone-token"); show(false); }
+
+$("pair-go").onclick = async () => {
+  $("pair-note").textContent = "Pairing…";
+  try {
+    const r = await fetch("/api/pair", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: $("code").value.trim() }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "error " + r.status);
+    token = data.token;
+    localStorage.setItem("rafiq-phone-token", token);
+    $("code").value = "";
+    start();
+  } catch (e) { $("pair-note").textContent = e.message; $("pair-note").className = "err"; }
+};
+
+const steps = new Map();
+const questions = new Map();
+function onEvent(e) {
+  switch (e.kind) {
+    case "state": $("state").textContent = e.state; break;
+    case "heard": add("card you", e.text); break;
+    case "typed": add("card you", e.text); break;
+    case "said": add("card rafiq", e.text); break;
+    case "step": {
+      const key = (e.run_id || "") + ":" + (e.step_id || e.name);
+      const el = steps.get(key) || add("step", e.name || "");
+      el.className = "step " + (e.status || "");
+      steps.set(key, el);
+      break;
+    }
+    case "confirm": ask(e); break;
+    case "confirmed": for (const el of questions.values()) el.remove(); questions.clear(); break;
+    case "error": if (e.error) add("step failed", typeof e.error === "string" ? e.error : "something went wrong"); break;
+    case "forgotten":   // "forget that" at home: off the phone too
+      for (const el of [...feed.querySelectorAll(".card")]) if ((e.texts || []).includes(el.dataset.text)) el.remove();
+      break;
+  }
+}
+function ask(e) {
+  const el = add("card ask", e.action + "?");
+  const buttons = document.createElement("div");
+  buttons.className = "buttons";
+  for (const [label, yes] of [["Yes", true], ["No", false]]) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (yes) b.className = "primary";
+    b.onclick = () => { api("/api/confirm", { id: e.id || "", yes }).catch((x) => add("step failed", x.message));
+                        el.remove(); questions.delete(e.id); };
+    buttons.append(b);
+  }
+  el.append(buttons);
+  questions.set(e.id, el);
+}
+
+async function follow() {
+  // fetch, not EventSource: EventSource can't send the phone's token in a header.
+  while (token) {
+    try {
+      const r = await fetch("/events", { headers: { Authorization: "Bearer " + token } });
+      if (r.status === 403) return forget();
+      // The stream starts from now (no replay), so a reconnect adds nothing twice to what is shown.
+      const reader = r.body.getReader(), text = new TextDecoder();
+      let rest = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        rest += text.decode(value, { stream: true });
+        let cut;
+        while ((cut = rest.indexOf("\n\n")) >= 0) {
+          const block = rest.slice(0, cut); rest = rest.slice(cut + 2);
+          for (const line of block.split("\n"))
+            if (line.startsWith("data: ")) { try { onEvent(JSON.parse(line.slice(6))); } catch (_) {} }
+        }
+      }
+    } catch (_) {}
+    await new Promise((ok) => setTimeout(ok, 3000));   // Rafiq restarting, or the phone off the network
+  }
+}
+
+// iOS plays sound only when a tap started it: the tap that asks starts the element (silently), and the answer,
+// seconds later, plays in the element that is already allowed.
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+function unlock() {
+  if (voice.dataset.unlocked) return;
+  voice.src = SILENCE;
+  voice.play().then(() => { voice.dataset.unlocked = "1"; }).catch(() => {});
+}
+function play(answer) {
+  if (!answer.audio) return;
+  voice.src = "data:" + (answer.mime || "audio/mpeg") + ";base64," + answer.audio;
+  voice.play().catch(() => {});
+}
+$("text").onkeydown = async (ev) => {
+  if (ev.key !== "Enter" || !$("text").value.trim()) return;
+  unlock();
+  const text = $("text").value.trim();
+  $("text").value = "";
+  try { play(await api("/api/ask", { text })); } catch (e) { add("step failed", e.message); }
+};
+$("stop").onclick = () => { voice.pause(); api("/api/stop").catch(() => {}); };
+
+let recorder = null, chunks = [], starting = false, released = false;
+async function startTalking() {
+  if (recorder || starting) return;   // a second press while the microphone opens would leave it on
+  starting = true;
+  released = false;
+  unlock();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Let go while the microphone opened (the first time, to tap Allow): nothing is recorded or sent.
+    const discard = released;
+    recorder = new MediaRecorder(stream);
+    chunks = [];
+    recorder.ondataavailable = (ev) => chunks.push(ev.data);
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      recorder = null;
+      $("talk").classList.remove("on");
+      if (discard) return add("step", "Hold the button while you talk.");
+      try { play(await api("/api/voice", null, blob)); } catch (e) { add("step failed", e.message); }
+    };
+    recorder.start();
+    if (discard) recorder.stop(); else $("talk").classList.add("on");
+  } catch (e) { add("step failed", "The microphone isn't available: " + e.message); recorder = null; }
+  finally { starting = false; }
+}
+function stopTalking() {
+  if (starting) released = true;
+  if (recorder && recorder.state === "recording") recorder.stop();
+}
+$("talk").addEventListener("pointerdown", (ev) => { ev.preventDefault(); startTalking(); });
+$("talk").addEventListener("pointerup", stopTalking);
+$("talk").addEventListener("pointerleave", stopTalking);
+
+function start() { show(true); follow(); }
+if (token) start(); else show(false);
+</script>
+</body>
+</html>

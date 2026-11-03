@@ -536,6 +536,44 @@ on the same Wi-Fi). It refuses `0.0.0.0` and public addresses, and Rafiq then st
 token travels in plain HTTP, so only a private network may carry it. Public tunnels such as ngrok are
 not supported.
 
+### Rafiq's page on your phone
+
+Rafiq's own page on the phone, from anywhere: the steps of what Rafiq is doing, live; ask by voice or by
+typing; answer Rafiq's questions with Yes or No; and hear the answer on the phone, in Rafiq's voice. Rafiq
+still runs at home; the phone is its remote. "Turn off the lights at home" and "what's on my screen at home?"
+work from the street.
+
+1. Tailscale on this computer and the phone, as above.
+2. Under `[mobile]` in the config, set `enabled = true`, then restart `rafiq run`. The page listens on
+   `127.0.0.1:8768` only.
+3. Once: `tailscale serve --bg http://127.0.0.1:8768`. Tailscale publishes the page at
+   `https://<computer>.<tailnet>.ts.net`, on your tailnet only, with a certificate it renews itself (it asks
+   you to turn HTTPS on for your tailnet the first time). HTTPS is what lets the phone's browser use the
+   microphone and install the page. Never use `tailscale funnel`: that would put Rafiq on the internet.
+4. `rafiq mobile pair "Sam's iPhone"` shows an eight-letter code, good for five minutes and five tries.
+   Open the address on the phone and type it: the phone gets a token of its own, and only its hash is kept
+   here.
+5. Keep it on the home screen: Share, then **Add to Home Screen** on an iPhone (Safari), or the menu, then
+   **Install app** on Android (Chrome).
+
+`rafiq mobile devices` lists the paired phones and `rafiq mobile unpair "Sam's iPhone"` ends one, at once.
+
+A request from the phone is answered silently at home, and Rafiq's questions about it are asked on screens
+only (the phone, the panel, the widget), with a minute to answer, so nobody at home can say yes to it out
+loud. The phone's Yes counts only for its own requests, never for something asked at home or by another AI
+app, and never as "always": remembered approvals are managed at home, and they don't answer for the phone,
+which is asked every time. Its No counts for any question. The phone also has a conversation of its own:
+"what did I just ask?" from the phone is about the phone's requests, not what was said at home.
+
+The phone sees its own requests, live, and nothing from before it connected: what others at home say and
+hear stays at home. It can't change settings, permissions or the history, and it can't start dictating,
+reading aloud, interpreting or sleep mode at home, which would take the room's microphone or speaker. Pages,
+emails and search results that Rafiq reads are still data, never instructions, from the phone as from
+anywhere.
+
+Not possible from a phone's browser: explaining the phone's own screen, or listening to a video playing on
+the phone. Rafiq explains the screen and the sound of the computer at home.
+
 ## The widget
 
 A small window that shows what Rafiq is doing, step by step: the state and the step running now, or, made

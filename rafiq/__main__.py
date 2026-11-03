@@ -1,14 +1,16 @@
 """rafiq setup | run | ask | say | dictate | notify | hooks | show | paper | agent | agent-token | satellite |
-gestures | doctor | status | update | phone | mcp | toolcheck | google-setup | chatgpt-login | chatgpt-logout |
-spotify-setup | instagram-setup | hue-setup | browser | install-service | uninstall-service | wake-pc | backup |
-stt-score | enroll | voiceid | listen"""
+gestures | doctor | status | update | phone | mobile | mcp | toolcheck | google-setup | chatgpt-login |
+chatgpt-logout | spotify-setup | instagram-setup | hue-setup | browser | install-service | uninstall-service |
+wake-pc | backup | stt-score | enroll | voiceid | listen"""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -40,6 +42,8 @@ def cmd_run(args) -> int:
     _start_hub(cfg, assistant)
     if cfg["phone"].get("enabled"):
         _start_phone(cfg, assistant)
+    if cfg["mobile"].get("enabled"):
+        _start_mobile(cfg, assistant)
     print('Say "Rafiq" (or "يا رفيق"). Ctrl+C stops.', flush=True)
     try:
         assistant.run()
@@ -52,6 +56,22 @@ def _stop_on_sigterm() -> None:
     """`systemctl stop` sends SIGTERM, whose default skips atexit hooks (Firefox then keeps a session it refuses
     to share); end the way Ctrl+C does instead."""
     signal.signal(signal.SIGTERM, signal.default_int_handler)
+
+
+def _start_mobile(cfg: dict, assistant):
+    """Serve the phone companion's page on 127.0.0.1, for `tailscale serve`; a taken port leaves Rafiq without it."""
+    from . import mobile
+
+    port = int(cfg["mobile"]["port"])
+    try:
+        server = mobile.serve(assistant, "127.0.0.1", port, mobile.Devices(config.home() / "mobile"),
+                              tailnet=tailnet_name())
+    except (ValueError, OSError) as exc:
+        print(f"Phone page off: {exc}", flush=True)
+        return None
+    threading.Thread(target=server.serve_forever, name="rafiq-mobile", daemon=True).start()
+    print(f"Phone page: http://127.0.0.1:{port}, for `tailscale serve` (rafiq mobile pair NAME)", flush=True)
+    return server
 
 
 def _start_phone(cfg: dict, assistant):
@@ -404,6 +424,13 @@ def cmd_doctor(_args) -> int:
     _check("ChatGPT plan", plan["signed_in"] and plan["plan"],
            ("signed in, plan usage allowed" if plan["plan"] else "signed in, but plan usage wasn't allowed: "
             "run rafiq chatgpt-login") if plan["signed_in"] else "run rafiq chatgpt-login (Plus or Pro)", optional=True)
+    from . import mobile
+
+    phones = mobile.Devices(config.home() / "mobile").names()
+    _check("phone page", bool(cfg["mobile"].get("enabled") and phones),
+           (f"on, {len(phones)} phone(s) paired" if phones else "on, no phone paired: run rafiq mobile pair NAME")
+           if cfg["mobile"].get("enabled") else "off; set [mobile] enabled = true, then rafiq mobile pair NAME",
+           optional=True)
     _check("OpenAI API key", bool(cfg.get("openai_api_key")),
            brain["openai_model"] if cfg.get("openai_api_key") else "set OPENAI_API_KEY to use OpenAI")
     from .tts import Speaker
@@ -786,6 +813,59 @@ def cmd_phone(_args) -> int:
     return 0
 
 
+def tailnet_name(run=subprocess.run) -> str:
+    """This computer's name on the tailnet (desk.tail1234.ts.net), where `tailscale serve` answers; "" if unknown."""
+    try:
+        done = run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=5)
+        name = json.loads(done.stdout).get("Self", {}).get("DNSName", "") if done.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return ""
+    return name.rstrip(".") if isinstance(name, str) else ""
+
+
+def cmd_mobile(args) -> int:
+    """Pair a phone with Rafiq's companion page, list the paired phones, or unpair one (#207)."""
+    from . import mobile
+
+    cfg = config.load()
+    devices = mobile.Devices(config.home() / "mobile")
+    if args.action == "devices":
+        names = devices.names()
+        print("\n".join(names) if names else "No phone is paired: run `rafiq mobile pair NAME`.")
+        return 0
+    if not args.name:
+        print(f"Give the phone's name: rafiq mobile {args.action} \"Sam's iPhone\"", file=sys.stderr)
+        return 1
+    if args.action == "unpair":
+        if devices.remove(args.name):
+            print(f"{args.name} is unpaired: it can't reach Rafiq any more.")
+            return 0
+        print(f"No phone is paired as {args.name}. Paired: {', '.join(devices.names()) or 'none'}", file=sys.stderr)
+        return 1
+    try:
+        code = devices.start_pairing(args.name)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    port = int(cfg["mobile"]["port"])
+    name = tailnet_name()
+    print(f"Pairing code for {args.name.strip()}: {code[:4]}-{code[4:]}  (good for 5 minutes)")
+    print()
+    if not cfg["mobile"].get("enabled"):
+        print(f"1. Turn the phone page on: set [mobile] enabled = true in {config.home() / 'config.toml'}, then "
+              "restart Rafiq.")
+    else:
+        print("1. The phone page is on.")
+    print(f"2. Once, so your tailnet reaches it over HTTPS: tailscale serve --bg http://127.0.0.1:{port}")
+    print("   (Tailscale asks you to turn on HTTPS for your tailnet the first time. Never use `tailscale funnel`:")
+    print("   that would put Rafiq on the internet.)")
+    where = f"https://{name}/" if name else "the https://…ts.net address that `tailscale serve status` shows"
+    print(f"3. On the phone, with Tailscale on, open {where} and type the code.")
+    print("4. Keep it on the home screen: Share, then Add to Home Screen (iPhone, Safari), or the menu, then")
+    print("   Install app (Android, Chrome).")
+    return 0
+
+
 def cmd_mcp(args) -> int:
     from . import mcp_server
 
@@ -1036,6 +1116,10 @@ def main(argv=None) -> int:
     update.set_defaults(fn=cmd_update)
     sub.add_parser("phone", help="show how to set up a phone shortcut for the phone bridge").set_defaults(
         fn=cmd_phone)
+    mobile = sub.add_parser("mobile", help="pair a phone with Rafiq's companion page, list or unpair phones")
+    mobile.add_argument("action", choices=("pair", "devices", "unpair"))
+    mobile.add_argument("name", nargs="?", default="", help="the phone's name, such as \"Sam's iPhone\"")
+    mobile.set_defaults(fn=cmd_mobile)
     mcp = sub.add_parser("mcp", help="offer Rafiq's tools to MCP clients such as Claude Code and Claude Desktop")
     mcp.add_argument("--list", action="store_true", help="show the tools offered, and which ask first")
     mcp.set_defaults(fn=cmd_mcp)
