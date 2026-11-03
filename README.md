@@ -57,7 +57,8 @@ hears your own mixed speech, record sentences as `name.wav` with their text in `
 
 ## Install
 
-Linux with PipeWire (Fedora, Ubuntu 22.10+), Python 3.11 or newer, `ffmpeg`.
+Linux with PipeWire (Fedora, Ubuntu 22.10+) or macOS (Apple silicon or Intel), Python 3.11 or newer,
+`ffmpeg`. On a Mac, see [macOS](#macos) below first.
 
 New to this? [INSTALL_WITH_AI.md](INSTALL_WITH_AI.md) ([بالعربية](INSTALL_WITH_AI.ar.md)) is a prompt
 to paste into any chatbot, which then walks you through the install one command at a time.
@@ -101,6 +102,54 @@ uploads anything: the archive holds your keys, so keep it out of public places.
 it fails, and logs to the journal (`journalctl --user -u rafiq -f`). Running it again keeps a single
 Rafiq. The service does not see keys exported in your shell, so put them in
 `~/.config/rafiq/rafiq.env` as `ANTHROPIC_API_KEY=...` lines. `rafiq uninstall-service` removes it.
+
+On macOS the same command makes a launchd agent, `~/Library/LaunchAgents/com.nexika.rafiq.plist`: it starts
+at login and again if Rafiq fails, and logs to `~/.config/rafiq/launchd.log`. launchd reads no key file, so
+the agent tells Rafiq where `rafiq.env` is and Rafiq reads it as it starts; the keys stay in that file.
+
+### macOS
+
+Install [Homebrew](https://brew.sh), then `brew install python@3.12 git ffmpeg`, and run the installer with
+that Python (the Mac's own `python3` is 3.9):
+
+```bash
+git clone https://github.com/nexika/rafiq.git && cd rafiq
+PYTHON=python3.12 ./install.sh
+```
+
+The settings live in `~/.config/rafiq`, as on Linux. If `~/.local/bin` isn't on your PATH, the installer
+says what to add to `~/.zshrc`. Where Linux uses PipeWire and desktop tools, macOS uses its own:
+
+| | On macOS |
+|---|---|
+| Volume, notifications, power | AppleScript (`osascript`); shutting down still asks first |
+| Opening apps and pages | `open`, and the `.app` bundles in Applications |
+| Music and video | Spotify and Music, through AppleScript; a video in a browser isn't reached |
+| Locking | `pmset displaysleepnow`, which locks when "require password after sleep" is on (the default) |
+| Clipboard | `pbcopy`, `pbpaste`. macOS has no selection Rafiq can read: copy the text and say "read what I copied" |
+| Switching speakers and headphones | `brew install switchaudio-osx`; without it the tool isn't offered |
+| What the Mac plays (song recognition, "explain this video") | `brew install blackhole-2ch`, then a Multi-Output Device with your speakers and BlackHole in Audio MIDI Setup |
+| Start at login | a launchd agent (above) |
+| Presence | `ping` and `arp`; macOS keeps a phone's network entry for up to 20 minutes, so leaving can be noticed that late |
+
+macOS asks for some permissions the first time, for the terminal or Python that runs Rafiq:
+
+- **Microphone**: asked when Rafiq first listens.
+- **Accessibility** (System Settings → Privacy & Security): typing for dictation, the hand gestures' keys,
+  shutting down and restarting. `rafiq doctor` says whether it's allowed.
+- **Screen Recording**: "what's on my screen?". Without it the picture shows only the desktop background.
+
+The permissions belong to the program that runs Rafiq: your terminal when you start `rafiq run` there, Python
+itself when the launchd agent starts it. If Rafiq hears nothing after `rafiq install-service`, check Python
+under Microphone and Accessibility in System Settings > Privacy & Security. This hasn't been tried on a Mac yet:
+please report what macOS asks.
+
+On a Mac shared by several accounts, the panel can't yet tell another account's connection from yours, as it
+does on Linux: its token is the only barrier (#234). Until that's fixed, use Rafiq on a Mac where you are the
+only account.
+
+There is no echo cancellation from the system on macOS, so use headphones if Rafiq hears itself. The graphics
+card tool isn't offered on a Mac.
 
 ## The brain: your ChatGPT plan, Claude or Ollama
 

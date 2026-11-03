@@ -63,6 +63,15 @@ class Probe:
     def run(self, args: list[str], timeout: float = 5) -> subprocess.CompletedProcess:
         return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
 
+    def input_devices(self) -> list[str]:
+        """The names of the audio inputs (the microphone, a BlackHole loopback on macOS)."""
+        try:
+            import sounddevice
+
+            return [str(d.get("name", "")) for d in sounddevice.query_devices() if d.get("max_input_channels", 0)]
+        except Exception:
+            return []
+
 
 # ---------------------------------------------------------------------- integrations
 
@@ -161,10 +170,13 @@ def _songs(cfg: dict, probe: Probe) -> Check:
     if not cfg.get("songs", {}).get("audd_token"):
         return Check("Song recognition", False, "no AudD token", "set AUDD_API_TOKEN (https://audd.io)",
                      optional=True)
-    missing = [n for n in ("parec", "ffmpeg") if not probe.which(n)]
+    from . import desktop
+
+    missing = [n for n in (("ffmpeg",) if desktop.system() == "mac" else ("parec", "ffmpeg")) if not probe.which(n)]
     if missing:
         return Check("Song recognition", False, f"room only, missing {', '.join(missing)}",
-                     "install pulseaudio-utils (parec) for the computer's sound and ffmpeg for files",
+                     ("brew install ffmpeg (BlackHole for the Mac's own sound: see above)" if desktop.system() == "mac"
+                      else "install pulseaudio-utils (parec) for the computer's sound and ffmpeg for files"),
                      optional=True)
     return Check("Song recognition", True, "AudD")
 
@@ -214,6 +226,12 @@ def _music(cfg: dict, probe: Probe) -> Check:
                  "new developer apps)")
 
 
+def _on_mac() -> bool:
+    from . import desktop
+
+    return desktop.system() == "mac"
+
+
 def _pointer(probe: Probe) -> Check:
     """How click_on_screen clicks here; nothing is clicked to check."""
     import os
@@ -258,14 +276,47 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _songs(cfg, probe),
         _dmx(cfg),
         _browser(cfg, probe),
-        _pointer(probe),
+        *([] if _on_mac() else [_pointer(probe)]),        # clicking isn't offered on macOS yet
         _music(cfg, probe),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
-        _programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
-        _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),
-        _programs("Lock screen", ["loginctl"], probe, "needs systemd-logind"),
-        _programs("Desktop notifications", ["notify-send"], probe, "install libnotify"),
+        *_desktop(probe),
     ]
+
+
+def _desktop(probe: Probe) -> list[Check]:
+    """The programs behind the volume, opening, locking and notifications, per platform (#192)."""
+    from . import desktop
+
+    if desktop.system() != "mac":
+        return [_programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
+                _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),
+                _programs("Lock screen", ["loginctl"], probe, "needs systemd-logind"),
+                _programs("Desktop notifications", ["notify-send"], probe, "install libnotify")]
+    checks = [_programs("Volume", ["osascript"], probe, "osascript comes with macOS"),
+              _programs("Open apps and pages", ["open"], probe, "open comes with macOS"),
+              _programs("Lock screen", ["pmset"], probe, "pmset comes with macOS"),
+              _programs("Desktop notifications", ["osascript"], probe, "osascript comes with macOS")]
+    outputs = _programs("Switch outputs", ["SwitchAudioSource"], probe, "brew install switchaudio-osx")
+    outputs.optional = True
+    checks.append(outputs)
+    checks.append(_accessibility(probe))
+    has_blackhole = any("blackhole" in name.lower() for name in probe.input_devices())
+    checks.append(Check("The Mac's own sound", has_blackhole, "BlackHole" if has_blackhole else "no BlackHole input",
+                        "" if has_blackhole else "brew install blackhole-2ch, then a Multi-Output Device with it in "
+                        "Audio MIDI Setup", optional=True))
+    return checks
+
+
+def _accessibility(probe: Probe) -> Check:
+    """Typing, gesture keys and power go through System Events, which answers only with the permission."""
+    label, fix = "Typing and keys (Accessibility)", ("allow your terminal (or Python) in System Settings > Privacy & "
+                                                     "Security > Accessibility")
+    try:
+        done = probe.run(["osascript", "-e", 'tell application "System Events" to return UI elements enabled'])
+    except (OSError, subprocess.SubprocessError):
+        return Check(label, False, "osascript did not answer", fix, optional=True)
+    allowed = (done.stdout or "").strip() == "true"
+    return Check(label, allowed, "allowed" if allowed else "not allowed", "" if allowed else fix, optional=True)
 
 
 # ---------------------------------------------------------------------- models for this machine

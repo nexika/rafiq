@@ -140,13 +140,13 @@ class Keyboard:
     def wayland(self) -> bool:
         return self.env.get("XDG_SESSION_TYPE") == "wayland" or bool(self.env.get("WAYLAND_DISPLAY"))
 
-    def _ok(self, args: list[str], text: str | None = None) -> bool:
+    def _ok(self, args: list[str], text: str | None = None, timeout: float = 10) -> bool:
         if not self.which(args[0]):
             return False
         try:
             # No pipes: wl-copy and xclip stay in the background to serve the clipboard.
             result = self.run(args, input=text, text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                              timeout=10, check=False)
+                              timeout=timeout, check=False)
         except (OSError, subprocess.TimeoutExpired):
             return False
         return result.returncode == 0
@@ -162,8 +162,26 @@ class Keyboard:
             return False
         return any(self._ok(args) for args in keys)
 
+    def _mac_type(self, text: str) -> str:
+        """System Events types the text, given as an argument; when it can't, the clipboard and Command-V."""
+        from . import desktop
+
+        # keystroke goes through the keyboard layout: a letter the layout lacks (Arabic, é on a US layout) comes out
+        # as another key, and osascript still succeeds. Only ASCII is typed; the rest is pasted. System Events types
+        # about 30 characters a second, so a long dictation gets the time it needs.
+        if text.isascii() and self._ok(desktop.type_command() + [text], timeout=10 + len(text) / 20):
+            return "keystroke"
+        if self._ok(["pbcopy"], text) and self._ok(desktop.paste_command()):
+            return "paste"
+        raise TypingFailed("could not type: allow Rafiq's terminal or Python in System Settings > Privacy & "
+                           "Security > Accessibility")
+
     def type(self, text: str) -> str:
-        """Type the text; the way it went in ("wtype", "ydotool", "xdotool" or "paste")."""
+        """Type the text; the way it went in ("wtype", "ydotool", "xdotool", "keystroke" or "paste")."""
+        from . import desktop
+
+        if desktop.system() == "mac":
+            return self._mac_type(text)
         if self.wayland:
             tries = [("wtype", ["wtype", "--", text])]
             if text.isascii():

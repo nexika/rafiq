@@ -2,6 +2,15 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def on_linux(monkeypatch):
+    """Every test sees Linux, whatever runs it (CI runs the suite on macOS too, #192); a test of the macOS commands
+    asks for them with test_macos.py's `mac` fixture."""
+    from rafiq import desktop
+
+    monkeypatch.setattr(desktop, "system", lambda: "linux")
+
+
+@pytest.fixture(autouse=True)
 def never_the_real_screen(monkeypatch):
     """No test may take a real screenshot or click: on GNOME the screenshot portal answers without asking, so a
     test that reached it captured the user's screen without a sign. A test that needs a screenshot gives its own."""

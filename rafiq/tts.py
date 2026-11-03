@@ -366,5 +366,6 @@ class SpeechStream:
 
 
 def notify(text: str) -> None:
-    if shutil.which("notify-send"):
-        subprocess.run(["notify-send", "Rafiq", text[:300]], check=False)
+    from . import desktop
+
+    desktop.notify(text)

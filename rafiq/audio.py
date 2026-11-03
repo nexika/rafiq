@@ -216,10 +216,51 @@ def echo_cancel_source(run=subprocess.run) -> str | None:
 CAPTURE_GRACE = 3.0
 
 
+def _sounddevice():
+    import sounddevice
+
+    return sounddevice
+
+
+def mac_system_audio(seconds: float) -> np.ndarray:
+    """macOS has no monitor of what plays: a BlackHole loopback input, fed by a Multi-Output Device in Audio MIDI
+    Setup, carries it. Recorded through sounddevice like the microphone; none raises FileNotFoundError."""
+    sd = _sounddevice()
+    devices = list(sd.query_devices())
+    index = next((i for i, d in enumerate(devices)
+                  if "blackhole" in str(d.get("name", "")).lower() and d.get("max_input_channels", 0) > 0), None)
+    if index is None:
+        raise FileNotFoundError("BlackHole: install it (brew install blackhole-2ch) and add it to a Multi-Output "
+                                "Device in Audio MIDI Setup, so Rafiq can hear what the Mac plays")
+    channels = min(2, int(devices[index]["max_input_channels"]))
+    # Recorded at the device's own rate (BlackHole runs at 48 kHz), then brought to 16 kHz as the microphone is.
+    rate = int(devices[index].get("default_samplerate") or 48000)
+    frames = int(seconds * rate)
+    stop = threading.Timer(seconds + CAPTURE_GRACE, sd.stop)    # a recording that hangs ends the wait below
+    stop.start()
+    try:
+        data = sd.rec(frames, samplerate=rate, channels=channels, dtype="float32", device=index)
+        sd.wait()
+    finally:
+        stop.cancel()
+    mono = np.asarray(data, dtype=np.float32).reshape(-1, channels).mean(axis=1)
+    if rate == RATE:
+        return mono
+    from scipy.signal import resample_poly
+
+    g = math.gcd(RATE, rate)
+    return resample_poly(mono, RATE // g, rate // g).astype(np.float32)
+
+
 def system_audio(seconds: float, spawn=subprocess.Popen) -> np.ndarray:
     """`seconds` of what this computer is playing, from PipeWire's (or PulseAudio's) monitor of the default
     output, as 16 kHz mono floats. parec comes with pulseaudio-utils, like the pactl used above; a missing
-    parec raises FileNotFoundError. A recorder still running CAPTURE_GRACE seconds late is killed."""
+    parec raises FileNotFoundError. A recorder still running CAPTURE_GRACE seconds late is killed. On macOS,
+    from BlackHole (mac_system_audio)."""
+    from . import desktop
+
+    if desktop.system() == "mac":
+        return mac_system_audio(seconds)
     want = int(seconds * RATE) * 2
     rec = spawn(["parec", "-d", "@DEFAULT_MONITOR@", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=1"],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)

@@ -12,6 +12,7 @@ happened while Rafiq was off. Turning it off by voice is saved, so it stays off 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import threading
 import time
@@ -27,8 +28,38 @@ def _run(args: list[str], timeout: float = 5) -> subprocess.CompletedProcess:
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+def ping_command(ip: str) -> list[str]:
+    """One ping waiting a second: -W is in seconds on Linux, in milliseconds on macOS."""
+    from . import desktop
+
+    return ["ping", "-c", "1", "-W", "1000" if desktop.system() == "mac" else "1", ip]
+
+
+def neighbour_command(ip: str) -> list[str]:
+    from . import desktop
+
+    return ["arp", "-n", ip] if desktop.system() == "mac" else ["ip", "neigh", "show", ip]
+
+
+_ARP_ADDRESS = re.compile(r"\bat\s+([0-9a-f]{1,2}(?::[0-9a-f]{1,2}){5})\b", re.IGNORECASE)
+
+
+def _same_mac(found: str, wanted: str) -> bool:
+    """macOS's arp writes 0a:0b as a:b."""
+    return [p.zfill(2) for p in found.lower().split(":")] == [p.zfill(2) for p in wanted.lower().split(":")]
+
+
 def neighbour_present(table: str, mac: str = "") -> bool:
-    """Whether `ip neigh show <ip>` says the phone answered ARP just now (with this MAC, if given)."""
+    """Whether `ip neigh show <ip>` (on macOS `arp -n <ip>`) says the phone answered ARP just now (with this MAC,
+    if given)."""
+    from . import desktop
+
+    if desktop.system() == "mac":
+        for line in table.splitlines():
+            found = _ARP_ADDRESS.search(line)
+            if found and (not mac or _same_mac(found.group(1), mac)):
+                return True
+        return False
     for line in table.splitlines():
         words = line.split()
         if not words or words[-1] not in _PRESENT_STATES:
@@ -42,10 +73,10 @@ def neighbour_present(table: str, mac: str = "") -> bool:
 def phone_seen(ip: str, mac: str = "", run=_run) -> bool:
     """Is the phone on the network now? A missing command or a timeout counts as not seen."""
     try:
-        if run(["ping", "-c", "1", "-W", "1", ip], timeout=3).returncode == 0:
+        if run(ping_command(ip), timeout=3).returncode == 0:
             return True
         # The ping made the kernel ask for the phone by ARP; a sleeping phone answers that.
-        return neighbour_present(run(["ip", "neigh", "show", ip], timeout=3).stdout, mac)
+        return neighbour_present(run(neighbour_command(ip), timeout=3).stdout, mac)
     except (OSError, subprocess.SubprocessError):
         return False
 

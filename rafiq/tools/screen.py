@@ -36,6 +36,26 @@ CLOUD_NOTICE = "send a picture of your screen to Claude, in the cloud"
 PORTAL_SECONDS = 60          # time for the user to answer the portal's "allow screenshot?" dialog
 # Each command writes a PNG to its standard output, or to the file named last.
 COMMANDS = [["grim", "-"], ["gnome-screenshot", "-f"], ["spectacle", "-b", "-n", "-o"]]
+# macOS: screencapture writes the file named last; -x without the camera sound. It needs the Screen Recording
+# permission for Rafiq's terminal or Python (System Settings > Privacy & Security).
+MAC_COMMANDS = [["screencapture", "-x", "-t", "png"]]
+
+
+MAC_PERMISSION = (" If the screenshot shows only a desktop background, a menu bar and no windows, say so: on a Mac "
+                  "that means Rafiq needs the Screen Recording permission (System Settings > Privacy & Security), "
+                  "not that the screen is empty.")
+
+
+def _mac_note() -> str:
+    from .. import desktop
+
+    return MAC_PERMISSION if desktop.system() == "mac" else ""
+
+
+def commands() -> list[list[str]]:
+    from .. import desktop
+
+    return MAC_COMMANDS if desktop.system() == "mac" else COMMANDS
 
 PROMPT = """This is a screenshot of the user's computer screen. The user asked about it: "{question}"
 Answer that from the screenshot, in {language}, in at most a few sentences that can be read aloud: no
@@ -168,8 +188,8 @@ def capture(portal: Callable[[], bytes] | None = None, run=None) -> bytes:
         return portal()
     except ScreenError as exc:
         errors.append(str(exc))
-    for command in COMMANDS:
-        to_file = command[-1] in ("-f", "-o")
+    for command in commands():
+        to_file = command[0] == "screencapture" or command[-1] in ("-f", "-o")
         with tempfile.TemporaryDirectory(prefix="rafiq-") as folder:
             target = Path(folder) / "screen.png"
             try:
@@ -246,7 +266,7 @@ def look(cfg: dict, question: str, tag: str, capture=capture, vision=None, shrin
     if vision is None:
         vision = claude_vision(cfg) if where == "claude" else ollama_vision(cfg)
     prompt = PROMPT.format(question=question or "What is on the screen?",
-                           language=lang_mod.NAMES.get(tag, "English")) + prof.note()
+                           language=lang_mod.NAMES.get(tag, "English")) + _mac_note() + prof.note()
     return vision(png, prompt) or "error: the vision model gave no answer"
 
 
@@ -266,7 +286,7 @@ def look_marked(cfg: dict, question: str, tag: str, keep, show) -> str:
     width, height = size
     vision = claude_vision(cfg) if where == "claude" else ollama_vision(cfg)
     prompt = PROMPT.format(question=question or "What is on the screen?",
-                           language=lang_mod.NAMES.get(tag, "English")) + prof.note()
+                           language=lang_mod.NAMES.get(tag, "English")) + _mac_note() + prof.note()
     reply = vision(png, prompt + MARKED.format(width=width, height=height, max_marks=MAX_MARKS))
     if not reply:
         return "error: the vision model gave no answer"

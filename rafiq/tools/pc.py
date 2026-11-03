@@ -1,6 +1,6 @@
 """This computer: open apps, volume, media, how it is doing, lock it, power off, and wake other computers
 on the network (Wake-on-LAN). Linux with PipeWire (wpctl), playerctl and a desktop that reads .desktop
-files (GNOME, KDE, ...).
+files (GNOME, KDE, ...); on macOS, AppleScript, the .app bundles and SwitchAudioSource (rafiq/desktop.py).
 
 Commands run as argument lists, never through a shell: no word the user says can become a command.
 """
@@ -19,7 +19,7 @@ from configparser import ConfigParser
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import config, lang
+from .. import config, desktop, lang
 from . import tool
 
 APP_DIRS = ["/usr/share/applications", "/usr/local/share/applications", "~/.local/share/applications",
@@ -53,6 +53,11 @@ def desktop_entries(dirs: list[str] | None = None) -> list[dict]:
             found.append({"id": path.stem, "name": entry.get("Name", path.stem),
                           "names": [n.lower() for n in names], "keywords": [k.lower() for k in keywords]})
     return found
+
+
+def installed_apps() -> list[dict]:
+    """The apps the menu shows: .desktop files on Linux, .app bundles on macOS."""
+    return desktop.mac_apps() if desktop.system() == "mac" else desktop_entries()
 
 
 def find_app(query: str, entries: list[dict]) -> dict | None:
@@ -92,8 +97,10 @@ def launch_args(spec: dict) -> list[str]:
         game = link.group(1) if link else text
         if isinstance(value, bool) or not game.isdigit():
             raise ValueError("steam is a game id like 49520 or a steam://rungameid/ link")
-        return ["xdg-open", f"steam://rungameid/{game}"]
+        return desktop.open_command(f"steam://rungameid/{game}")
     if kinds[0] == "flatpak":
+        if desktop.system() == "mac":
+            raise ValueError("Flatpak is for Linux only")
         if not isinstance(value, str) or not FLATPAK_ID.fullmatch(value):
             raise ValueError("flatpak is an app id like com.valvesoftware.Steam")
         return ["flatpak", "run", value]
@@ -145,7 +152,7 @@ def _cfg(ctx) -> dict:
       required=("name",), level="act")
 def open_app(name: str, ctx=None) -> str:
     # The catalogue comes first, so on a tie the name the user chose wins over the menu's.
-    app = find_app(name, catalogue(_cfg(ctx)) + desktop_entries())
+    app = find_app(name, catalogue(_cfg(ctx)) + installed_apps())
     if not app:
         return f"error: no installed app matches {name!r}"
     try:
@@ -159,7 +166,7 @@ def open_app(name: str, ctx=None) -> str:
       {"filter": {"type": "string", "description": "only names containing this"}},
       level="safe", expose=True, card="list")
 def list_apps(filter: str = "", ctx=None) -> str:  # noqa: A002
-    entries = catalogue(_cfg(ctx)) + desktop_entries()
+    entries = catalogue(_cfg(ctx)) + installed_apps()
     names = sorted({e["name"] for e in entries if filter.lower() in e["name"].lower()})
     return ", ".join(names[:80]) or "none"
 
@@ -235,9 +242,16 @@ def parse_volume(text: str) -> tuple[int, bool]:
        "change": {"type": "integer", "description": "raise (positive) or lower (negative) by this many percent"},
        "mute": {"type": "boolean", "description": "true to mute, false to unmute"}}, level="act")
 def volume(level: int | None = None, change: int | None = None, mute: bool | None = None) -> str:
-    current, muted = parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
+    mac = desktop.system() == "mac"
+    try:
+        current, muted = desktop.mac_volume() if mac else parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
+    except desktop.NoVolume as exc:
+        return f"error: {exc}"
     if mute is not None:
-        _run(["wpctl", "set-mute", SINK, "1" if mute else "0"])
+        if mac:
+            desktop.set_mac_volume(mute=bool(mute))
+        else:
+            _run(["wpctl", "set-mute", SINK, "1" if mute else "0"])
         muted = bool(mute)
     target = None
     if level is not None:
@@ -246,7 +260,10 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
         target = current + int(change)
     if target is not None:
         target = max(0, min(100, target))
-        _run(["wpctl", "set-volume", SINK, f"{target / 100:.2f}"])
+        if mac:
+            desktop.set_mac_volume(level=target)
+        else:
+            _run(["wpctl", "set-volume", SINK, f"{target / 100:.2f}"])
         current = target
     return f"volume {current}%" + (", muted" if muted else "")
 
@@ -282,6 +299,8 @@ def active_player(run=_run) -> tuple[str, str] | None:
 def media(action: str, run=_run) -> str:
     if action not in MEDIA and action != "status":
         return f"error: action is one of {', '.join([*MEDIA, 'status'])}"
+    if desktop.system() == "mac":                    # no MPRIS there: Spotify and Music through AppleScript
+        return desktop.mac_media(action)
     try:
         found = active_player(run)
         if not found:
@@ -326,8 +345,8 @@ def parse_sinks(text: str) -> list[Sink]:
 
 # What people call each kind of output in the six languages, and words in the names of such devices.
 OUTPUT_WORDS = {
-    "headphones": ["headphone", "headset", "earphone", "earbud", "casque", "écouteur", "ecouteur", "auricular",
-                   "cascos", "kopfhörer", "kopfhoerer", "سماعات الرأس", "سماعة الرأس", "سماعات الأذن",
+    "headphones": ["headphone", "headset", "earphone", "earbud", "airpods", "casque", "écouteur", "ecouteur",
+                   "auricular", "cascos", "kopfhörer", "kopfhoerer", "سماعات الرأس", "سماعة الرأس", "سماعات الأذن",
                    "سماعات", "سماعة", "هيدفون", "هيدسيت"],
     "speakers": ["speaker", "enceinte", "haut-parleur", "haut parleur", "altavoz", "altavoces", "bocina",
                  "lautsprecher", "boxen", "مكبرات الصوت", "مكبر الصوت", "سبيكر", "السماعات الخارجية"],
@@ -384,14 +403,15 @@ def _outputs(sinks: list[Sink]) -> str:
       "'TV', or a name the user set; with no name, list the outputs.",
       {"name": {"type": "string", "description": "the output as the user said it, in their language"}}, level="act")
 def audio_output(name: str = "", ctx=None) -> str:
-    sinks = parse_sinks(_run(["wpctl", "status"]).stdout)
+    mac = desktop.system() == "mac"
+    sinks = desktop.mac_outputs() if mac else parse_sinks(_run(["wpctl", "status"]).stdout)
     if not name.strip():
         return "outputs: " + _outputs(sinks)
     aliases = ctx.cfg.get("audio", {}).get("outputs", {}) if ctx else {}
     sink = find_sink(name, sinks, aliases)
     if not sink:
         return f"error: no output matches {name!r}; outputs: {_outputs(sinks)}"
-    result = _run(["wpctl", "set-default", str(sink.id)])
+    result = desktop.set_mac_output(sink.name) if mac else _run(["wpctl", "set-default", str(sink.id)])
     return f"now playing on {sink.name}" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
 
 
@@ -516,8 +536,7 @@ def gpu_status() -> str:
 
 @tool("lock_screen", "Lock the screen.", level="act")
 def lock_screen() -> str:
-    session = os.environ.get("XDG_SESSION_ID")
-    result = _run(["loginctl", "lock-session"] + ([session] if session else []))
+    result = _run(desktop.lock_command())
     return "locked" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
 
 
@@ -594,13 +613,13 @@ def power(action: str, ctx=None) -> str:
         tag = ctx.tag
         say = getattr(ctx, "say", None) or (lambda text, tag: None)
         started = SHUTDOWN.start(
-            delay, POWER["shutdown"][0],
+            delay, desktop.power_command("shutdown"),
             on_warn=lambda left: say(lang.phrase("shutdown_soon", tag, seconds=str(left)), tag),
             on_fail=lambda: say(lang.phrase("shutdown_failed", tag), tag))
         if not started:
             return "a shutdown is already counting down; cancel_shutdown stops it"
         return f"shutting down in {delay} seconds; the user can say 'cancel the shutdown' to stop it"
-    result = _run(POWER[action][0])
+    result = _run(desktop.power_command(action))
     return "done" if result.returncode == 0 else f"error: {result.stderr.strip()[:200]}"
 
 

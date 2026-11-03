@@ -30,6 +30,15 @@ LISTENING = {"en": "Let me listen to the song.", "fr": "J'écoute la chanson.", 
              "de": "Ich höre mir das Lied an.", "ar": "لحظة، أستمع إلى الأغنية.", "ar-EG": "ثانية، بسمع الأغنية."}
 
 
+
+def _no_system_sound() -> str:
+    from .. import desktop
+
+    if desktop.system() == "mac":
+        return ("hearing what this Mac plays needs BlackHole: brew install blackhole-2ch, then a Multi-Output Device "
+                "with it in Audio MIDI Setup")
+    return "recording this computer's sound needs parec (install pulseaudio-utils)"
+
 class SongError(Exception):
     """Why a song could not be looked up, in words the model can pass on."""
 
@@ -113,7 +122,7 @@ def _clip(source: str, cfg: dict, ctx, path: str, start, capture, run) -> np.nda
         except RuntimeError as exc:
             raise SongError(str(exc)) from None
         except FileNotFoundError:
-            raise SongError("recording this computer's sound needs parec (install pulseaudio-utils)") from None
+            raise SongError(_no_system_sound()) from None
     record = getattr(ctx, "record", None)
     if record is None:
         raise SongError("listening to the room needs Rafiq running (rafiq run)")

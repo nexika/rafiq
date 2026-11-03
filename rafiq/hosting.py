@@ -6,6 +6,8 @@ process. The service is a systemd user unit named "rafiq" (rafiq/rafiq.service, 
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,15 +58,43 @@ def is_checkout(root: Path) -> bool:
     return (root / ".git").exists()   # a file, not a folder, in a git worktree
 
 
+MAC_LABEL = "com.nexika.rafiq"          # service.LABEL, the launchd agent on macOS
+
+
+def _mac() -> bool:
+    from . import desktop
+
+    return desktop.system() == "mac"
+
+
+def _service_manager() -> str:
+    return "launchctl" if _mac() else "systemctl"
+
+
+def service_command() -> list[str]:
+    if _mac():
+        return ["launchctl", "print", f"gui/{os.getuid()}/{MAC_LABEL}"]
+    return ["systemctl", "--user", "is-active", SERVICE]
+
+
+def restart_command() -> list[str]:
+    if _mac():
+        return ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{MAC_LABEL}"]
+    return ["systemctl", "--user", "restart", SERVICE]
+
+
 def _service_state(run: Run) -> str:
-    _code, out = run(["systemctl", "--user", "is-active", SERVICE])
+    _code, out = run(service_command())
+    if _mac():                               # launchctl print says "state = running" while it runs
+        found = re.search(r"^\s*state = (\w+)", out or "", re.MULTILINE)
+        return "active" if found and found.group(1) == "running" else (found.group(1) if found else "inactive")
     return out.splitlines()[-1] if out else "unknown"
 
 
 def status(cfg: dict, root: Path = ROOT, run: Run = run_command, probe: Callable[[str, int], bool] = panel_up,
            has_systemctl: bool | None = None) -> list[Check]:
     if has_systemctl is None:
-        has_systemctl = shutil.which("systemctl") is not None
+        has_systemctl = shutil.which(_service_manager()) is not None
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     up = probe(host, port)
     where = f"{host}:{port}"
@@ -92,7 +122,7 @@ def update(root: Path = ROOT, run: Run = run_command, python: str = sys.executab
            has_systemctl: bool | None = None, check: bool = False, restart: bool = True) -> tuple[int, list[str]]:
     """Pull the new commits, reinstall, and restart the service if it was running."""
     if has_systemctl is None:
-        has_systemctl = shutil.which("systemctl") is not None
+        has_systemctl = shutil.which(_service_manager()) is not None
     if not is_checkout(root):
         return 1, [f"{root} is not a git checkout: reinstall Rafiq with pip to update it."]
 
@@ -124,7 +154,7 @@ def update(root: Path = ROOT, run: Run = run_command, python: str = sys.executab
         return 1, lines + [f"pip install failed: {out[-500:]}"]
     lines.append("Installed.")
     if restart and has_systemctl and _service_state(run) == "active":
-        code, out = run(["systemctl", "--user", "restart", SERVICE])
+        code, out = run(restart_command())
         lines.append("Service restarted." if code == 0 else f"Restart failed: {out}")
         return (0 if code == 0 else 1), lines
     lines.append("Restart Rafiq to use the new version.")
