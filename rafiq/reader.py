@@ -76,13 +76,22 @@ def _first_output(commands: list[list[str]], run) -> str:
     return ""
 
 
+def selection_commands() -> list[list[str]]:
+    """What reads the highlighted text. macOS has no primary selection: there it is what was copied."""
+    from . import desktop
+
+    return [["pbpaste"]] if desktop.system() == "mac" else PRIMARY
+
+
 def selection(run=_run) -> str:
     """The highlighted text, or "" when nothing is selected or no clipboard tool is installed."""
-    return _first_output(PRIMARY, run)
+    return _first_output(selection_commands(), run)
 
 
 def clipboard(run=_run) -> str:
-    return _first_output(CLIPBOARD, run)
+    from . import desktop
+
+    return _first_output([["pbpaste"]] if desktop.system() == "mac" else CLIPBOARD, run)
 
 
 def pdf_text(path: str) -> str:

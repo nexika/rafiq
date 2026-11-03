@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Install Rafiq on Linux: a virtual environment in .venv next to this script, the dependencies (with the
-# offline voices and Google), then `rafiq setup` for the keys, voices, models and the wake word.
+# Install Rafiq on Linux or macOS: a virtual environment in .venv next to this script, the dependencies (with
+# the offline voices and Google), then `rafiq setup` for the keys, voices, models and the wake word.
 #
 #   ./install.sh               install, then run the setup wizard
 #   ./install.sh --no-setup    install only (run `rafiq setup` later)
 #   ./install.sh --link-only   only put `rafiq` on the PATH, as ~/.local/bin/rafiq (after moving the folder)
 set -euo pipefail
 
-cd "$(dirname "$(readlink -f "$0")")"
+# macOS before 12.3 has no readlink -f: there, the folder the script was started from.
+here=$(readlink -f "$0" 2>/dev/null || echo "$0")
+cd "$(dirname "$here")"
+mac=0
+[ "$(uname -s)" = Darwin ] && mac=1
 setup=1
 link_only=0
 for arg in "$@"; do
@@ -36,9 +40,11 @@ link_rafiq() {
       rafiq_cmd=rafiq
       echo "Linked $link: \`rafiq doctor\`, \`rafiq run\` and the rest work from any folder." ;;
     *)
-      echo "Linked $link, but $bin is not on your PATH yet. Log out and in again, or add"
+      local rc=~/.bashrc
+      [ "$mac" = 1 ] && rc=~/.zshrc      # macOS's shell is zsh, and ~/.local/bin isn't on its PATH
+      echo "Linked $link, but $bin is not on your PATH yet. Add"
       echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-      echo "to ~/.bashrc. Until then, use $(pwd)/.venv/bin/rafiq" ;;
+      echo "to $rc and open a new terminal. Until then, use $(pwd)/.venv/bin/rafiq" ;;
   esac
 }
 
@@ -52,17 +58,25 @@ if [ "$link_only" = 1 ]; then
 fi
 
 python=${PYTHON:-python3}
+if [ "$mac" = 1 ]; then
+  get_python="brew install python@3.12, then PYTHON=python3.12 ./install.sh (Homebrew: https://brew.sh)"
+  get_ffmpeg="brew install ffmpeg"
+else
+  get_python="Fedora: sudo dnf install python3, Ubuntu: sudo apt install python3-venv"
+  get_ffmpeg="Fedora: sudo dnf install ffmpeg    Ubuntu: sudo apt install ffmpeg"
+fi
 if ! command -v "$python" >/dev/null; then
-  echo "Python 3.11 or newer is needed (Fedora: sudo dnf install python3, Ubuntu: sudo apt install python3-venv)." >&2
+  echo "Python 3.11 or newer is needed ($get_python)." >&2
   exit 1
 fi
 if ! "$python" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
-  echo "Python 3.11 or newer is needed; $("$python" --version) found. Set PYTHON=python3.12 to pick another." >&2
+  # macOS's own python3 is 3.9: Homebrew's is the one to use.
+  echo "Python 3.11 or newer is needed; $("$python" --version) found ($get_python)." >&2
   exit 1
 fi
 if ! command -v ffplay >/dev/null; then
   echo "Warning: ffmpeg (ffplay) is missing, so Rafiq cannot play its voice." >&2
-  echo "  Fedora: sudo dnf install ffmpeg    Ubuntu: sudo apt install ffmpeg" >&2
+  echo "  $get_ffmpeg" >&2
 fi
 
 if [ ! -x .venv/bin/python ]; then
@@ -71,7 +85,16 @@ if [ ! -x .venv/bin/python ]; then
 fi
 echo "Installing Rafiq and its dependencies (a few minutes the first time)..."
 .venv/bin/python -m pip install --quiet --upgrade pip
-.venv/bin/python -m pip install --quiet -e ".[google,offline-voice]"
+if [ "$mac" = 1 ]; then
+  # The offline voices (Piper) may have no wheel for this Mac: Rafiq works without them, with the online voices.
+  .venv/bin/python -m pip install --quiet -e ".[google]"
+  .venv/bin/python -m pip install --quiet -e ".[google,offline-voice]" \
+    || echo "Note: the offline voices (piper-tts) did not install here; Rafiq uses the online voices." >&2
+  echo "macOS will ask to allow the microphone the first time Rafiq listens. For typing, gestures and power, allow"
+  echo "your terminal in System Settings > Privacy & Security > Accessibility. rafiq doctor shows what is missing."
+else
+  .venv/bin/python -m pip install --quiet -e ".[google,offline-voice]"
+fi
 
 echo "Installed: $(pwd)/.venv/bin/rafiq"
 link_rafiq

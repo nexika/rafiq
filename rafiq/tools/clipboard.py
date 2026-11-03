@@ -1,5 +1,5 @@
 """The clipboard: read what the user copied (to translate, summarise or explain it) and put an answer
-back. wl-clipboard on Wayland, xclip on X11.
+back. wl-clipboard on Wayland, xclip on X11, pbpaste and pbcopy on macOS.
 
 The clipboard is read only when a tool asks for it, and its text goes to the model as data. Writing
 to it runs without asking: the user asked for it, and nothing outside the clipboard changes.
@@ -7,7 +7,6 @@ to it runs without asking: the user asked for it, and nothing outside the clipbo
 
 from __future__ import annotations
 
-import os
 import subprocess
 
 from . import tool
@@ -26,11 +25,9 @@ def _run(args: list[str], text_in: str | None = None) -> subprocess.CompletedPro
 
 def commands() -> tuple[list[str], list[str]] | None:
     """(read, write) commands for this desktop session, or None when there is no session."""
-    if os.environ.get("WAYLAND_DISPLAY"):
-        return ["wl-paste", "--no-newline", "--type", "text"], ["wl-copy"]
-    if os.environ.get("DISPLAY"):
-        return ["xclip", "-selection", "clipboard", "-o"], ["xclip", "-selection", "clipboard", "-i"]
-    return None
+    from .. import desktop
+
+    return desktop.clipboard_commands()
 
 
 def _missing(program: str) -> str:

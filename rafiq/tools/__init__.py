@@ -122,6 +122,20 @@ def music_service(cfg: dict) -> str:
     return str(cfg.get("music", {}).get("service") or "").strip().lower()
 
 
+def not_here() -> set[str]:
+    """Tools with no way to work on this platform, left out rather than failing when called (#192)."""
+    import shutil
+
+    from .. import desktop
+
+    if desktop.system() != "mac":
+        return set()
+    missing = {"gpu_status"}                     # reads AMD and NVIDIA cards through Linux's /sys and NVML
+    if not shutil.which("SwitchAudioSource"):    # brew install switchaudio-osx
+        missing.add("audio_output")
+    return missing
+
+
 # Skills that need an account or another app, loaded only when enabled in their config section.
 OPTIONAL = ("google", "discord", "instagram", "obs", "prayer", "spotify", "browser")
 
@@ -200,6 +214,8 @@ def load_all(cfg: dict) -> dict[str, Tool]:
     from . import brief  # noqa: F401  (last: it gathers the others)
     # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
     tools = {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
+    for name in not_here():
+        tools.pop(name, None)
     if music == "spotify" and "spotify_play" in tools:
         play = tools["spotify_play"]
         tools["spotify_play"] = dataclasses.replace(play, description=f"{play.description} Spotify is the user's "

@@ -44,6 +44,23 @@ jobs:
       - name: Test
         run: python -m pytest -q
 
+  # macOS (#192): the install script on a clean Mac, the suite (every device is faked), and what doctor says there.
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install with install.sh
+        run: PYTHON=python3.13 ./install.sh --no-setup
+      - name: Test
+        run: |
+          .venv/bin/python -m pip install --quiet -e ".[dev]"
+          .venv/bin/python -m pytest -q
+      - name: Doctor
+        run: .venv/bin/rafiq doctor || true     # no microphone or desktop on the runner: for the log only
+
   # The widget (widget/): the page's logic with Node's own test runner, and the Tauri side with cargo.
   widget:
     runs-on: ubuntu-latest
@@ -69,10 +86,10 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [lint, test, widget]
+    needs: [lint, test, test-macos, widget]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed
         run: |
           [ "${{ needs.lint.result }}" = success ] && [ "${{ needs.test.result }}" = success ] \
-            && [ "${{ needs.widget.result }}" = success ]
+            && [ "${{ needs.test-macos.result }}" = success ] && [ "${{ needs.widget.result }}" = success ]

@@ -140,6 +140,8 @@ def open_in_browser(url: str) -> str:
     why = plain_url(url)
     if why:
         return f"error: {why}; it was not opened"
-    subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    from .. import desktop
+
+    subprocess.Popen(desktop.open_command(url), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      start_new_session=True)
     return f"opened {url}"

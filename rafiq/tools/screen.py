@@ -36,6 +36,15 @@ CLOUD_NOTICE = "send a picture of your screen to Claude, in the cloud"
 PORTAL_SECONDS = 60          # time for the user to answer the portal's "allow screenshot?" dialog
 # Each command writes a PNG to its standard output, or to the file named last.
 COMMANDS = [["grim", "-"], ["gnome-screenshot", "-f"], ["spectacle", "-b", "-n", "-o"]]
+# macOS: screencapture writes the file named last; -x without the camera sound. It needs the Screen Recording
+# permission for Rafiq's terminal or Python (System Settings > Privacy & Security).
+MAC_COMMANDS = [["screencapture", "-x", "-t", "png"]]
+
+
+def commands() -> list[list[str]]:
+    from .. import desktop
+
+    return MAC_COMMANDS if desktop.system() == "mac" else COMMANDS
 
 PROMPT = """This is a screenshot of the user's computer screen. The user asked about it: "{question}"
 Answer that from the screenshot, in {language}, in at most a few sentences that can be read aloud: no
@@ -163,8 +172,8 @@ def capture(portal: Callable[[], bytes] = portal_screenshot, run=subprocess.run)
         return portal()
     except ScreenError as exc:
         errors.append(str(exc))
-    for command in COMMANDS:
-        to_file = command[-1] in ("-f", "-o")
+    for command in commands():
+        to_file = command[0] == "screencapture" or command[-1] in ("-f", "-o")
         with tempfile.TemporaryDirectory(prefix="rafiq-") as folder:
             target = Path(folder) / "screen.png"
             try:

@@ -19,9 +19,11 @@ from . import config, lang, modes, privacy
 
 
 def cmd_run(args) -> int:
+    from . import service
     from .assistant import Assistant
     from .panel import serve
 
+    service.load_env()           # the launchd agent's keys, from rafiq.env (#192); nothing where it isn't set
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
@@ -409,11 +411,13 @@ def cmd_doctor(_args) -> int:
     print(f"Rafiq settings: {config.home() / 'config.toml'}")
     _check_microphone(cfg)
     _check("audio player (ffplay)", bool(shutil.which("ffplay")))
+    from . import desktop
     from .dictation import Keyboard
 
-    typing = ("wtype", "ydotool", "wl-copy") if Keyboard().wayland else ("xdotool", "xclip")
-    found = [t for t in typing if shutil.which(t)]
-    _check("dictation (typing into windows)", bool(found), ", ".join(found) or "install " + " or ".join(typing))
+    if desktop.system() != "mac":           # on macOS, System Events: "Typing and keys (Accessibility)" below
+        typing = ("wtype", "ydotool", "wl-copy") if Keyboard().wayland else ("xdotool", "xclip")
+        found = [t for t in typing if shutil.which(t)]
+        _check("dictation (typing into windows)", bool(found), ", ".join(found) or "install " + " or ".join(typing))
     print("Integrations:")
     for check in doctor.integrations(cfg):
         _check(check.label, check.ok, check.detail, check.fix, check.optional)

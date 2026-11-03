@@ -162,8 +162,23 @@ class Keyboard:
             return False
         return any(self._ok(args) for args in keys)
 
+    def _mac_type(self, text: str) -> str:
+        """System Events types the text, given as an argument; when it can't, the clipboard and Command-V."""
+        from . import desktop
+
+        if self._ok(desktop.type_command() + [text]):
+            return "keystroke"
+        if self._ok(["pbcopy"], text) and self._ok(desktop.paste_command()):
+            return "paste"
+        raise TypingFailed("could not type: allow Rafiq's terminal or Python in System Settings > Privacy & "
+                           "Security > Accessibility")
+
     def type(self, text: str) -> str:
-        """Type the text; the way it went in ("wtype", "ydotool", "xdotool" or "paste")."""
+        """Type the text; the way it went in ("wtype", "ydotool", "xdotool", "keystroke" or "paste")."""
+        from . import desktop
+
+        if desktop.system() == "mac":
+            return self._mac_type(text)
         if self.wayland:
             tries = [("wtype", ["wtype", "--", text])]
             if text.isascii():

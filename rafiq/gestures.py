@@ -76,9 +76,19 @@ class SystemDesktop:
         self.run = run
 
     def media(self, command: str) -> None:
+        from . import desktop
+
+        if desktop.system() == "mac":
+            desktop.mac_media({"play-pause": "toggle"}.get(command, command), run=self.run)
+            return
         self.run(["playerctl", command])
 
     def keys(self, name: str) -> None:
+        from . import desktop
+
+        if desktop.system() == "mac":           # System Events, with the Accessibility permission
+            self.run(desktop.key_command(name))
+            return
         combo = KEYS[name]
         if os.environ.get("WAYLAND_DISPLAY") and shutil.which("ydotool"):
             codes = [KEYCODES[k] for k in combo]
