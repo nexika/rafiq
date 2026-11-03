@@ -90,12 +90,13 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 |---|---|---|
 | `run` | `status`: `started`, `done`, `failed`; `error` when failed | `{"status": "started"}` |
 | `heard` | `text`, `tag`; `room` from a satellite | `{"text": "weather in Cairo", "tag": "en"}` |
-| `typed` | `text` | `{"text": "weather in Cairo"}` |
+| `typed` | `text`; `from` (the paired phone's name) for a request from the phone | `{"text": "weather in Cairo"}` |
 | `step` | `step_id`, `name`, `status`, `started`, `ended` | see above |
 | `tool_start` | `name`, `step_id` | `{"name": "weather", "step_id": 1}` |
 | `waiting` | `name`, `text` (what Rafiq says while a slow tool runs), `tag`, `step_id` | `{"name": "web_search", "text": "Let me look.", "tag": "en", "step_id": 2}` |
 | `tool` | `name`, `args`, `result` (first 500 characters, or `declined`), `card`, `step_id` | `{"name": "weather", "args": {"city": "Cairo"}, "result": "31°C, sunny", "card": "weather", "step_id": 1}` |
-| `confirm` | `action`, `tag`, `always` (whether "yes, always" may be remembered) | `{"action": "shut down the computer", "tag": "en", "always": true}` |
+| `confirm` | `action`, `tag`, `always` (whether "yes, always" may be remembered), `id`; `from` (the paired phone's name) when the question is for a phone's request, which only a button answers | `{"action": "shut down the computer", "tag": "en", "always": true, "id": "3f9c2a1b0d4e"}` |
+| `mobile` | `paired` (a phone's name, just paired with the phone page) | `{"paired": "Sam's iPhone"}` |
 | `confirmed` | `yes` | `{"yes": false}` |
 | `said` | `text`, `tag`; `cards` when there are some; `room` from a satellite | `{"text": "It's 31 degrees.", "tag": "en"}` |
 | `video` | `state` (`listening`, `explaining`, `done`); `seconds` listened so far while listening; `why` when done (`time`, `stopped`, `ended`, or what went wrong) | `{"state": "listening", "seconds": 90}` |

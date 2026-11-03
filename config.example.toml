@@ -158,6 +158,10 @@ enabled = false
 host = "127.0.0.1"              # this computer only; "tailscale" from anywhere; never "0.0.0.0"
 port = 8767
 
+[mobile]                        # Rafiq's page on a paired phone: `rafiq mobile pair NAME` (see the README)
+enabled = false
+port = 8768                     # on 127.0.0.1 only; `tailscale serve --bg http://127.0.0.1:8768` brings the phone
+
 [screen]
 ollama_model = ""               # a local vision model (e.g. "qwen2.5vl:7b") to read the screen offline
 ask_first = true                # ask before each screenshot that goes to Claude, in the cloud

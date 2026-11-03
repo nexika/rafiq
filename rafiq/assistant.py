@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import queue
+import tempfile
 import threading
 import time
 import unicodedata
@@ -23,6 +24,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -81,7 +83,9 @@ SCREEN_SECONDS = 300         # how long a screenshot waits to be fetched by the 
 MUTED_RECORDING = "Rafiq is muted, so it does not record anything"
 # Jobs held while Rafiq asks yes or no: an answer meant for the question could approve another program's tool,
 # and words spoken in its listening time (a background task's answer) could put words into it.
-WAIT_FOR_ANSWER = ("tool", "result", "notify", "say", "video_done", "brief", "read", "scene", "paper")
+WAIT_FOR_ANSWER = ("tool", "result", "notify", "say", "video_done", "brief", "read", "scene", "paper", "phone")
+PHONE_WAITING = 2            # phone requests queued at once (#207); more are refused until these are answered
+PHONE_CONFIRM_SECONDS = 60.0   # a question for a phone's request: it crosses the network to a phone in a pocket
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +261,9 @@ class Assistant:
         self.overlay = overlay.Overlay(overlay.pick_backend(self.cfg))
         self.events.watchers.append(self.overlay.feed)
         self.silent = bool(self.cfg["overlay"].get("silent"))   # answers on screen only
+        self.from_phone = ""                 # the paired phone whose request is being answered (#207)
+        self.phone_runs: dict[str, str] = {}   # run_id: the phone that asked, for its event stream
+        self.phone_lock, self.phone_waiting = threading.Lock(), 0
         self.jobs: queue.Queue = queue.Queue()
         self.mic = Microphone.from_config(self.cfg)
         if self.mic.device is None:          # no microphone chosen: the echo-cancelled one, if loaded
@@ -598,20 +605,30 @@ class Assistant:
         panel's Yes button goes ahead. spoken_yes=False takes only the button's yes (a spoken no still
         cancels); aloud=False asks in the panel and the widget only, saying nothing and keeping nothing heard.
         Each question has its own id, sent with it to the panel: a yes clicked for another one doesn't count."""
+        phone = getattr(self, "from_phone", "")
+        if phone:
+            # A request from the phone (#207): asked on screens only, so nobody at home can say yes to it, and never
+            # remembered, since approvals are managed at home.
+            aloud, can_remember = False, False
         while not self.pending_answer.empty():
             self.pending_answer.get_nowait()
         if self.speech:                      # finish what was being said before asking
             self.speech.wait()
         self.question_id = uuid.uuid4().hex[:12]
-        self.events.publish("confirm", {"action": action, "tag": tag, "always": can_remember, "id": self.question_id})
+        # Whose question it is: a phone's Yes counts only for its own requests (#207).
+        outer_from, self.question_from = getattr(self, "question_from", ""), phone
+        asked = {"action": action, "tag": tag, "always": can_remember, "id": self.question_id}
+        self.events.publish("confirm", {**asked, "from": phone} if phone else asked)
         # Kept, not cleared: a question asked while another waits must not end the first one's protections.
         outer, self.confirming = getattr(self, "confirming", False), True
         try:
+            if phone:
+                return self._panel_answer(tag, aloud=False, seconds=PHONE_CONFIRM_SECONDS)
             if not aloud:
                 return self._panel_answer(tag, aloud=False)
             return self._ask_yes_or_no(action, tag, can_remember, spoken_yes)
         finally:
-            self.confirming = outer
+            self.confirming, self.question_from = outer, outer_from
 
     def _clicked(self) -> bool | str | None:
         """The panel's answer to the question being asked, or None. A no counts whichever question it was
@@ -622,8 +639,12 @@ class Assistant:
             except queue.Empty:
                 return None
             if isinstance(answer, tuple):
-                asked, answer = answer
+                # (question id, answer), or with a third item, the paired phone that answered (#207): its yes
+                # counts only for a question about its own request, while its no counts for any.
+                asked, answer, *phone = answer
                 if answer and asked != getattr(self, "question_id", None):
+                    continue
+                if answer and phone and phone[0] != getattr(self, "question_from", ""):
                     continue
             return answer
 
@@ -677,11 +698,11 @@ class Assistant:
                                       "match": match})
         return match
 
-    def _panel_answer(self, tag: str, aloud: bool = True) -> bool:
+    def _panel_answer(self, tag: str, aloud: bool = True, seconds: float = CONFIRM_SECONDS) -> bool:
         """Wait for the panel's Yes or No; nothing said out loud counts now. Not aloud: nothing is said, and
         what the microphone hears is dropped while muted, as when idle."""
         self.set_state("listening")
-        deadline = time.monotonic() + CONFIRM_SECONDS
+        deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             answer = self._clicked()
             if answer is not None:
@@ -713,6 +734,10 @@ class Assistant:
             self.say(lang.phrase("forgotten" if last else "nothing_to_forget", tag), tag)
             return
         pair = interpret.parse_request(text)
+        # From the phone (#207), nothing that takes the home microphone or speaker until someone at home stops it.
+        if source == "phone" and (pair or dictation.wants_dictation(text) or lang.is_sleep(text)):
+            self.say(lang.phrase("phone_not_here", tag), tag)
+            return
         if pair and self._interpret_unless_off(pair, tag):
             return
         if lang.is_show_again(text):
@@ -768,7 +793,10 @@ class Assistant:
                 self.speech.close()
             self.speech = None
         self.publish_spending(tag)
-        if self.reader.active:            # read_aloud or "resume reading" loaded something
+        if self.reader.active and source == "phone":   # reading aloud at home, for minutes, isn't for the phone
+            self.reader.stop()
+            self.say(lang.phrase("phone_not_here", tag), tag)
+        elif self.reader.active:          # read_aloud or "resume reading" loaded something
             self.read()
         self.follow_up_until = time.monotonic() + self.cfg["speech"]["follow_up_seconds"]
 
@@ -1028,6 +1056,73 @@ class Assistant:
         except queue.Empty:
             return None
 
+    def ask_phone(self, device: str, text: str = "", audio=None, timeout: float | None = None) -> dict | None:
+        """A request from a paired phone (#207), typed or spoken, answered on the loop's thread. What was heard,
+        what Rafiq answered and that answer as sound, or None when it took longer than timeout: it then never
+        runs, even later. {"error": ...} when phones already have PHONE_WAITING requests waiting."""
+        if not hasattr(self, "phone_lock"):
+            self.phone_lock, self.phone_waiting = threading.Lock(), 0
+        with self.phone_lock:
+            if self.phone_waiting >= PHONE_WAITING:
+                return {"error": "Rafiq is still answering your other requests; try again in a moment"}
+            self.phone_waiting += 1
+        reply: queue.Queue = queue.Queue(maxsize=1)
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        self.submit("phone", device=device, text=text, audio=audio, reply=reply, deadline=deadline)
+        try:
+            return reply.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def _from_phone(self, data: dict) -> None:
+        """Answer a phone's request silently here: the words and the sound go back to the phone, and while it
+        runs, confirm() asks on screens only."""
+        from .mobile import audio_reply
+        from .tts import for_speech
+
+        reply, device = data["reply"], data["device"]
+        if hasattr(self, "phone_lock"):
+            with self.phone_lock:
+                self.phone_waiting -= 1
+        if data.get("deadline") is not None and time.monotonic() > data["deadline"]:
+            return                           # the phone was told "no answer in time": it must not run now
+        result = {"heard": "", "tag": self.tag, "answer": "", "audio": "", "mime": ""}
+        heard = self.events.subscribe()
+        run_id = ""
+        silent, outer_phone = self.silent, self.from_phone
+        self.silent, self.from_phone = True, device
+        try:
+            with self.events.run() as run_id:
+                self.phone_runs[run_id] = device   # the phone's event stream shows this run, and no other
+                while len(self.phone_runs) > 50:
+                    self.phone_runs.pop(next(iter(self.phone_runs)))
+                if data.get("audio") is not None:
+                    text, tag = self.hear(data["audio"])
+                else:
+                    text = data["text"]
+                    tag = lang.dialect(lang.guess(text, self.tag), text, self.tag)
+                    self.events.publish("typed", {"text": text, "from": device})
+                result.update(heard=text, tag=tag)
+                self.respond(text, tag, source="phone")
+        finally:
+            self.silent, self.from_phone = silent, outer_phone
+            self.events.unsubscribe(heard)
+            said = []
+            while not heard.empty():
+                event = heard.get_nowait()
+                if event["kind"] == "said" and event.get("run_id") == run_id:   # not a timer ringing meanwhile
+                    said.append(event["text"])
+            result["answer"] = "\n".join(said)
+            if result["answer"]:
+                try:
+                    with tempfile.TemporaryDirectory(prefix="rafiq-phone-") as folder:
+                        path, _errors = self.speaker.synthesize(for_speech(result["answer"]), result["tag"],
+                                                                Path(folder), "answer")
+                        result["audio"], result["mime"] = audio_reply(path)
+                except Exception as exc:       # no voice: the phone still shows the words
+                    self.events.publish("error", {"error": f"phone voice: {type(exc).__name__}"})
+            reply.put(result)
+
     def announce(self, text: str, tag: str) -> None:
         """Say the result of a background task, without the private data in it (privacy.redact)."""
         self.submit("result", text=text, tag=tag)
@@ -1047,6 +1142,8 @@ class Assistant:
             try:
                 if kind == "text":
                     self._typed(data)
+                elif kind == "phone":
+                    self._from_phone(data)
                 elif kind == "listen":
                     self._listen_for_request(greet=False)
                 elif kind == "notify":

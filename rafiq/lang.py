@@ -409,6 +409,18 @@ PHRASES = {
                       "ar": "وصلتُ إلى حد اشتراكك في ChatGPT الآن. تجده في إعدادات ChatGPT، في قسم الاستخدام.",
                       "ar-EG": "خلّصت الحد بتاع اشتراكك في ChatGPT دلوقتي. تقدر تشوفه في إعدادات ChatGPT، في جزء "
                                "الاستخدام."},
+    "phone_not_here": {"en": "I can't do that from your phone: dictating, reading aloud, interpreting and going to "
+                             "sleep happen at home.",
+                       "fr": "Je ne peux pas faire ça depuis ton téléphone : la dictée, la lecture à voix haute, "
+                             "l'interprétation et la mise en veille se font à la maison.",
+                       "es": "Eso no lo puedo hacer desde tu teléfono: dictar, leer en voz alta, interpretar y "
+                             "dormirme se hacen en casa.",
+                       "de": "Das geht nicht vom Handy aus: Diktieren, Vorlesen, Dolmetschen und Schlafen gehen nur "
+                             "zu Hause.",
+                       "ar": "لا أستطيع فعل ذلك من هاتفك: الإملاء والقراءة بصوت عالٍ والترجمة الفورية والنوم تكون "
+                             "في البيت.",
+                       "ar-EG": "مقدرش أعمل ده من موبايلك: الإملاء والقراية بصوت عالي والترجمة والنوم بيتعملوا في "
+                                "البيت."},
     "brain_off": {"en": "I'm working inside your AI app now, so ask me there. The timers and reminders you "
                         "already set still ring here.",
                   "fr": "Je travaille maintenant dans ton application d'IA, demande-moi là-bas. Les minuteurs et "
