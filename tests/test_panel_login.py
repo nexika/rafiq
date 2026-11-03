@@ -201,6 +201,7 @@ def test_ipv6_loopback_ends_are_read_too():
 
 def test_another_account_s_connection_is_refused(site, monkeypatch):
     assistant, port = site
+    monkeypatch.setattr(panel.sys, "platform", "linux")      # the owner is read from /proc, which the test fakes
     monkeypatch.setattr(panel, "connection_owner", lambda client, server: 4242)
     status = call(port, "POST", "/api/text", {"X-Rafiq-Token": TOKEN, "Content-Type": "application/json"},
                   '{"text": "hi"}')[0]

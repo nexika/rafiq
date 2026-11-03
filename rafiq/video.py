@@ -100,7 +100,9 @@ class VideoWatch:
             text = self.complete(system, f"The summary:\n{summary}")
             self.on_done(text or lang_mod.phrase("brain_down", tag), tag)
         except FileNotFoundError:
-            why = "recording this computer's sound needs parec (install pulseaudio-utils)"
+            from .tools.songs import _no_system_sound
+
+            why = _no_system_sound()
             self.on_done(lang_mod.phrase("video_failed", tag), tag)
         except Exception as exc:         # a thread must not lose it: said, and the next video can start
             why = f"{type(exc).__name__}: {exc}"

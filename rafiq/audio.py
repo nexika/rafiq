@@ -233,10 +233,23 @@ def mac_system_audio(seconds: float) -> np.ndarray:
         raise FileNotFoundError("BlackHole: install it (brew install blackhole-2ch) and add it to a Multi-Output "
                                 "Device in Audio MIDI Setup, so Rafiq can hear what the Mac plays")
     channels = min(2, int(devices[index]["max_input_channels"]))
-    frames = int(seconds * RATE)
-    data = sd.rec(frames, samplerate=RATE, channels=channels, dtype="float32", device=index)
-    sd.wait()
-    return np.asarray(data, dtype=np.float32).reshape(frames, channels).mean(axis=1)
+    # Recorded at the device's own rate (BlackHole runs at 48 kHz), then brought to 16 kHz as the microphone is.
+    rate = int(devices[index].get("default_samplerate") or 48000)
+    frames = int(seconds * rate)
+    stop = threading.Timer(seconds + CAPTURE_GRACE, sd.stop)    # a recording that hangs ends the wait below
+    stop.start()
+    try:
+        data = sd.rec(frames, samplerate=rate, channels=channels, dtype="float32", device=index)
+        sd.wait()
+    finally:
+        stop.cancel()
+    mono = np.asarray(data, dtype=np.float32).reshape(-1, channels).mean(axis=1)
+    if rate == RATE:
+        return mono
+    from scipy.signal import resample_poly
+
+    g = math.gcd(RATE, rate)
+    return resample_poly(mono, RATE // g, rate // g).astype(np.float32)
 
 
 def system_audio(seconds: float, spawn=subprocess.Popen) -> np.ndarray:

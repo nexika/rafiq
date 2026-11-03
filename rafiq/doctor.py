@@ -175,7 +175,8 @@ def _songs(cfg: dict, probe: Probe) -> Check:
     missing = [n for n in (("ffmpeg",) if desktop.system() == "mac" else ("parec", "ffmpeg")) if not probe.which(n)]
     if missing:
         return Check("Song recognition", False, f"room only, missing {', '.join(missing)}",
-                     "install pulseaudio-utils (parec) for the computer's sound and ffmpeg for files",
+                     ("brew install ffmpeg (BlackHole for the Mac's own sound: see above)" if desktop.system() == "mac"
+                      else "install pulseaudio-utils (parec) for the computer's sound and ffmpeg for files"),
                      optional=True)
     return Check("Song recognition", True, "AudD")
 

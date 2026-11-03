@@ -998,7 +998,12 @@ def cmd_install_service(_args) -> int:
         print(exc, file=sys.stderr)
         return 1
     print(f"Rafiq now starts at login ({path}) and is running.")
-    print("Logs: journalctl --user -u rafiq -f")
+    from . import desktop
+
+    if desktop.system() == "mac":
+        print(f"Logs: tail -f {config.home() / 'launchd.log'}")
+    else:
+        print("Logs: journalctl --user -u rafiq -f")
     print(f"Exported keys are not seen by the service: put ANTHROPIC_API_KEY=... lines in {service.env_file()}")
     return 0
 

@@ -15,6 +15,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -102,7 +103,9 @@ def _domain() -> str:
 
 
 def plist_text(python: str | None = None) -> str:
-    env = {"PYTHONUNBUFFERED": "1", "RAFIQ_ENV_FILE": str(env_file())}
+    # launchd's PATH is /usr/bin:/bin:/usr/sbin:/sbin: Homebrew's programs (ffplay, SwitchAudioSource) are added.
+    env = {"PYTHONUNBUFFERED": "1", "RAFIQ_ENV_FILE": str(env_file()),
+           "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"}
     if os.environ.get("RAFIQ_HOME"):
         env["RAFIQ_HOME"] = str(config.home())
     logs = config.home() / "launchd.log"
@@ -113,6 +116,9 @@ def plist_text(python: str | None = None) -> str:
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},      # again after a failure, not after `rafiq` quits on purpose
         "ThrottleInterval": 5,
+        # Files Rafiq and launchd make (the log, anything without its own mode) are the user's only: a Mac's home
+        # folder can be read by every account on it.
+        "Umask": 0o077,
         "EnvironmentVariables": env,
         "StandardOutPath": str(logs),
         "StandardErrorPath": str(logs),
@@ -120,12 +126,31 @@ def plist_text(python: str | None = None) -> str:
     return plistlib.dumps(agent).decode()
 
 
-def _install_mac(run, python: str | None) -> Path:
+def _private_file(path: Path) -> None:
+    """The file, created empty if missing, readable only by the user."""
+    os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
+    path.chmod(0o600)
+
+
+BOOTSTRAP_TRIES = 10          # bootout returns before launchd has let the old agent go: bootstrap then fails a moment
+BOOTSTRAP_WAIT = 0.5          # with 5 (Input/output error) or 37 (Operation already in progress)
+
+
+def _install_mac(run, python: str | None, sleep=time.sleep) -> Path:
+    home = config.home()
+    home.mkdir(parents=True, exist_ok=True)
+    home.chmod(0o700)                                  # it holds config.toml and rafiq.env, with the keys
+    _private_file(env_file())
+    _private_file(home / "launchd.log")
     path = plist_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(plist_text(python), encoding="utf-8")
     run(["bootout", f"{_domain()}/{LABEL}"])          # the one running, if any: never two
-    done = run(["bootstrap", _domain(), str(path)])
+    for attempt in range(BOOTSTRAP_TRIES):
+        done = run(["bootstrap", _domain(), str(path)])
+        if done.returncode not in (5, 37) or attempt == BOOTSTRAP_TRIES - 1:
+            break
+        sleep(BOOTSTRAP_WAIT)
     if done.returncode != 0:
         raise ServiceError(f"launchctl bootstrap failed: {(done.stderr or done.stdout or '').strip()}")
     return path
@@ -147,8 +172,14 @@ def load_env(environ=None) -> None:
     name = environ.get("RAFIQ_ENV_FILE")
     if not name:
         return
+    path = Path(name)
     try:
-        lines = Path(name).read_text(encoding="utf-8").splitlines()
+        info = path.stat()
+        if info.st_uid != os.getuid():           # someone else's file: its keys could be anyone's
+            return
+        if info.st_mode & 0o077:                 # written as other files are (0644): the keys are the user's only
+            path.chmod(0o600)
+        lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return
     for line in lines:

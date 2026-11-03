@@ -243,7 +243,10 @@ def parse_volume(text: str) -> tuple[int, bool]:
        "mute": {"type": "boolean", "description": "true to mute, false to unmute"}}, level="act")
 def volume(level: int | None = None, change: int | None = None, mute: bool | None = None) -> str:
     mac = desktop.system() == "mac"
-    current, muted = desktop.mac_volume() if mac else parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
+    try:
+        current, muted = desktop.mac_volume() if mac else parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
+    except desktop.NoVolume as exc:
+        return f"error: {exc}"
     if mute is not None:
         if mac:
             desktop.set_mac_volume(mute=bool(mute))

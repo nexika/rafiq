@@ -2,6 +2,15 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def on_linux(monkeypatch):
+    """Every test sees Linux, whatever runs it (CI runs the suite on macOS too, #192); a test of the macOS commands
+    asks for them with test_macos.py's `mac` fixture."""
+    from rafiq import desktop
+
+    monkeypatch.setattr(desktop, "system", lambda: "linux")
+
+
+@pytest.fixture(autouse=True)
 def rafiq_home(tmp_path, monkeypatch):
     """Every test gets its own settings folder, its own (empty) prof data, no prof installed unless it gives
     one, and no real keys."""

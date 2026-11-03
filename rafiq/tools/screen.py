@@ -41,6 +41,17 @@ COMMANDS = [["grim", "-"], ["gnome-screenshot", "-f"], ["spectacle", "-b", "-n",
 MAC_COMMANDS = [["screencapture", "-x", "-t", "png"]]
 
 
+MAC_PERMISSION = (" If the screenshot shows only a desktop background, a menu bar and no windows, say so: on a Mac "
+                  "that means Rafiq needs the Screen Recording permission (System Settings > Privacy & Security), "
+                  "not that the screen is empty.")
+
+
+def _mac_note() -> str:
+    from .. import desktop
+
+    return MAC_PERMISSION if desktop.system() == "mac" else ""
+
+
 def commands() -> list[list[str]]:
     from .. import desktop
 
@@ -250,7 +261,7 @@ def look(cfg: dict, question: str, tag: str, capture=capture, vision=None, shrin
     if vision is None:
         vision = claude_vision(cfg) if where == "claude" else ollama_vision(cfg)
     prompt = PROMPT.format(question=question or "What is on the screen?",
-                           language=lang_mod.NAMES.get(tag, "English")) + prof.note()
+                           language=lang_mod.NAMES.get(tag, "English")) + _mac_note() + prof.note()
     return vision(png, prompt) or "error: the vision model gave no answer"
 
 
@@ -270,7 +281,7 @@ def look_marked(cfg: dict, question: str, tag: str, keep, show) -> str:
     width, height = size
     vision = claude_vision(cfg) if where == "claude" else ollama_vision(cfg)
     prompt = PROMPT.format(question=question or "What is on the screen?",
-                           language=lang_mod.NAMES.get(tag, "English")) + prof.note()
+                           language=lang_mod.NAMES.get(tag, "English")) + _mac_note() + prof.note()
     reply = vision(png, prompt + MARKED.format(width=width, height=height, max_marks=MAX_MARKS))
     if not reply:
         return "error: the vision model gave no answer"

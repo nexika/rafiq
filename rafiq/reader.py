@@ -77,10 +77,11 @@ def _first_output(commands: list[list[str]], run) -> str:
 
 
 def selection_commands() -> list[list[str]]:
-    """What reads the highlighted text. macOS has no primary selection: there it is what was copied."""
+    """What reads the highlighted text. macOS has no primary selection, and reading what was copied instead could
+    read a copied password aloud: nothing there, so the user copies the text and asks for the clipboard."""
     from . import desktop
 
-    return [["pbpaste"]] if desktop.system() == "mac" else PRIMARY
+    return [] if desktop.system() == "mac" else PRIMARY
 
 
 def selection(run=_run) -> str:

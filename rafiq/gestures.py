@@ -79,7 +79,7 @@ class SystemDesktop:
         from . import desktop
 
         if desktop.system() == "mac":
-            desktop.mac_media({"play-pause": "toggle"}.get(command, command), run=self.run)
+            desktop.mac_media({"play-pause": "toggle"}.get(command, command))
             return
         self.run(["playerctl", command])
 

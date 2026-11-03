@@ -125,17 +125,23 @@ says what to add to `~/.zshrc`. Where Linux uses PipeWire and desktop tools, mac
 | Opening apps and pages | `open`, and the `.app` bundles in Applications |
 | Music and video | Spotify and Music, through AppleScript; a video in a browser isn't reached |
 | Locking | `pmset displaysleepnow`, which locks when "require password after sleep" is on (the default) |
-| Clipboard | `pbcopy`, `pbpaste`; "read this" reads what you copied, as macOS has no selection to read |
+| Clipboard | `pbcopy`, `pbpaste`. macOS has no selection Rafiq can read: copy the text and say "read what I copied" |
 | Switching speakers and headphones | `brew install switchaudio-osx`; without it the tool isn't offered |
 | What the Mac plays (song recognition, "explain this video") | `brew install blackhole-2ch`, then a Multi-Output Device with your speakers and BlackHole in Audio MIDI Setup |
 | Start at login | a launchd agent (above) |
+| Presence | `ping` and `arp`; macOS keeps a phone's network entry for up to 20 minutes, so leaving can be noticed that late |
 
 macOS asks for some permissions the first time, for the terminal or Python that runs Rafiq:
 
 - **Microphone**: asked when Rafiq first listens.
 - **Accessibility** (System Settings → Privacy & Security): typing for dictation, the hand gestures' keys,
   shutting down and restarting. `rafiq doctor` says whether it's allowed.
-- **Screen Recording**: "what's on my screen?".
+- **Screen Recording**: "what's on my screen?". Without it the picture shows only the desktop background.
+
+The permissions belong to the program that runs Rafiq: your terminal when you start `rafiq run` there, Python
+itself when the launchd agent starts it. If Rafiq hears nothing after `rafiq install-service`, check Python
+under Microphone and Accessibility in System Settings > Privacy & Security. This hasn't been tried on a Mac yet:
+please report what macOS asks.
 
 There is no echo cancellation from the system on macOS, so use headphones if Rafiq hears itself. The graphics
 card tool isn't offered on a Mac.

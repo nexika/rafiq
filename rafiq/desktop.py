@@ -65,17 +65,26 @@ def notify(text: str, run: Callable | None = None, which: Callable[[str], str | 
     if system() == "mac":
         osascript(['display notification (item 1 of argv) with title "Rafiq"'], text[:300], run=run)
     elif which("notify-send"):
-        run(["notify-send", "Rafiq", text[:300]], timeout=5)
+        try:
+            run(["notify-send", "Rafiq", text[:300]], timeout=5)
+        except (OSError, subprocess.SubprocessError):     # a notification that can't be shown is no failure
+            pass
 
 
 # ---------------------------------------------------------------------- volume (macOS)
+
+class NoVolume(Exception):
+    """The output has no volume of its own (HDMI, DisplayPort, some USB): macOS says "missing value"."""
+
 
 def mac_volume(run: Callable | None = None) -> tuple[int, bool]:
     """The output volume in percent, and whether it is muted."""
     done = osascript(["set s to get volume settings",
                       "return (output volume of s as text) & \",\" & (output muted of s as text)"], run=run)
     level, _, muted = (done.stdout or "").strip().partition(",")
-    return (int(level) if level.strip().isdigit() else 0), muted.strip() == "true"
+    if not level.strip().isdigit():
+        raise NoVolume("this output has no volume control of its own; change it on the device")
+    return int(level), muted.strip() == "true"
 
 
 def set_mac_volume(level: int | None = None, mute: bool | None = None, run: Callable | None = None) -> None:
@@ -96,9 +105,15 @@ MEDIA_DONE = {"play": "playing", "pause": "paused", "toggle": "toggled", "next":
 
 
 def _player_state(player: str, run: Callable | None) -> str:
-    done = osascript([f'if application "{player}" is running then',
-                      f'tell application "{player}" to return player state as text',
-                      "end if", 'return ""'], run=run)
+    """"playing", "paused", "stopped", or "" when the app isn't running. pgrep looks first: a script that names
+    an app which isn't installed could make macOS ask "Where is Spotify?"."""
+    try:
+        running = _runner(run)(["pgrep", "-x", player], timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if running.returncode != 0 or not (running.stdout or "").strip():
+        return ""
+    done = osascript([f'tell application "{player}" to return player state as text'], run=run)
     return (done.stdout or "").strip().lower()
 
 
@@ -194,7 +209,8 @@ def type_command() -> list[str]:
 
 
 def paste_command() -> list[str]:
-    return _script(['tell application "System Events" to keystroke "v" using {command down}'])
+    # Key code 9 is the V key whatever the layout: keystroke "v" may not be Command-V with an Arabic layout.
+    return _script(['tell application "System Events" to key code 9 using {command down}'])
 
 
 # ---------------------------------------------------------------------- apps (macOS)

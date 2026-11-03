@@ -7,6 +7,8 @@ import pytest
 
 from rafiq import desktop
 
+SYSTEM = desktop.system          # as defined: conftest.py replaces it with "linux" for every test
+
 
 class Runs:
     """subprocess.run as the test wants it: answers by program (or by a word in the AppleScript), records every call."""
@@ -44,9 +46,9 @@ def script(args):
 
 def test_the_platform_is_read_from_sys_platform(monkeypatch):
     monkeypatch.setattr(desktop.sys, "platform", "darwin")
-    assert desktop.system() == "mac"
+    assert SYSTEM() == "mac"
     monkeypatch.setattr(desktop.sys, "platform", "linux")
-    assert desktop.system() == "linux"
+    assert SYSTEM() == "linux"
 
 
 def test_words_reach_applescript_only_as_arguments():
@@ -113,14 +115,16 @@ def test_the_volume_tool_on_macos(mac, monkeypatch):
 # ---------------------------------------------------------------------- media
 
 def test_media_goes_to_the_player_that_is_playing(mac):
-    runs = Runs({'"Spotify" is running': "paused", '"Music" is running': "playing"})
+    runs = Runs({"pgrep -x": "123", '"Spotify" to return player state': "paused",
+                 '"Music" to return player state': "playing"})
     assert desktop.mac_media("pause", run=runs) == "paused Music"
     lines, _ = script(runs.args()[-1])
     assert 'tell application "Music" to pause' in " ".join(lines)
 
 
 def test_media_status_says_what_is_playing(mac):
-    runs = Runs({'"Spotify" is running': "playing", "current track": "Fairuz - Kifak Inta"})
+    runs = Runs({"pgrep -x Spotify": "123", '"Spotify" to return player state': "playing",
+                 "current track": "Fairuz - Kifak Inta"})
     assert desktop.mac_media("status", run=runs) == "Spotify is playing: Fairuz - Kifak Inta"
 
 
@@ -131,7 +135,7 @@ def test_media_with_no_player_running(mac):
 def test_the_media_tool_on_macos(mac, monkeypatch):
     from rafiq.tools import pc
 
-    runs = Runs({'"Spotify" is running': "playing"})
+    runs = Runs({"pgrep -x Spotify": "123", '"Spotify" to return player state': "playing"})
     monkeypatch.setattr(desktop, "run", runs)
     assert pc.media("next") == "skipped to the next on Spotify"
     assert not any(a[0] == "playerctl" for a in runs.args())
@@ -204,10 +208,13 @@ def test_the_clipboard_tool_uses_pbpaste_on_macos(mac, monkeypatch):
     assert clipboard.commands() == (["pbpaste"], ["pbcopy"])
 
 
-def test_reading_the_selection_on_macos_reads_the_clipboard(mac):
+def test_reading_the_selection_on_macos_never_reads_the_clipboard_instead(mac):
+    """A copied password would be read aloud: the user copies the text and asks for the clipboard."""
     from rafiq import reader
+    from rafiq.tools import reading
 
-    assert reader.selection_commands() == [["pbpaste"]]
+    assert reader.selection_commands() == []
+    assert reading.read_aloud("selection").startswith("error:") and "copy" in reading.read_aloud("selection")
 
 
 # ---------------------------------------------------------------------- keys and typing
@@ -222,12 +229,13 @@ def test_gesture_keys_on_macos_are_key_codes_with_fixed_modifiers(mac):
 def test_gestures_on_macos_press_keys_and_control_media_there(mac, monkeypatch):
     from rafiq.gestures import SystemDesktop
 
-    runs = Runs({'"Music" is running': "playing"})
+    runs = Runs({"pgrep -x Music": "123", '"Music" to return player state': "playing"})
     monkeypatch.setattr(desktop, "run", runs)
     gestures = SystemDesktop(run=runs)
     gestures.keys("next_tab")
     gestures.media("pause")
     assert runs.args()[0][0] == "osascript" and not any(a[0] in ("playerctl", "xdotool") for a in runs.args())
+    assert any("pause" in " ".join(a) for a in runs.args()[1:])
 
 
 def test_typing_on_macos_passes_the_text_as_an_argument(mac):
@@ -251,8 +259,19 @@ def test_typing_on_macos_pastes_when_keystrokes_fail(mac):
             return done
 
     runs = Fails()
-    assert Keyboard(env={}, which=lambda p: "/usr/bin/" + p, run=runs).type("مرحبا") == "paste"
-    assert runs.args()[1][0] == "pbcopy" and runs.calls[1][1]["input"] == "مرحبا"
+    assert Keyboard(env={}, which=lambda p: "/usr/bin/" + p, run=runs).type("hello") == "paste"
+    assert runs.args()[1][0] == "pbcopy" and runs.calls[1][1]["input"] == "hello"
+    assert "key code 9 using {command down}" in " ".join(runs.args()[2])
+
+
+def test_arabic_and_accents_on_macos_are_pasted_never_keystroked(mac):
+    """keystroke goes through the keyboard layout: Arabic on a US layout would come out as other letters."""
+    from rafiq.dictation import Keyboard
+
+    for text in ("مرحبا", "café"):
+        runs = Runs()
+        assert Keyboard(env={}, which=lambda p: "/usr/bin/" + p, run=runs).type(text) == "paste"
+        assert runs.args()[0][0] == "pbcopy" and not any("keystroke (item 1" in " ".join(a) for a in runs.args())
 
 
 # ---------------------------------------------------------------------- apps
@@ -316,7 +335,7 @@ def test_the_computer_s_sound_on_macos_comes_from_blackhole(mac, monkeypatch):
         @staticmethod
         def query_devices():
             return [{"name": "MacBook Pro Microphone", "max_input_channels": 1},
-                    {"name": "BlackHole 2ch", "max_input_channels": 2}]
+                    {"name": "BlackHole 2ch", "max_input_channels": 2, "default_samplerate": 48000.0}]
 
         @staticmethod
         def rec(frames, samplerate, channels, dtype, device):
@@ -327,9 +346,14 @@ def test_the_computer_s_sound_on_macos_comes_from_blackhole(mac, monkeypatch):
         def wait():
             pass
 
+        @staticmethod
+        def stop():
+            pass
+
     monkeypatch.setattr(audio, "_sounddevice", lambda: FakeSD)
     out = audio.system_audio(2.0)
-    assert recorded == [(2 * audio.RATE, audio.RATE, 2, 1)] and out.shape == (2 * audio.RATE,)
+    # At BlackHole's own 48 kHz, then 16 kHz like the microphone.
+    assert recorded == [(2 * 48000, 48000, 2, 1)] and out.shape == (2 * audio.RATE,) and out.dtype == np.float32
 
 
 def test_without_blackhole_the_computer_s_sound_says_how_to_set_it_up(mac, monkeypatch):
@@ -489,3 +513,146 @@ def test_doctor_on_macos_finds_blackhole_for_the_mac_s_own_sound(mac):
 def test_doctor_on_linux_is_unchanged(linux):
     checks = doctor_checks(mac_probe(programs=("wpctl",)))
     assert checks["Volume"].detail == "wpctl" and "Switch outputs" not in checks
+
+
+# ---------------------------------------------------------------------- after the security review
+
+def test_installing_on_macos_makes_the_key_file_and_the_log_private(mac, tmp_path, monkeypatch):
+    import stat
+
+    from rafiq import config, service
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    service.install(run=lambda args: subprocess.CompletedProcess(args, 0, "", ""))
+    assert stat.S_IMODE(config.home().stat().st_mode) == 0o700
+    for path in (service.env_file(), config.home() / "launchd.log"):
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_installing_again_keeps_the_keys_already_in_rafiq_env(mac, tmp_path, monkeypatch):
+    from rafiq import service
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    done = lambda args: subprocess.CompletedProcess(args, 0, "", "")  # noqa: E731
+    service.install(run=done)
+    service.env_file().write_text("ANTHROPIC_API_KEY=sk-keep\n")
+    service.install(run=done)
+    assert service.env_file().read_text() == "ANTHROPIC_API_KEY=sk-keep\n"
+
+
+def test_the_launch_agent_keeps_its_files_private_and_finds_homebrew(mac):
+    from rafiq import service
+
+    agent = plistlib.loads(service.plist_text("/usr/bin/python3").encode())
+    assert agent["Umask"] == 0o077 and agent["EnvironmentVariables"]["PATH"].startswith("/opt/homebrew/bin:")
+
+
+def test_a_key_file_others_can_read_is_made_private_before_it_is_read(tmp_path):
+    import stat
+
+    from rafiq import service
+
+    env_file = tmp_path / "rafiq.env"
+    env_file.write_text("ANTHROPIC_API_KEY=sk-x\n")
+    env_file.chmod(0o644)
+    environ = {"RAFIQ_ENV_FILE": str(env_file)}
+    service.load_env(environ)
+    assert stat.S_IMODE(env_file.stat().st_mode) == 0o600 and environ["ANTHROPIC_API_KEY"] == "sk-x"
+
+
+def test_a_key_file_of_another_user_is_not_read(tmp_path, monkeypatch):
+    from rafiq import service
+
+    env_file = tmp_path / "rafiq.env"
+    env_file.write_text("ANTHROPIC_API_KEY=sk-planted\n")
+    monkeypatch.setattr(service.os, "getuid", lambda: 12345)
+    environ = {"RAFIQ_ENV_FILE": str(env_file)}
+    service.load_env(environ)
+    assert "ANTHROPIC_API_KEY" not in environ
+
+
+def test_a_long_dictation_gets_time_to_be_typed(mac):
+    from rafiq.dictation import Keyboard
+
+    runs = Runs()
+    Keyboard(env={}, which=lambda p: "/usr/bin/" + p, run=runs).type("x" * 600)
+    assert runs.calls[0][1]["timeout"] >= 30
+
+
+
+# ---------------------------------------------------------------------- after the code review
+
+def test_the_default_gesture_runner_controls_media_on_macos(mac, monkeypatch):
+    """The gestures' own runner takes no timeout and returns nothing: media goes through the platform's runner."""
+    from rafiq.gestures import SystemDesktop
+
+    runs = Runs({"pgrep -x Music": "123", '"Music" to return player state': "playing"})
+    monkeypatch.setattr(desktop, "run", runs)
+    SystemDesktop().media("play-pause")
+    assert 'tell application "Music" to playpause' in " ".join(runs.args()[-1])
+
+
+def test_a_player_that_is_not_running_is_never_named_in_a_script(mac):
+    runs = Runs({"pgrep -x Music": "123", '"Music" to return player state': "playing"})
+    desktop.mac_media("pause", run=runs)
+    assert not any("Spotify" in " ".join(a) for a in runs.args() if a[0] == "osascript")
+
+
+def test_reinstalling_waits_for_launchd_to_let_the_old_agent_go(mac, tmp_path, monkeypatch):
+    from rafiq import service
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    codes, slept = [5, 37, 0], []
+
+    def run(args):
+        code = codes.pop(0) if args[0] == "bootstrap" else 0
+        return subprocess.CompletedProcess(args, code, "", "Bootstrap failed: 5: Input/output error" if code else "")
+
+    service._install_mac(run, None, sleep=slept.append)
+    assert codes == [] and len(slept) == 2
+
+
+def test_reinstalling_gives_up_with_launchd_s_error(mac, tmp_path, monkeypatch):
+    from rafiq import service
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with pytest.raises(service.ServiceError, match="Input/output"):
+        service._install_mac(lambda args: subprocess.CompletedProcess(
+            args, 5 if args[0] == "bootstrap" else 0, "", "Bootstrap failed: 5: Input/output error"), None,
+            sleep=lambda s: None)
+
+
+def test_an_output_without_its_own_volume_says_so_on_macos(mac, monkeypatch):
+    from rafiq.tools import pc
+
+    monkeypatch.setattr(desktop, "run", Runs({"get volume settings": "missing value,false"}))
+    assert pc.volume(change=10).startswith("error:") and "volume control" in pc.volume()
+
+
+def test_a_notification_that_hangs_on_linux_is_not_an_error(linux):
+    def hangs(args, **kwargs):
+        raise subprocess.TimeoutExpired(args, 5)
+
+    desktop.notify("hi", run=hangs, which=lambda p: "/usr/bin/" + p)
+
+
+def test_without_blackhole_song_recognition_names_the_mac_fix(mac):
+    from rafiq.tools import songs
+
+    assert "blackhole" in songs._no_system_sound().lower() and "parec" not in songs._no_system_sound()
+
+
+def test_on_macos_the_screen_prompt_knows_a_bare_desktop_means_no_permission(mac):
+    from rafiq.tools import screen
+
+    assert "Screen Recording" in screen._mac_note()
+
+
+def test_the_install_service_message_points_to_the_launchd_log(mac, tmp_path, monkeypatch, capsys):
+    from rafiq import service
+    from rafiq.__main__ import main
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(service, "launchctl", lambda args: subprocess.CompletedProcess(args, 0, "", ""))
+    main(["install-service"])
+    assert "launchd.log" in capsys.readouterr().out
