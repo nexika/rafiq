@@ -184,6 +184,36 @@ def _dmx(cfg: dict) -> Check:
     return Check("Video lights (DMX)", True, f"{len(found)} lights on {host}")
 
 
+def _music(cfg: dict, probe: Probe) -> Check:
+    """The music service named in [music]; for Deezer one search in the public catalogue, which needs no key."""
+    import httpx
+
+    from .tools import music_service
+
+    service = music_service(cfg)
+    if not service:
+        return Check("Music", False, "no service named", 'set [music] service = "deezer" or "spotify"',
+                     optional=True)
+    if service == "spotify":
+        ready = cfg.get("spotify", {}).get("enabled") and (config.home() / "spotify" / "token.json").is_file()
+        return Check("Music", bool(ready), "Spotify",
+                     "" if ready else "rafiq spotify-setup, then [spotify] enabled = true")
+    if service != "deezer":
+        return Check("Music", False, f"unknown service {service!r}", "set [music] service to spotify or deezer")
+    try:
+        resp = probe.get("https://api.deezer.com/search/track", params={"q": "rafiq", "limit": 1},
+                         follow_redirects=False)
+        data = resp.json()
+    except (httpx.HTTPError, ValueError):
+        return Check("Music", False, "Deezer's catalogue is not reachable", "check the network")
+    if resp.status_code != 200 or not isinstance(data, dict) or "error" in data:
+        error = data.get("error") if isinstance(data, dict) else None
+        why = str(error.get("message", "")) if isinstance(error, dict) else f"status {resp.status_code}"
+        return Check("Music", False, f"Deezer's catalogue refused: {why[:120]}", "try again in a minute")
+    return Check("Music", True, "Deezer: search and open links; playlists aren't offered (Deezer isn't creating "
+                 "new developer apps)")
+
+
 def _browser(cfg: dict, probe: Probe) -> Check:
     """Only what is installed and whether it runs: nothing is asked of the browser."""
     from . import browser
@@ -211,6 +241,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _songs(cfg, probe),
         _dmx(cfg),
         _browser(cfg, probe),
+        _music(cfg, probe),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         _programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
         _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),

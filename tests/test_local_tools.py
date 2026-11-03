@@ -55,7 +55,7 @@ def call(name, arguments):
 # ---------------------------------------------------------------------- the smaller tool set
 
 def test_the_local_set_is_smaller_and_only_names_real_tools():
-    tools = load_all({"google": {"enabled": True}})
+    tools = load_all({"google": {"enabled": True}, "spotify": {"enabled": True}, "music": {"service": "deezer"}})
     assert set(LOCAL_TOOLS) <= set(tools)
     assert len(local_tools(tools, "local")) < len(tools)
 

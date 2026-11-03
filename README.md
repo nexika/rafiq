@@ -706,6 +706,35 @@ playlist". Playback control needs Spotify Premium.
 Adding a song to a playlist is asked first. With no playlist named, songs go to "Rafiq finds", which
 Rafiq creates the first time.
 
+## Deezer
+
+"Play Amr Diab on Deezer", "شغل ويجز على ديزر", "joue Stromae sur Deezer". No account or key is needed:
+Rafiq looks the song, album, artist or playlist up in Deezer's public catalogue and opens its page on
+www.deezer.com in your browser, where you're signed in. If the catalogue doesn't answer, Deezer's
+search page opens instead. Pause and next work with the media keys, like any player.
+
+To make Deezer the service for "play some jazz" when you don't name one, set this in the config
+(`spotify` works the same way for Spotify):
+
+```toml
+[music]
+service = "deezer"
+```
+
+`rafiq doctor` checks that the catalogue answers.
+
+What Deezer's official API doesn't allow today (checked November 2026), so Rafiq doesn't do it either:
+
+- Playing on another device or controlling playback: [Deezer Connect reached its end of
+  life](https://support.deezer.com/hc/en-gb/articles/5449309457949-Deezer-Connect) in May 2025, and
+  there is no [Deezer app for Linux](https://support.deezer.com/hc/en-gb/articles/115005516009-Deezer-Desktop-App).
+- Adding songs to your playlists: that needs a Deezer developer app, and Deezer's developer portal
+  [isn't creating new apps](https://en.deezercommunity.com/other-devices-49/impossible-de-creer-une-app-migration-spotify-vers-deezer-pour-un-projet-de-decouvert-et-jeux-musicaux-82752).
+  It will come once Deezer opens it again (#194).
+
+Rafiq uses only [Deezer's official API](https://developers.deezer.com/termsofuse), for personal,
+non-commercial use: no unofficial libraries and no cookie taken from your browser.
+
 ## Discord
 
 Rafiq reads Discord through a bot of your own, never your user account (self-bots are against

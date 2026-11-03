@@ -55,6 +55,14 @@ DOMAINS: dict[str, tuple[tuple[str, ...], set[str]]] = {
         "ausschalten", "sperre", "sperren", "akku",
         "صوت", "افتح", "شغل", "اقفل", "كمبيوتر", "جهاز", "بطارية", "اطفي", "اطفئ", "اغلق", "برنامج", "تطبيق",
     }),
+    # "Play some jazz" with no service named: the user's music service ([music] service) and the media keys.
+    "music": (("deezer_play", "spotify_play", "spotify_control", "play_media", "media"), {
+        "play", "music", "song", "songs", "playlist", "album", "jazz", "listen",
+        "joue", "lance", "mets", "musique", "chanson", "chansons", "écoute", "ecoute",
+        "pon", "ponme", "reproduce", "toca", "música", "musica", "canción", "cancion", "escucha",
+        "spiel", "spiele", "starte", "musik", "lied", "lieder",
+        "شغل", "شغلي", "شغللي", "اغنية", "اغاني", "موسيقى", "مزيكا", "ميوزك", "جاز", "اسمع", "اسمعني",
+    }),
     "math": (("calculate", "convert_units"), {
         "calculate", "minus", "divided", "multiplied", "percent", "squared", "sqrt", "convert",
         "calcule", "divisé", "multiplié", "pourcent", "convertis", "convertir",

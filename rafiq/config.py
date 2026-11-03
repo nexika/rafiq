@@ -171,6 +171,8 @@ DEFAULTS: dict = {
     "privacy": {"log_days": 30},     # the log (data/logs) is redacted and deleted after this many days
     # client_id of your Spotify developer app; port of the login redirect http://127.0.0.1:<port>/callback
     "spotify": {"enabled": False, "client_id": "", "port": 8888},
+    # Where "play some jazz" goes when no service is named: "spotify", "deezer", or "" to let the model ask
+    "music": {"service": ""},
     "paper": {
         "title": "Rafiq",
         "languages": [],                 # e.g. ["en", "ar"] for a bilingual paper; empty: the first speech language
