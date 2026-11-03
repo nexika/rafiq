@@ -15,7 +15,7 @@ from rafiq.brain import Brain
 from rafiq.permissions import Approvals, levels
 from rafiq.tools import Tool, check, load_all
 
-ALWAYS_ASK = {"power", "email_send", "email_reply", "email_trash", "calendar_delete"}
+ALWAYS_ASK = {"power", "email_send", "email_reply", "email_trash", "calendar_delete", "click_on_screen"}
 
 
 def test_the_blocklist_is_exactly_the_tools_that_must_ask_every_time():

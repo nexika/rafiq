@@ -83,7 +83,7 @@ def public_url(url: str, resolve=socket.getaddrinfo) -> str | None:
 @tool("web_search", "Search the web. Returns titles, short extracts and addresses.",
       {"query": {"type": "string"}, "max_results": {"type": "integer", "description": "1 to 8"}},
       required=("query",), level="safe", slow=True, waiting_phrase=SEARCHING, expose=True, card="list",
-      sends=("query",))
+      sends=("query",), outside=True)
 def web_search(query: str, max_results: int = 5) -> str:
     from ddgs import DDGS
 
@@ -117,7 +117,7 @@ def fetch(url: str) -> tuple[str, str]:
 
 @tool("read_page", "Read the main text of a web page, to summarise or translate it.",
       {"url": {"type": "string"}}, required=("url",), level="safe", slow=True, waiting_phrase=READING, expose=True,
-      sends=("url",))
+      sends=("url",), outside=True)
 def read_page(url: str) -> str:
     import trafilatura
 

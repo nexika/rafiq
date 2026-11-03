@@ -125,6 +125,7 @@ class Budget:
     calls: int = 0
     said: str = ""
     read_private: bool = False
+    read_outside: bool = False       # a web page or search results answered: anyone could have written them
 
     def unsaid(self, tool: Tool, args: dict) -> str | None:
         """After a private read, the first value this tool would send out that the user didn't say.
@@ -132,6 +133,17 @@ class Budget:
         if not self.read_private:
             return None
         for name in tool.sends:
+            value = str(args.get(name) or "").strip()
+            if value and not said_by_user(value, self.said):
+                return value
+        return None
+
+    def unfollowed(self, tool: Tool, args: dict) -> str | None:
+        """After a private read or text from outside, the first value saying what to act on (what to click) that the
+        user didn't say."""
+        if not (self.read_private or self.read_outside):
+            return None
+        for name in tool.follows:
             value = str(args.get(name) or "").strip()
             if value and not said_by_user(value, self.said):
                 return value
@@ -542,6 +554,13 @@ class Brain:
         if tool is None:
             self._step(step, "failed")
             return f"error: there is no tool named {name}"
+        unfollowed = budget.unfollowed(tool, args) if budget else None
+        if unfollowed:
+            self._step(step, "declined")
+            self.on_event("tool", {"name": name, "args": args, "result": "refused", "step_id": step})
+            return (f"refused: the user didn't say {unfollowed!r}, and after reading the screen, a page or an email "
+                    "Rafiq acts only on what the user named. Nothing was done. Call again with the user's own words, "
+                    "or ask them what they want.")
         action = tool.action(args, ctx)
         # A phone's request (#207) is asked every time: approvals remembered at home are for requests made at home.
         can_remember = self.approvals is not None and not tool.always_asks and getattr(self, "approvals_apply", True)
@@ -573,6 +592,8 @@ class Brain:
             result = f"error: {type(exc).__name__}: {exc}"
         if budget and tool.private_read():
             budget.read_private = True
+        if budget and tool.outside:
+            budget.read_outside = True
         if tool.private:
             hidden = "error (hidden)" if result.startswith("error") else "(hidden)"
             self.on_event("tool", {"name": name, "args": "(hidden)", "result": hidden, "card": tool.card,

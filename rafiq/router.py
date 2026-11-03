@@ -45,7 +45,9 @@ DOMAINS: dict[str, tuple[tuple[str, ...], set[str]]] = {
         "بريد", "ايميل", "ايميلات", "الايميل",
     }),
     "computer": (("open_app", "list_apps", "add_app", "volume", "media", "system_status", "lock_screen", "power",
-                  "wake_computer", "open_in_browser"), {
+                  "wake_computer", "open_in_browser", "look_at_screen", "click_on_screen"), {
+        # Click words only: "screen" alone also means a video to explain or text to copy, which other tools do.
+        "click", "clique", "cliquer", "clic", "klick", "klicke", "klicken", "اضغط", "دوس", "انقر",
         "volume", "louder", "quieter", "mute", "unmute", "open", "launch", "app", "apps", "application",
         "shutdown", "shut", "restart", "reboot", "lock", "battery", "cpu", "computer", "pc", "suspend",
         "ouvre", "ouvrir", "lance", "ordinateur", "éteins", "éteindre", "redémarre", "verrouille", "batterie",

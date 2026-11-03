@@ -20,6 +20,7 @@ microphone → speech detection → "Rafiq"? → Whisper → Claude, OpenAI or O
 | Everyday | "what time is it in Tokyo?", "set a timer for 10 minutes", "remind me tomorrow at 9 to call mum", "weather in Cairo", "what's the weather?" (where you are), "15% of 240", "5 miles in km" |
 | Notes | "note: buy batteries", "idea: a lamp that follows the sun", "give me a random idea from my notes", "what did I note today?" (Markdown files in `~/.config/rafiq/data/notes`, or `[notes] folder` such as an Obsidian vault) |
 | The screen | "what's this error?", "read this", "translate this into Arabic" (asks first: the screenshot goes to Claude) |
+| Clicking | "click the Save button", "اضغط على زر الحفظ": circles it on the widget and clicks only after your yes |
 | Web | "search for…", "summarise this page", "translate this article into Arabic", "open youtube.com" |
 | Browser tabs | "what tabs are open?", "summarise this tab", "translate the Gmail tab into Arabic", "switch to the YouTube tab", in Rafiq's own Chrome or Firefox (see below) |
 | Learning | With Nexika's prof plugin for Claude Code installed, Rafiq explains the screen, a video or anything else at the level in your prof profile (beginner, junior or intermediate), and, after your yes ("save that to my notes"), records what was explained so prof can review and quiz you later. It only reads prof's profile and asks prof's own helper; your learner data stays out of the logs |
@@ -831,6 +832,27 @@ your network directly; no Hue cloud account is used.
 
 Rooms are the Hue app's rooms and zones, matched loosely. To say a room in another language than the
 Hue app's, add it under `[hue.rooms]`, e.g. `"الصالة" = "Living room"`.
+
+## Clicking on the screen
+
+"Click the Save button", "clique sur Enregistrer", "دوس على حفظ". Rafiq takes a screenshot, and the
+vision model finds what you named. Rafiq circles it on the widget or the dashboard and asks "Should I
+click "the Save button", circled on the screen?". After your yes it takes a second screenshot. If that
+part of the screen changed in the meantime, it doesn't click.
+
+- One click per request, and every click is asked about. A "yes, always" is never remembered for it.
+- It clicks only what you named. Text on the screen is data to the model, never an instruction to click:
+  after Rafiq has read the screen, a page or an email in the same request, it refuses a target you didn't say.
+- It never clicks for a request from your phone, or for another program (MCP), which isn't offered the tool.
+- The screenshot goes to Claude when Claude is your brain, asked first as for "what's this error?".
+  Offline, only a local vision model (`[screen] ollama_model`) sees it.
+
+On Wayland (GNOME), the click goes through the desktop's RemoteDesktop portal. The first time, GNOME
+asks you to allow remote interaction. Rafiq keeps the permission it gives in `remote_desktop.json`,
+readable only by you. After that GNOME doesn't ask again, so Rafiq's own yes is what guards each click; delete
+`remote_desktop.json` (in the config folder) to make GNOME ask again. While a click is made, GNOME shows that
+the screen is shared. Monitors at different scales aren't supported: Rafiq says so and doesn't click. On X11,
+install `xdotool`. `rafiq doctor` says which one it will use.
 
 ## Browser tabs
 

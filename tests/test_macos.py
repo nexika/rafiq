@@ -449,10 +449,12 @@ def test_the_service_state_on_macos_comes_from_launchctl(mac):
 
 # ---------------------------------------------------------------------- tools with no macOS version
 
-def test_the_gpu_tool_does_not_load_on_macos(mac):
+def test_the_gpu_and_click_tools_do_not_load_on_macos(mac):
     from rafiq.tools import load_all
 
-    assert "gpu_status" not in load_all({})
+    tools = load_all({})
+    assert "gpu_status" not in tools and "click_on_screen" not in tools
+    assert "Click on screen" not in doctor_checks(mac_probe())
 
 
 def test_on_linux_the_same_tools_load_as_before(linux, monkeypatch):
