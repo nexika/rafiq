@@ -117,6 +117,11 @@ def tool(name: str, description: str, params: dict | None = None, required: tupl
     return register
 
 
+def music_service(cfg: dict) -> str:
+    """[music] service as written by hand: "Deezer" and " deezer " are Deezer."""
+    return str(cfg.get("music", {}).get("service") or "").strip().lower()
+
+
 # Skills that need an account or another app, loaded only when enabled in their config section.
 OPTIONAL = ("google", "discord", "instagram", "obs", "prayer", "spotify", "browser")
 
@@ -189,9 +194,16 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         from . import agenda  # noqa: F401
     else:
         off.add(f"{__name__}.agenda")
+    music = music_service(cfg)
+    if music != "deezer":           # media imports it for "on Deezer"; the tool itself only for Deezer users
+        off.add(f"{__name__}.deezer")
     from . import brief  # noqa: F401  (last: it gathers the others)
     # A module imported earlier (by a setup command, or a test) stays registered: leave out the ones turned off.
     tools = {name: t for name, t in REGISTRY.items() if t.fn.__module__ not in off}
+    if music == "spotify" and "spotify_play" in tools:
+        play = tools["spotify_play"]
+        tools["spotify_play"] = dataclasses.replace(play, description=f"{play.description} Spotify is the user's "
+                                                    "music service: use it for music when they name no service.")
     found = scenes.scenes_from(cfg)
     if found:
         run = tools["run_scene"]
@@ -206,7 +218,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
 # email_read and email_send. [brain] ollama_tools = "all" sends everything, or a list names the set.
 LOCAL_TOOLS = ("get_time", "set_timer", "set_reminder", "weather", "calculate", "convert_units", "web_search",
                "open_app", "volume", "media", "system_status", "power", "calendar_events", "email_list",
-               "remember", "recall", "forget")
+               "remember", "recall", "forget", "deezer_play", "spotify_play")
 
 
 def local_tools(tools: dict[str, Tool], choice: str | list = "local") -> dict[str, Tool]:

@@ -29,7 +29,7 @@ class Card:
 
 # Tools whose result is worth a card. Music tools don't exist yet; any tool named like one gets a card.
 CARD_TOOLS = {"weather": "weather", "set_timer": "timer", "set_reminder": "timer"}
-MUSIC_PREFIXES = ("music", "media", "play_", "spotify")
+MUSIC_PREFIXES = ("music", "media", "play_", "spotify", "deezer")
 TITLES = {"weather": "Weather", "timer": "Timer", "music": "Music"}
 
 
