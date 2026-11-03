@@ -77,6 +77,7 @@ MCP_QUIET_SECONDS = 180      # after a no (or no answer) to another program, it 
 # The tools another program may be told "yes, always" for: small changes, which send nothing out and open nothing.
 # Claude takes images up to 5 MB, base64 included: 3.7 MB of PNG. A 1568-pixel screenshot is far smaller.
 MCP_PICTURE_BYTES = 3_700_000
+CLICK_TOOL = "click_on_screen"   # never for another program: it could get a yes from the speakers (#26)
 SCREEN_TOOL = "look_at_screen"   # for another program it answers with the screenshot, not Rafiq's own vision
 MCP_ALWAYS = ("set_timer", "cancel_timer", "volume", "media", "spotify_control")
 SCREEN_SECONDS = 300         # how long a screenshot waits to be fetched by the widget, once
@@ -120,6 +121,9 @@ class Context:
     show: Callable[[str, dict], None] | None = None
     keep_screen: Callable[[bytes], str] | None = None
     video: VideoWatch | None = None
+    run_id: Callable[[], str | None] | None = None    # the request being answered (one click per request, #26)
+    away: Callable[[], bool] | None = None            # True while answering a phone's request (#207)
+    stopped: Callable[[], bool] | None = None         # True once Stop was pressed during this request
 
 
 @dataclass
@@ -297,7 +301,9 @@ class Assistant:
                            on_mode=self._mode_changed, facts=self.facts, presence=self.presence,
                            confirm=self.confirm, tools=self.tools, gestures=self.gestures, budget=self.budget,
                            practice=self.practice, reader=self.reader, record=self.record,
-                           quiet=self.quiet, show=self.show, keep_screen=self.keep_screen)
+                           quiet=self.quiet, show=self.show, keep_screen=self.keep_screen,
+                           run_id=self.events.run_id, away=self.away,
+                           stopped=lambda: self.brain.stopping.is_set())
         self.nudger = self._nudger()
         self.brain = Brain(self.cfg, self.tools, self.confirm, on_event=self.events.publish, facts=self.facts,
                            budget=self.budget, approvals=self.approvals)
@@ -532,6 +538,10 @@ class Assistant:
     def _video_done(self, text: str, tag: str) -> None:
         """The video's explanation, from its thread: shown and said on this one, between requests."""
         self.submit("video_done", text=text, tag=tag)
+
+    def away(self) -> bool:
+        """Whether the request being answered came from a paired phone: the user may not be at the computer."""
+        return bool(getattr(self, "from_phone", ""))
 
     def keep_screen(self, png: bytes) -> str:
         """Keep the screenshot the widget is about to show, for the panel to serve (GET /api/screen); only the
@@ -972,6 +982,8 @@ class Assistant:
         tool = self.tools.get(name)
         if tool is None or name in self.cfg.get("mcp", {}).get("off", []):
             return f"error: there is no tool named {name}"
+        if name == CLICK_TOOL:
+            return "refused: Rafiq clicks on the screen only for the user's own request, never for another program"
         problem = self._mcp_args(tool, args)
         if problem:
             return f"error: {problem}"

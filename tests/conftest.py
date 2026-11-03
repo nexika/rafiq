@@ -2,6 +2,26 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def never_the_real_screen(monkeypatch):
+    """No test may take a real screenshot or click: on GNOME the screenshot portal answers without asking, so a
+    test that reached it captured the user's screen without a sign. A test that needs a screenshot gives its own."""
+    from rafiq import pointer
+    from rafiq.tools import screen
+
+    def no_screen(*args, **kwargs):
+        raise screen.ScreenError("no real screen in tests")
+
+    def no_pointer(*args, **kwargs):
+        raise pointer.PointerError("no real pointer in tests")
+
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setattr(screen, "portal_screenshot", no_screen)
+    monkeypatch.setattr(screen, "run_command", lambda args, **kwargs: (_ for _ in ()).throw(FileNotFoundError(args[0])))
+    monkeypatch.setattr(pointer, "portal_click", no_pointer)
+    monkeypatch.setattr(pointer, "JeepneyBus", no_pointer)
+
+
+@pytest.fixture(autouse=True)
 def rafiq_home(tmp_path, monkeypatch):
     """Every test gets its own settings folder, its own (empty) prof data, no prof installed unless it gives
     one, and no real keys."""
