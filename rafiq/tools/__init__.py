@@ -52,6 +52,12 @@ class Tool:
     # Answers with the user's data although its level isn't private (the screen, a forgotten fact): it starts the
     # same watch on what is sent out next.
     reads_private: bool = False
+    # The parameters that say what to act on (what to click): after a private read in the same request, a value
+    # the user didn't say is refused, since only the screen, a page or an email said it (#26).
+    follows: tuple = ()
+    # Answers with text from outside (a web page, search results), which anyone could have written: like a private
+    # read, it starts the watch on `follows` (#26).
+    outside: bool = False
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": list(self.required)}
@@ -102,15 +108,18 @@ def check(t: Tool) -> None:
         raise ValueError(f"{t.name}: only a slow tool has a waiting phrase")
     if set(t.sends) - set(t.params):
         raise ValueError(f"{t.name}: it can only send its own parameters")
+    if set(t.follows) - set(t.params):
+        raise ValueError(f"{t.name}: it can only follow its own parameters")
 
 
 def tool(name: str, description: str, params: dict | None = None, required: tuple = (), confirm=None, *,
          level: str, slow: bool = False, waiting_phrase: dict | None = None, expose: bool = False,
          card: str = "text", private: bool = False, always_asks: bool = False, sends: tuple = (),
-         reads_private: bool = False):
+         reads_private: bool = False, follows: tuple = (), outside: bool = False):
     def register(fn: Callable) -> Callable:
         t = Tool(name, description, fn, params or {}, tuple(required), confirm, level, slow,
-                 dict(waiting_phrase or {}), expose, card, private, always_asks, tuple(sends), reads_private)
+                 dict(waiting_phrase or {}), expose, card, private, always_asks, tuple(sends), reads_private,
+                 tuple(follows), outside)
         check(t)
         REGISTRY[name] = t
         return fn

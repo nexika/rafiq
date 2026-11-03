@@ -214,6 +214,23 @@ def _music(cfg: dict, probe: Probe) -> Check:
                  "new developer apps)")
 
 
+def _pointer(probe: Probe) -> Check:
+    """How click_on_screen clicks here; nothing is clicked to check."""
+    import os
+
+    from . import pointer
+
+    how = pointer.method(os.environ, probe.which)
+    if how == "portal":
+        if not probe.has_module("jeepney"):
+            return Check("Click on screen", False, "needs jeepney", "pip install jeepney", optional=True)
+        return Check("Click on screen", True, "RemoteDesktop portal, where the desktop offers it (GNOME, KDE); "
+                     "GNOME asks the first time")
+    if how == "xdotool":
+        return Check("Click on screen", True, "xdotool")
+    return Check("Click on screen", False, "no way to click", "install xdotool (X11)", optional=True)
+
+
 def _browser(cfg: dict, probe: Probe) -> Check:
     """Only what is installed and whether it runs: nothing is asked of the browser."""
     from . import browser
@@ -241,6 +258,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _songs(cfg, probe),
         _dmx(cfg),
         _browser(cfg, probe),
+        _pointer(probe),
         _music(cfg, probe),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         _programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),

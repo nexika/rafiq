@@ -32,8 +32,11 @@ def safe_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
     return {name: t for name, t in tools.items() if t.expose and t.level == "safe" and t.confirm is None}
 
 
+NEVER = {"click_on_screen"}     # the user's own request only (#26): Rafiq refuses it from another program anyway
+
+
 def offered(tools: dict[str, Tool], cfg: dict) -> dict[str, Tool]:
-    off = set(cfg.get("mcp", {}).get("off", []))
+    off = set(cfg.get("mcp", {}).get("off", [])) | NEVER
     return {name: t for name, t in tools.items() if name not in off}
 
 

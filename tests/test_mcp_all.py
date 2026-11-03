@@ -123,6 +123,11 @@ def test_the_panel_says_when_rafiq_did_not_answer_in_time(panel):
 
 # ---------------------------------------------------------------------- in the running Rafiq
 
+# A 1 by 1 PNG, for a screenshot that is never the real screen.
+TINY_PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+                         "0000000d49444154789c6360606060000000050001a5f645400000000049454e44ae426082")
+
+
 def bare(answers=(True,), tools=None):
     a = object.__new__(Assistant)
     a.events, a.jobs, a.silent, a.dictating, a.tag = Events(), queue.Queue(), False, False, "fr"
@@ -440,7 +445,10 @@ def test_without_a_running_rafiq_a_tool_that_sends_data_out_is_not_run_here(monk
     assert reply["isError"] is True and "rafiq run" in reply["content"][0]["text"] and fetched == []
 
 
-def test_a_tool_that_answers_with_what_is_on_screen_starts_the_private_window():
+def test_a_tool_that_answers_with_what_is_on_screen_starts_the_private_window(monkeypatch):
+    from rafiq.tools import screen
+
+    monkeypatch.setattr(screen, "capture", lambda: TINY_PNG)       # never the real screen
     a = bare([True, False])
     a.tools = search_tools(a.ran)
     a.tools["look_at_screen"] = Tool("look_at_screen", "look", lambda question="": "your inbox: code 4411",
