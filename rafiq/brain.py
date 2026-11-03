@@ -290,6 +290,7 @@ class Brain:
         self.budget = budget                 # charged for each Claude response; at its cap, offline only
         # confirm answers True, False, or "always" (yes, and remember it in `approvals`).
         self.approvals = approvals
+        self.approvals_apply = True          # False during a phone's request (#207): it is asked every time
         self.on_event = on_event or (lambda kind, data: None)
         self.memory = Memory()
         self.clock = clock
@@ -542,7 +543,8 @@ class Brain:
             self._step(step, "failed")
             return f"error: there is no tool named {name}"
         action = tool.action(args, ctx)
-        can_remember = self.approvals is not None and not tool.always_asks
+        # A phone's request (#207) is asked every time: approvals remembered at home are for requests made at home.
+        can_remember = self.approvals is not None and not tool.always_asks and getattr(self, "approvals_apply", True)
         unsaid = budget.unsaid(tool, args) if budget else None
         if unsaid:
             action, can_remember = f'send "{spelled(unsaid)}" out to the internet, though you didn\'t say it', False

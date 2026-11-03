@@ -561,7 +561,9 @@ work from the street.
 A request from the phone is answered silently at home, and Rafiq's questions about it are asked on screens
 only (the phone, the panel, the widget), with a minute to answer, so nobody at home can say yes to it out
 loud. The phone's Yes counts only for its own requests, never for something asked at home or by another AI
-app, and never as "always": remembered approvals are managed at home. Its No counts for any question.
+app, and never as "always": remembered approvals are managed at home, and they don't answer for the phone,
+which is asked every time. Its No counts for any question. The phone also has a conversation of its own:
+"what did I just ask?" from the phone is about the phone's requests, not what was said at home.
 
 The phone sees its own requests, live, and nothing from before it connected: what others at home say and
 hear stays at home. It can't change settings, permissions or the history, and it can't start dictating,

@@ -614,7 +614,8 @@ class Assistant:
             self.pending_answer.get_nowait()
         if self.speech:                      # finish what was being said before asking
             self.speech.wait()
-        self.question_id = uuid.uuid4().hex[:12]
+        # A question asked while another waits gets its own id, and the outer one gets its id back afterwards.
+        outer_id, self.question_id = getattr(self, "question_id", None), uuid.uuid4().hex[:12]
         # Whose question it is: a phone's Yes counts only for its own requests (#207).
         outer_from, self.question_from = getattr(self, "question_from", ""), phone
         asked = {"action": action, "tag": tag, "always": can_remember, "id": self.question_id}
@@ -623,12 +624,18 @@ class Assistant:
         outer, self.confirming = getattr(self, "confirming", False), True
         try:
             if phone:
-                return self._panel_answer(tag, aloud=False, seconds=PHONE_CONFIRM_SECONDS)
+                # Yes or no, never "always", whoever answered; and no yes after the phone was told "no answer in
+                # time", since it then expects nothing to happen.
+                answer = bool(self._panel_answer(tag, aloud=False, seconds=PHONE_CONFIRM_SECONDS))
+                deadline = getattr(self, "phone_deadline", None)
+                return answer and (deadline is None or time.monotonic() <= deadline)
             if not aloud:
                 return self._panel_answer(tag, aloud=False)
             return self._ask_yes_or_no(action, tag, can_remember, spoken_yes)
         finally:
             self.confirming, self.question_from = outer, outer_from
+            if outer:                        # only a question still waiting gets its id back
+                self.question_id = outer_id
 
     def _clicked(self) -> bool | str | None:
         """The panel's answer to the question being asked, or None. A no counts whichever question it was
@@ -728,7 +735,8 @@ class Assistant:
             self.say(lang.phrase("not_heard", tag), tag)
             return
         if lang.is_forget(text) and self.history is not None:
-            last = self.history.forget_last()
+            # From the phone, only the phone's own last request: not what was asked at home meanwhile.
+            last = self.history.forget_last("phone" if source == "phone" else None)
             if last:
                 self.forget([last])
             self.say(lang.phrase("forgotten" if last else "nothing_to_forget", tag), tag)
@@ -782,6 +790,8 @@ class Assistant:
             self.speaker.rate = self.practice.rate()
             self.speech.put(text, voice(text, guess))
 
+        # A phone's request leaves the reading at home as it was: one paused at sentence 140 is still there after.
+        reading = self.reader.saved() if source == "phone" else None
         try:
             answer = self.brain.think(text, tag, self.ctx, on_speech=speak if self.speech else None)
             if self.history is not None:
@@ -792,9 +802,11 @@ class Assistant:
             if self.speech:
                 self.speech.close()
             self.speech = None
+            if reading is not None:
+                changed = self.reader.saved() != reading
+                self.reader.put_back(reading)
         self.publish_spending(tag)
-        if self.reader.active and source == "phone":   # reading aloud at home, for minutes, isn't for the phone
-            self.reader.stop()
+        if reading is not None and changed:   # reading aloud at home, for minutes, isn't for the phone
             self.say(lang.phrase("phone_not_here", tag), tag)
         elif self.reader.active:          # read_aloud or "resume reading" loaded something
             self.read()
@@ -1081,18 +1093,42 @@ class Assistant:
         from .tts import for_speech
 
         reply, device = data["reply"], data["device"]
+        if self.events.run_id() is not None:
+            # Inside a request being answered (dictation, the interpreter): that run is someone else's. _run_jobs
+            # holds phone jobs then; this is the last guard, so the phone never takes over a run it didn't open.
+            self.submit("phone", **data)
+            return
         if hasattr(self, "phone_lock"):
             with self.phone_lock:
                 self.phone_waiting -= 1
         if data.get("deadline") is not None and time.monotonic() > data["deadline"]:
             return                           # the phone was told "no answer in time": it must not run now
         result = {"heard": "", "tag": self.tag, "answer": "", "audio": "", "mime": ""}
-        heard = self.events.subscribe()
-        run_id = ""
+        said: list[str] = []
+        run = {"id": ""}
+
+        def collect(kind: str, event: dict) -> None:   # as published: a long question can't crowd it out
+            if kind == "said" and run["id"] and self.events.run_id() == run["id"]:
+                said.append(event["text"])
+
+        self.events.watchers.append(collect)
+        brain = getattr(self, "brain", None)
+        if brain is not None and not hasattr(brain, "memory"):
+            brain = None
         silent, outer_phone = self.silent, self.from_phone
-        self.silent, self.from_phone = True, device
+        self.silent, self.from_phone, self.phone_deadline = True, device, data.get("deadline")
+        if brain is not None:
+            # The phone has a conversation of its own: what was said at home in the last minutes isn't its to
+            # ask about, and approvals remembered at home don't answer for it.
+            memories = getattr(self, "phone_memories", None)
+            if memories is None:
+                memories = self.phone_memories = {}
+            outer_memory, outer_apply = brain.memory, getattr(brain, "approvals_apply", True)
+            brain.memory = memories.setdefault(device, type(brain.memory)())
+            brain.approvals_apply = False
         try:
             with self.events.run() as run_id:
+                run["id"] = run_id
                 self.phone_runs[run_id] = device   # the phone's event stream shows this run, and no other
                 while len(self.phone_runs) > 50:
                     self.phone_runs.pop(next(iter(self.phone_runs)))
@@ -1105,13 +1141,10 @@ class Assistant:
                 result.update(heard=text, tag=tag)
                 self.respond(text, tag, source="phone")
         finally:
-            self.silent, self.from_phone = silent, outer_phone
-            self.events.unsubscribe(heard)
-            said = []
-            while not heard.empty():
-                event = heard.get_nowait()
-                if event["kind"] == "said" and event.get("run_id") == run_id:   # not a timer ringing meanwhile
-                    said.append(event["text"])
+            self.silent, self.from_phone, self.phone_deadline = silent, outer_phone, None
+            if brain is not None:
+                brain.memory, brain.approvals_apply = outer_memory, outer_apply
+            self.events.watchers.remove(collect)
             result["answer"] = "\n".join(said)
             if result["answer"]:
                 try:
@@ -1137,6 +1170,12 @@ class Assistant:
                     self.jobs.put(job)
                 return
             if kind in WAIT_FOR_ANSWER and getattr(self, "confirming", False):
+                held.append((kind, data))
+                continue
+            # A phone's request has the loop to itself (#207): a request from home run inside it would join its run,
+            # so the phone would see it and could answer its questions. A phone job waits likewise while any request
+            # is being answered (dictation, the interpreter), or it would join that one.
+            if getattr(self, "from_phone", "") or (kind == "phone" and self.events.run_id() is not None):
                 held.append((kind, data))
                 continue
             try:

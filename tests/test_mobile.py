@@ -624,3 +624,236 @@ def test_the_phone_page_is_off_by_default():
     from rafiq import config
 
     assert config.load()["mobile"] == {"enabled": False, "port": 8768}
+
+
+# ---------------------------------------------------------------------- re-review (#230): runs, memory, reading
+
+def test_while_a_phone_request_runs_a_request_from_home_waits_for_it():
+    a, _seen = bare_assistant()
+    a.jobs, a.from_phone = queue.Queue(), "Sam's iPhone"
+    a._typed = lambda data: pytest.fail("a home request ran inside the phone's run")
+    a.submit("text", text="read my bank statement")
+    a._run_jobs()
+    assert a.jobs.get_nowait()[0] == "text"            # held, for after the phone's request
+
+
+def test_a_phone_request_waits_while_a_home_request_is_answered():
+    a, _seen = bare_assistant()
+    a.jobs = queue.Queue()
+    a._from_phone = lambda data: pytest.fail("the phone joined a home run (dictation, the interpreter)")
+    with a.events.run():
+        a.submit("phone", device="p", text="hi", audio=None, reply=queue.Queue(), deadline=None)
+        a._run_jobs()
+    assert a.jobs.get_nowait()[0] == "phone"
+
+
+def test_a_phone_request_never_takes_over_a_run_it_didnt_open():
+    a, seen = bare_assistant()
+    a.jobs = queue.Queue()
+    with a.events.run() as home:
+        a._from_phone({"device": "p", "text": "hi", "audio": None, "reply": queue.Queue(), "deadline": None})
+    assert seen == {} and home not in a.phone_runs
+    assert a.jobs.get_nowait()[0] == "phone"           # back in the queue, for when the home request is done
+
+
+def test_the_answer_survives_a_long_question_full_of_other_events():
+    a, _seen = bare_assistant()
+
+    def respond(text, tag, source="voice"):
+        for _ in range(400):                           # the microphone level, five times a second, for 80 s
+            a.events.publish("level", {"level": 0.1}, keep=False)
+        a.events.publish("said", {"text": "Done, the lights are off."})
+
+    a.respond = respond
+    reply = queue.Queue()
+    a._from_phone({"device": "p", "text": "lights off", "audio": None, "reply": reply, "deadline": None})
+    assert reply.get_nowait()["answer"] == "Done, the lights are off."
+    assert a.events.watchers == []                     # its collector is gone
+
+
+def test_a_phone_has_a_conversation_of_its_own_and_home_approvals_dont_answer_for_it():
+    from rafiq.brain import Memory
+
+    a, _seen = bare_assistant()
+    home = Memory()
+    a.brain = type("B", (), {"memory": home, "approvals_apply": True})()
+    during = {}
+
+    def respond(text, tag, source="voice"):
+        during.update(memory=a.brain.memory, apply=a.brain.approvals_apply)
+
+    a.respond = respond
+    a._from_phone({"device": "p", "text": "what did I just ask?", "audio": None, "reply": queue.Queue(),
+                   "deadline": None})
+    assert during["memory"] is not home and during["apply"] is False
+    assert a.brain.memory is home and a.brain.approvals_apply is True
+    first = during["memory"]
+    a._from_phone({"device": "p", "text": "and before?", "audio": None, "reply": queue.Queue(), "deadline": None})
+    assert during["memory"] is first                   # the same phone keeps its own conversation
+
+
+def test_with_home_approvals_off_a_tool_approved_always_is_asked_again():
+    from test_brain_panel import tools_with
+
+    from rafiq import config
+    from rafiq.brain import Brain
+
+    asked = []
+
+    class Approvals:
+        def allowed(self, name):
+            return True
+
+        def remember(self, name):
+            pytest.fail("remembered from a phone")
+
+    brain = Brain(config.load(), tools_with([]), lambda action, tag, **kw: asked.append(action) or True,
+                  approvals=Approvals())
+    brain.approvals_apply = False
+    (step,) = brain._queue(["power"])
+    brain._run_tool("power", {}, "en", None, brain.tools, None, None, step)
+    assert asked == ["shut down the computer"]
+
+
+def test_a_phones_question_never_comes_back_as_always_and_not_after_its_deadline():
+    a = Assistant.__new__(Assistant)
+    a.events, a.pending_answer, a.speech, a.from_phone = Events(), queue.Queue(), None, "p"
+    a._panel_answer = lambda tag, aloud=True, seconds=10.0: "always"
+    a.phone_deadline = time.monotonic() + 60
+    assert a.confirm("send the email", "en") is True
+    a.phone_deadline = time.monotonic() - 1               # the phone was told "no answer in time"
+    assert a.confirm("send the email", "en") is False
+
+
+def test_a_question_asked_inside_another_gives_the_outer_one_its_id_back():
+    a = Assistant.__new__(Assistant)
+    a.events, a.pending_answer, a.speech, a.from_phone = Events(), queue.Queue(), None, ""
+    ids = []
+
+    def inner(tag, aloud=True, seconds=10.0):
+        ids.append(a.question_id)
+        if len(ids) == 1:                                 # the outer question waits; another one is asked
+            a.confirm("inner", "en", aloud=False)
+            ids.append(a.question_id)
+        return False
+
+    a._panel_answer = inner
+    a.confirm("outer", "en", aloud=False)
+    outer_id, inner_id, after = ids
+    assert inner_id != outer_id and after == outer_id
+
+
+def test_from_the_phone_forget_that_forgets_only_the_phones_own_request(tmp_path):
+    from rafiq.history import History
+
+    history = History(tmp_path / "history.json")
+    history.add("call mum", "Calling.", "en", "voice")
+    assert history.forget_last("phone") is None            # the last one was asked at home
+    history.add("lights off", "Done.", "en", "phone")
+    assert history.forget_last("phone").heard == "lights off"
+
+
+def test_the_reading_at_home_can_be_put_back_as_it_was():
+    from rafiq.reader import Reader, Segment
+
+    reader = Reader(interrupt=lambda: None)
+    reader.load([Segment("one", "en"), Segment("two", "en")])
+    reader.index, reader.state = 1, "paused"
+    kept = reader.saved()
+    reader.load([Segment("a phone's page", "en")])
+    reader.put_back(kept)
+    assert reader.saved() == kept and reader.index == 1 and reader.state == "paused"
+
+
+def test_pairing_takes_json_only(phone, devices):
+    _, port, _ = phone
+    code = devices.start_pairing("Tablet")
+    status, _body, _ = call(port, "/api/pair", raw=json.dumps({"code": code}).encode(), kind="text/plain")
+    assert status == 415
+    assert call(port, "/api/pair", {"code": code})[0] == 200       # the code still works: nothing was tried
+
+
+def test_a_phone_follows_rafiq_in_two_tabs_at_most(phone):
+    _, port, token = phone
+    first, second = open_stream(port, token), open_stream(port, token)
+    next_event(first)
+    next_event(second)
+    status, _body, _ = call(port, "/events", token=token)
+    assert status == 429
+    first.close()
+    second.close()
+
+
+def test_recordings_decoded_at_once_are_limited(devices, monkeypatch):
+    monkeypatch.setattr(mobile, "MAX_DECODING", 0)
+    monkeypatch.setattr(mobile, "decode", lambda data: pytest.fail("decoded over the limit"))
+    server = mobile.serve(FakeAssistant(), "127.0.0.1", 0, devices)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    _, token = devices.redeem(devices.start_pairing("p"))
+    try:
+        port = server.server_address[1]
+        assert call(port, "/api/voice", token=token, raw=b"OggS", kind="audio/ogg")[0] == 429
+    finally:
+        server.shutdown()
+
+
+def test_connections_over_the_limit_are_closed_at_once(devices, monkeypatch):
+    import socket
+
+    monkeypatch.setattr(mobile, "MAX_CONNECTIONS", 1)
+    server = mobile.serve(FakeAssistant(), "127.0.0.1", 0, devices)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+    try:
+        slow = socket.create_connection(("127.0.0.1", port))      # says nothing, holding the one slot
+        time.sleep(0.2)
+        with pytest.raises((urllib.error.URLError, ConnectionError, http_client_errors())):
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3).read()
+        slow.close()
+    finally:
+        server.shutdown()
+
+
+def http_client_errors():
+    import http.client
+
+    return http.client.HTTPException
+
+
+def test_letting_go_before_the_microphone_opens_records_nothing():
+    from importlib import resources
+
+    page = resources.files("rafiq").joinpath("mobile.html").read_text()
+    assert "if (starting) released = true;" in page and "if (discard) recorder.stop();" in page
+
+
+def test_a_phones_resume_reading_leaves_the_paused_reading_at_home_as_it_was():
+    from types import SimpleNamespace
+
+    from rafiq import config, lang
+    from rafiq.reader import Reader, Segment
+
+    a = Assistant.__new__(Assistant)
+    a.cfg, a.events, a.history, a.silent, a.nudger = config.load(), Events(), None, True, None
+    a.reader = Reader(interrupt=lambda: None)
+    a.reader.load([Segment(f"sentence {i}", "en") for i in range(300)])
+    a.reader.index, a.reader.state = 140, "paused"
+    kept = a.reader.saved()
+    said = []
+    a.say = lambda words, tag, cards=None: said.append(words)
+    a.overlay = SimpleNamespace(show_again=lambda: True)
+    a.practice = SimpleNamespace(active=False, rate=lambda: 1.0, tag="en", home="en")
+    a.ctx = SimpleNamespace(tag="en")
+    a.set_state = lambda state: None
+    a.speaker = SimpleNamespace(rate=1.0)
+    a.publish_spending = lambda tag: None
+    a.read = lambda: pytest.fail("read aloud at home")
+
+    def think(text, tag, ctx, on_speech=None):
+        a.reader.resume()                                   # what the reading tool does for "resume reading"
+        return "Resumed."
+
+    a.brain = SimpleNamespace(think=think)
+    a._respond("resume reading", "en", "phone")
+    assert a.reader.saved() == kept                         # still paused at sentence 140
+    assert said == [lang.phrase("phone_not_here", "en")]

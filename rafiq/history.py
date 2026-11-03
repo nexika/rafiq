@@ -91,9 +91,10 @@ class History:
                 self._save()
         return gone
 
-    def forget_last(self) -> Entry | None:
+    def forget_last(self, source: str | None = None) -> Entry | None:
+        """Delete the newest entry; with `source`, only when it came from there (a phone forgets its own)."""
         with self.lock:
-            if not self._entries:
+            if not self._entries or (source is not None and self._entries[-1].source != source):
                 return None
             last = self._entries.pop()
             self._save()

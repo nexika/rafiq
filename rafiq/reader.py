@@ -132,6 +132,15 @@ class Reader:
         with self._lock:
             return self.state == "reading" and self.index < len(self.segments)
 
+    def saved(self) -> tuple:
+        """Where the reading stands, to put it back with put_back (#207: a phone's request leaves it as it was)."""
+        with self._lock:
+            return list(self.segments), self.index, self.state
+
+    def put_back(self, saved: tuple) -> None:
+        with self._lock:
+            self.segments, self.index, self.state = list(saved[0]), saved[1], saved[2]
+
     def load(self, segments: list[Segment]) -> None:
         with self._lock:
             self.segments, self.index = list(segments), 0

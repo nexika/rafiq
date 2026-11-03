@@ -56,6 +56,9 @@ ASK_SECONDS = 300
 EVENTS_VERSION = 1
 HOSTS_SUFFIX = ".ts.net"        # the name `tailscale serve` answers on, on the user's tailnet
 STREAM_CHECK_SECONDS = 5        # how soon an open event stream notices its phone was unpaired, when nothing happens
+MAX_CONNECTIONS = 32            # at once, on the listener
+MAX_STREAMS = 2                 # open event streams per phone (two tabs)
+MAX_DECODING = 2                # recordings being decoded at once
 
 
 class PairingError(Exception):
@@ -276,9 +279,13 @@ def for_phone(event: dict, device: str, runs: dict, shown: set) -> dict | None:
 
 
 def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
+    streams: dict[str, int] = {}             # open event streams, per phone
+    streams_lock = threading.Lock()
+    decoding = threading.BoundedSemaphore(MAX_DECODING)
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "Rafiq"
-        timeout = 30                         # a phone that connects and then says nothing
+        timeout = 10                         # a client that connects and then says nothing, or sends slowly
 
         def log_message(self, *_args):
             pass
@@ -331,7 +338,15 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
                 device = self._device()
                 if device is None:
                     return self._json(403, {"error": "pair this phone first"})
-                return self._stream(device, self._token())
+                with streams_lock:
+                    if streams.get(device, 0) >= MAX_STREAMS:
+                        return self._json(429, {"error": "this phone already follows Rafiq in other tabs"})
+                    streams[device] = streams.get(device, 0) + 1
+                try:
+                    return self._stream(device, self._token())
+                finally:
+                    with streams_lock:
+                        streams[device] -= 1
             return self._json(404, {"error": "not found"})
 
         def _stream(self, device: str, token: str) -> None:
@@ -403,6 +418,10 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
             return self._json(200, {"ok": True})
 
         def _pair(self) -> None:
+            # JSON only: a web page in the user's browser can post a form or text to 127.0.0.1 without asking, and
+            # five wrong codes would end a pairing under way.
+            if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+                return self._json(415, {"error": "send JSON"})
             raw = self._body(MAX_BODY)
             if raw is None:
                 return
@@ -421,13 +440,18 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
             return self._json(200, {"name": name, "token": token})
 
         def _voice(self, device: str) -> None:
-            raw = self._body(MAX_AUDIO)
-            if raw is None:
-                return
+            if not decoding.acquire(blocking=False):      # before reading 3 MB and starting ffmpeg
+                return self._json(429, {"error": "Rafiq is still listening to your other recordings"})
             try:
-                audio = decode(raw)
-            except ValueError as exc:
-                return self._json(400, {"error": str(exc)})
+                raw = self._body(MAX_AUDIO)
+                if raw is None:
+                    return None
+                try:
+                    audio = decode(raw)
+                except ValueError as exc:
+                    return self._json(400, {"error": str(exc)})
+            finally:
+                decoding.release()
             return self._answer(assistant.ask_phone(device, audio=audio, timeout=ASK_SECONDS))
 
         def _answer(self, result: dict | None) -> None:
@@ -440,14 +464,40 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
     return Handler
 
 
+class PhoneServer(ThreadingHTTPServer):
+    """At most MAX_CONNECTIONS at once: anyone who reaches the listener (a tailnet node, another user here) could
+    otherwise hold a thread per slow connection until `rafiq run` itself runs out. The ones over are closed."""
+
+    daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+
 def serve(assistant, host: str, port: int, devices: Devices, tailnet: str = "") -> ThreadingHTTPServer:
     """The phone's listener: on this computer only, where `tailscale serve` reaches it. With `tailnet` (this
     computer's name there), only that name is a host it answers."""
     if host not in ("127.0.0.1", "localhost"):
         raise ValueError(f"the phone page listens on 127.0.0.1 only, not {host}: `tailscale serve` brings the "
                          "phone to it over HTTPS")
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(assistant, devices, port, tailnet))
-    server.daemon_threads = True
+    server = PhoneServer(("127.0.0.1", port), make_handler(assistant, devices, port, tailnet))
     server.RequestHandlerClass = make_handler(assistant, devices, server.server_address[1], tailnet)
     return server
 
