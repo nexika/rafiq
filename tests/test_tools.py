@@ -49,7 +49,7 @@ def test_only_critical_tools_ask_first_and_every_critical_tool_does():
                                                                         "plug_switch", "spotify_add_to_playlist",
                                                                         "print_paper", "close_browser_tabs",
                                                                         "close_other_browser_tabs", "record_learning",
-                                                                        "click_on_screen"}
+                                                                        "click_on_screen", "operate_computer"}
 
 
 def test_only_safe_tools_are_exposed_over_mcp():

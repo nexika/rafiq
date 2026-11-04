@@ -858,6 +858,41 @@ readable only by you. After that GNOME doesn't ask again, so Rafiq's own yes is 
 the screen is shared. Monitors at different scales aren't supported: Rafiq says so and doesn't click. On X11,
 install `xdotool`. `rafiq doctor` says which one it will use.
 
+## Taking control of the computer
+
+"Take control and open the Wi-Fi settings", "تحكم في الكمبيوتر وافتح الإعدادات", "prends le contrôle et ouvre
+les réglages". On a request like that, a model works the desktop step by step from screenshots, and Rafiq
+clicks, types, presses keys and scrolls for it. Rafiq asks first, every time: "Should I take control of the
+computer to "open the Wi-Fi settings", at most 12 steps and 90 seconds, with screenshots going to Claude, in the
+cloud?". A "yes, always" is never remembered for it.
+
+- **Ending it:** Escape or the Stop button in the widget or dashboard ends the run before the next step. On GNOME,
+  Escape is bound through the desktop's GlobalShortcuts portal only while a run goes; GNOME asks you once to allow
+  it. Without that portal, the Stop button ends it. Saying "stop" doesn't, as Rafiq isn't listening during a run.
+- **Limits:** at most 12 steps (clicks, keys, typing, scrolling; screenshots don't count) and 90 seconds.
+- **What it hands back to you:** typing a password, paying, sending or posting, deleting, installing, or running a
+  command. The model is told to stop there, and Rafiq says what's left.
+- **What Rafiq refuses on its own:** the Super key (the Activities search starts any app), the key combinations
+  that open a terminal, a text console or the run dialog or that log out, pasting, typing a terminal's name, and
+  typing that looks like a command. This is a backstop, not a wall: a model that obeys a page could still click
+  its way to harm, so watch it work, and press Escape or Stop if it goes somewhere you didn't ask for.
+- **Escape is yours:** the model can't press it. While a run goes, the panel and the widget take no requests, so
+  the model can't type one in.
+- **Screen text is data:** a page or a message on the screen can't give the model orders. After Rafiq has read
+  the screen, a page or an email in the same request, it refuses a task you didn't say yourself.
+- **Never remote:** not for a request from your phone, and not for another program (MCP).
+- **Not yet:** a task taken from an email or page read in an *earlier* request isn't caught by the "only your
+  words" check (#235). You still hear the whole task in the question before the run.
+
+Which model drives it is set under `[operator]`: `driver = "auto"` uses Claude (an API key), then OpenAI (a key,
+or your ChatGPT plan after `rafiq chatgpt-login`), then a local vision model (`ollama_model`, such as
+`qwen2.5vl:7b`). Only the local model keeps the screenshots on this computer (unless `[brain] ollama_url` points
+at another machine; Rafiq's question then names it), and small models make more mistakes, and are easier for a
+page to mislead. `rafiq doctor` says which one Rafiq would use.
+
+The clicks and keys go through the same RemoteDesktop portal as clicking on the screen (above), in one session
+for the whole run, or through `xdotool` on X11. Not on macOS yet.
+
 ## Browser tabs
 
 "What tabs are open?", "summarise this page", "translate the article tab into Arabic", "switch to the

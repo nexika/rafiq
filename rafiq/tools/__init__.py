@@ -140,7 +140,8 @@ def not_here() -> set[str]:
     if desktop.system() != "mac":
         return set()
     missing = {"gpu_status",                     # reads AMD and NVIDIA cards through Linux's /sys and NVML
-               "click_on_screen"}                # clicks through GNOME's RemoteDesktop portal or xdotool (#26)
+               "click_on_screen",                # clicks through GNOME's RemoteDesktop portal or xdotool (#26)
+               "operate_computer"}               # the same input layer (#18)
     if not shutil.which("SwitchAudioSource"):    # brew install switchaudio-osx
         missing.add("audio_output")
     return missing
@@ -166,6 +167,7 @@ def load_all(cfg: dict) -> dict[str, Tool]:
         media,
         memory,
         notes,
+        operate,
         paper,
         pc,
         practice,

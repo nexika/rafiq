@@ -103,6 +103,7 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `scene` | `id`, `steps`: `[tool, result]` pairs | `{"id": "film", "steps": [["lights", "dimmed"]]}` |
 | `plan` | `title`, `steps` (at most 12), `done` (how many are done); sent again as it progresses | `{"title": "Book a table", "steps": ["Find a place", "Call"], "done": 1}` |
 | `explain` | `text` (at most 1500 characters, also said aloud), `tag`; `source: "mcp"` from another program | `{"text": "This loop stops at the first even number.", "tag": "en"}` |
+| `operator` | `step` (1 to 12), `text` (what was done, such as `clicked` or `typed 14 characters`; never the text typed) | `{"step": 2, "text": "typed 14 characters"}` |
 | `screen` | `id`, `width`, `height`, `text` (the answer), `marks`: `n` (the number the text uses, as `[n]`), `label`, `box` (`[left, top, right, bottom]` in the screenshot's pixels), `shape` (`circle`, `box`, `arrow`) | `{"id": "a1b2c3d4e5f6", "width": 1568, "height": 980, "text": "Close the dialog [1].", "marks": [{"n": 1, "label": "the dialog", "box": [610, 300, 960, 520], "shape": "circle"}]}` |
 | `card` | `card` (`music`, `news`, `weather`, `timer`), `data` (at most 8 short text fields) | `{"card": "weather", "data": {"city": "Cairo", "temperature": "31°C"}}` |
 | `task` | `id`, `goal`, `state` (`running`, `done`, `failed`, `cancelled`), `cost` (so far, when cancelled), `result` | `{"id": "ab12cd", "run_id": "task-ab12cd", "goal": "find a flight", "state": "running", "cost": null, "result": ""}` |
