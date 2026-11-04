@@ -187,7 +187,8 @@ def test_pairing_says_to_point_tailscale_at_the_socket(monkeypatch, capsys):
     write_config("[mobile]\nenabled = true\n")
     assert cli.main(["mobile", "pair", "Sam's iPhone"]) == 0
     out = capsys.readouterr().out
-    assert f"tailscale serve --bg unix:{mobile.socket_path()}" in out and "http://127.0.0.1" not in out
+    assert f"tailscale serve --bg unix:{mobile.socket_path()}" in out and "serve --bg http" not in out
+    assert "tailscale serve --https=443 off" in out          # moving a setup from before #238
 
 
 def test_pairing_on_the_port_warns_that_another_account_could_take_it(monkeypatch, capsys):
