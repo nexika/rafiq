@@ -22,8 +22,9 @@ from pathlib import Path
 
 from . import config
 
-# Relative to the settings folder: earlier backups, downloaded models and the panel token (made again on start).
-SKIP = ("backups", "data/oww", "data/piper", "panel.token")
+# Relative to the settings folder: earlier backups, downloaded models, the panel token (made again on start) and
+# the panel's socket (a socket can't be archived; made again on start).
+SKIP = ("backups", "data/oww", "data/piper", "panel.token", "run")
 EXTRA = re.compile(r"""^\s*([A-Za-z0-9._-]+).*;\s*extra\s*==\s*["']([^"']+)["']""")
 
 

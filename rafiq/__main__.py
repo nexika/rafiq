@@ -15,7 +15,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import config, lang, modes, privacy
+from . import config, lang, modes, privacy, sock
 
 
 def cmd_run(args) -> int:
@@ -39,6 +39,7 @@ def cmd_run(args) -> int:
         host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
         server = serve(assistant, host, port, config.panel_token())
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
+        _start_socket(server)
         assistant.gestures.url = f"http://{host}:{server.server_address[1]}/api/gesture"
         print("Panel: open it with `rafiq panel`", flush=True)
     _start_hub(cfg, assistant)
@@ -52,6 +53,20 @@ def cmd_run(args) -> int:
     except KeyboardInterrupt:
         assistant.stop()
     return 0
+
+
+def _start_socket(tcp):
+    """The panel's socket for Rafiq's own programs (#234); without it Rafiq still runs, and they say it isn't
+    reachable."""
+    from . import panel
+
+    try:
+        server = panel.serve_socket(tcp)
+    except (OSError, ValueError) as exc:
+        print(f"Rafiq's own programs (rafiq ask, rafiq mcp, the widget) can't reach it: {exc}", file=sys.stderr)
+        return None
+    threading.Thread(target=server.serve_forever, name="rafiq-panel-socket", daemon=True).start()
+    return server
 
 
 def _stop_on_sigterm() -> None:
@@ -317,7 +332,7 @@ def _ask_through_running(cfg: dict, text: str, tag: str | None, speak: bool) -> 
 
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/ask", json={"text": text, "lang": tag, "speak": speak},
+        resp = sock.post(f"http://{host}:{port}/api/ask", json={"text": text, "lang": tag, "speak": speak},
                           headers={"X-Rafiq-Token": config.panel_token()},
                           timeout=httpx.Timeout(ASK_SECONDS + 10, connect=2))
     except (httpx.ConnectError, httpx.ConnectTimeout):
@@ -515,7 +530,7 @@ def cmd_panel(args) -> int:
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/panel-key", json={}, timeout=5,
+        resp = sock.post(f"http://{host}:{port}/api/panel-key", json={}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
@@ -599,7 +614,7 @@ def _ask_running(path: str, body: dict) -> int:
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}{path}", json=body, timeout=5,
+        resp = sock.post(f"http://{host}:{port}{path}", json=body, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
@@ -621,7 +636,7 @@ def cmd_gestures(args) -> int:
     cfg = config.load()
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
     try:
-        resp = httpx.post(f"http://{host}:{port}/api/gestures", json={"on": args.action == "on"}, timeout=5,
+        resp = sock.post(f"http://{host}:{port}/api/gestures", json={"on": args.action == "on"}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
     except httpx.HTTPError:
         print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)

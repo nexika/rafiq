@@ -10,7 +10,7 @@ import httpx
 import pytest
 from test_brain_panel import FakeAssistant, request
 
-from rafiq import config, lang, mcp_server
+from rafiq import config, lang, mcp_server, sock
 from rafiq.assistant import Assistant, Events
 from rafiq.panel import serve
 from rafiq.tools import display, load_all
@@ -216,7 +216,7 @@ def test_the_display_tools_are_offered_over_mcp():
 
 def test_an_explanation_over_mcp_goes_to_the_running_rafiq_with_the_panel_token(monkeypatch):
     posted = Posted()
-    monkeypatch.setattr(httpx, "post", posted)
+    monkeypatch.setattr(sock, "post", posted)
     server = mcp_server.Server(config.load())
     reply = server.call(1, {"name": "explain", "arguments": {"text": "Hello", "lang": "es"}})
     assert not reply["result"]["isError"]
@@ -227,7 +227,7 @@ def test_an_explanation_over_mcp_goes_to_the_running_rafiq_with_the_panel_token(
 
 
 def test_over_mcp_without_a_running_rafiq_the_tool_says_so(monkeypatch):
-    monkeypatch.setattr(httpx, "post", Posted(error=httpx.ConnectError("refused")))
+    monkeypatch.setattr(sock, "post", Posted(error=httpx.ConnectError("refused")))
     reply = mcp_server.Server(config.load()).call(1, {"name": "show_card",
                                                       "arguments": {"kind": "music", "data": {"song": "x"}}})
     assert "isn't running" in reply["result"]["content"][0]["text"]

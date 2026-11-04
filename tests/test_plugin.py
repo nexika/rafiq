@@ -9,12 +9,11 @@ import tomllib
 import zipfile
 from types import SimpleNamespace
 
-import httpx
 import pytest
 from test_brain_panel import FakeAssistant, request
 from test_mcp_all import Posted, bare, rpc
 
-from rafiq import config, lang, mcp_server, plugin
+from rafiq import config, lang, mcp_server, plugin, sock
 from rafiq.brain import Brain
 from rafiq.panel import serve
 from rafiq.tools import Tool
@@ -178,7 +177,7 @@ def test_the_panel_hands_the_screenshot_to_rafiq_mcp():
 
 
 def test_rafiq_mcp_answers_with_the_picture_and_the_text(monkeypatch):
-    monkeypatch.setattr(httpx, "post", Posted(data={"result": "From Rafiq: your screen", "image": "aW1n"}))
+    monkeypatch.setattr(sock, "post", Posted(data={"result": "From Rafiq: your screen", "image": "aW1n"}))
     reply = rpc(mcp_server.Server(config.load()), "tools/call",
                 {"name": "look_at_screen", "arguments": {"question": "what is this?"}})["result"]
     assert reply["isError"] is False

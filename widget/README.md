@@ -15,16 +15,17 @@ shows as "(hidden)".
 - The widget is a separate app. Rafiq's core stays in Python.
 - The Rust side (`src-tauri/`) reads the panel token from `~/.config/rafiq/panel.token` (`RAFIQ_HOME` moves
   it) and the port from `[panel] port` in `config.toml`, the files `rafiq ask` uses. It follows the event stream
-  at `http://127.0.0.1:<port>/events` (see [docs/events.md](../docs/events.md)) and connects again when Rafiq
-  restarts.
+  at `/events` over the panel's socket, `~/.config/rafiq/run/panel.sock` (see [docs/events.md](../docs/events.md)),
+  and connects again when Rafiq restarts.
 - The page (`ui/`) is plain HTML and JavaScript with no packages. It only gets the events, never the token, and
   draws everything as text.
 - The page asks the Rust side for one of three things: a typed request, an answer, or stop. It never chooses
   a path, and the Rust side adds the token.
 - It only connects on this computer. A panel set to listen anywhere else is refused.
-- Before it sends the token, it checks in `/proc/net/tcp` that the program listening on the panel's port is
-  yours. The token is kept between Rafiq's starts, so while Rafiq is stopped another program could take the
-  port to collect it. While Rafiq is away it tries again after 2 seconds, then less often, up to every 30.
+- Before it sends the token, it checks that the socket's folder is yours, isn't a link and is closed to others,
+  and that the socket is yours: then no other account can have made it (#234). The token is kept between
+  Rafiq's starts, so while Rafiq is stopped another account's program could otherwise wait where Rafiq listens
+  to collect it. While Rafiq is away it tries again after 2 seconds, then less often, up to every 30.
 - When Rafiq looks at the screen, the Rust side fetches the screenshot once with the panel's token and the
   screen token (`screen.token`, readable only by you), and hands the page a `data:` URL. The page draws
   numbered circles, highlights and arrows over it.

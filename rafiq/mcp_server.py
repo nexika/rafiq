@@ -15,7 +15,7 @@ import sys
 from types import SimpleNamespace
 from typing import TextIO
 
-from . import __version__, config
+from . import __version__, config, sock
 from .scheduler import Scheduler
 from .tools import Tool, load_all
 
@@ -58,7 +58,7 @@ class Server:
 
         host, port = self.cfg["panel"]["host"], int(self.cfg["panel"]["port"])
         try:
-            resp = httpx.post(f"http://{host}:{port}/api/tool", json={"name": name, "arguments": args},
+            resp = sock.post(f"http://{host}:{port}/api/tool", json={"name": name, "arguments": args},
                               headers={"X-Rafiq-Token": config.panel_token()}, timeout=CALL_SECONDS)
         except (httpx.ConnectError, httpx.ConnectTimeout):
             return f"{NOT_RUNNING}: {name} needs it (start it with: rafiq run)"
@@ -86,7 +86,7 @@ class Server:
 
         host, port = self.cfg["panel"]["host"], int(self.cfg["panel"]["port"])
         try:
-            resp = httpx.post(f"http://{host}:{port}/api/display", json={"kind": kind, "data": data},
+            resp = sock.post(f"http://{host}:{port}/api/display", json={"kind": kind, "data": data},
                               headers={"X-Rafiq-Token": config.panel_token()}, timeout=5)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise RuntimeError("Rafiq isn't running, so there is nothing to show it on") from exc

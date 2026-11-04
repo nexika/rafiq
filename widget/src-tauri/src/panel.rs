@@ -11,6 +11,8 @@ pub struct Panel {
     pub port: u16,
     pub token: String,
     pub ipv6: bool, // `[panel] host = "::1"`: the panel then listens on IPv6 only
+    /// Where Rafiq's own programs reach it (rafiq/sock.py): the port is still named, for its Host check.
+    pub socket: PathBuf,
 }
 
 /// `RAFIQ_HOME`, or `~/.config/rafiq`, as in rafiq/config.py.
@@ -32,7 +34,7 @@ pub fn find(home: &Path) -> Result<Panel, String> {
         return Err("bad_token".to_string());
     }
     let (port, ipv6) = settings(home)?;
-    Ok(Panel { port, token, ipv6 })
+    Ok(Panel { port, token, ipv6, socket: home.join("run").join("panel.sock") })
 }
 
 /// screen.token: needed for the screenshot (GET /api/screen) beside the panel token, which any program on this
@@ -84,7 +86,8 @@ mod tests {
     #[test]
     fn finds_the_token_and_the_default_port() {
         let home = folder("default", &[("panel.token", &format!("{TOKEN}\n"))]);
-        assert_eq!(find(&home), Ok(Panel { port: DEFAULT_PORT, token: TOKEN.to_string(), ipv6: false }));
+        let socket = home.join("run").join("panel.sock");
+        assert_eq!(find(&home), Ok(Panel { port: DEFAULT_PORT, token: TOKEN.to_string(), ipv6: false, socket }));
     }
 
     #[test]

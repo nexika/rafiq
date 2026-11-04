@@ -1,93 +1,136 @@
-//! Whose program listens on the panel's port. The panel token outlives Rafiq (panel.token is kept between
-//! starts), so while Rafiq is stopped another program could take the port and collect the token from a
-//! widget that keeps reconnecting. The token is only sent to a listener of this user's own (#199).
+//! Whose socket the widget is about to talk to. The panel token outlives Rafiq (panel.token is kept between
+//! starts), so while Rafiq is stopped another account could put its own program where Rafiq listens and collect
+//! the token from a widget that keeps reconnecting (#199, #234). Rafiq's programs therefore talk over a socket
+//! in `<settings>/run`, and the token is sent only when that folder is this user's alone (not a link, mode 0700)
+//! and the socket in it is this user's: then no one else can have made it.
 
-/// The user id of the program listening on `port` on loopback or every address, from the text of
-/// /proc/net/tcp (or tcp6). None when nothing listens there.
-pub fn listener_uid(table: &str, port: u16) -> Option<u32> {
-    let port = format!("{port:04X}");
-    table.lines().skip(1).find_map(|line| {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        let (address, at) = fields.get(1)?.split_once(':')?;
-        let listening = fields.get(3) == Some(&"0A");
-        let here = matches!(address, "0100007F" | "00000000" | "00000000000000000000000001000000")
-            || address.chars().all(|c| c == '0');
-        (listening && here && at == port).then(|| fields.get(7)?.parse().ok()).flatten()
-    })
-}
+#[cfg(unix)]
+use std::path::Path;
 
-/// Ok when this user's own program listens on the port; a problem code otherwise.
-#[cfg(target_os = "linux")]
-pub fn check(port: u16, ipv6: bool) -> Result<(), String> {
-    use std::os::unix::fs::MetadataExt;
+/// Ok when `socket` is a socket of `uid`'s in a folder only `uid` can open; a problem code otherwise.
+#[cfg(unix)]
+pub fn ours(socket: &Path, uid: u32) -> Result<(), String> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
-    let me = std::fs::metadata("/proc/self").map_err(|_| "io".to_string())?.uid();
-    let table = std::fs::read_to_string(if ipv6 { "/proc/net/tcp6" } else { "/proc/net/tcp" })
-        .map_err(|_| "io".to_string())?;
-    match listener_uid(&table, port) {
-        Some(uid) if uid == me => Ok(()),
-        Some(_) => Err("not_ours".to_string()),
-        None => Err("not_running".to_string()),
+    let folder = socket.parent().ok_or("not_ours".to_string())?;
+    let folder = std::fs::symlink_metadata(folder).map_err(|_| "not_running".to_string())?;
+    if !folder.is_dir() || folder.uid() != uid || folder.mode() & 0o077 != 0 {
+        return Err("not_ours".to_string());
     }
-}
-
-/// Elsewhere there is no /proc to read; the widget ships for Linux first (#192, #193 come later).
-#[cfg(not(target_os = "linux"))]
-pub fn check(_port: u16, _ipv6: bool) -> Result<(), String> {
+    let file = std::fs::symlink_metadata(socket).map_err(|_| "not_running".to_string())?;
+    if !file.file_type().is_socket() || file.uid() != uid {
+        return Err("not_ours".to_string());
+    }
     Ok(())
 }
 
-#[cfg(test)]
+/// Is the panel's socket this user's?
+#[cfg(unix)]
+pub fn check(panel: &crate::panel::Panel) -> Result<(), String> {
+    // SAFETY: getuid has no preconditions and cannot fail.
+    ours(&panel.socket, unsafe { libc::getuid() })
+}
+
+/// Whose program is at the other end of a connection, as the kernel says; None when it can't be told.
+#[cfg(unix)]
+pub fn peer_uid(conn: &std::os::unix::net::UnixStream) -> Option<u32> {
+    use std::os::fd::AsRawFd;
+
+    let fd = conn.as_raw_fd();
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: getsockopt writes at most `len` bytes into a ucred we own, on a descriptor `conn` keeps open.
+        let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+        let got = unsafe {
+            libc::getsockopt(fd, libc::SOL_SOCKET, libc::SO_PEERCRED, &mut cred as *mut _ as *mut libc::c_void, &mut len)
+        };
+        (got == 0 && len as usize == std::mem::size_of::<libc::ucred>()).then_some(cred.uid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let (mut uid, mut gid) = (0, 0);
+        // SAFETY: getpeereid writes two ids we own, on a descriptor `conn` keeps open.
+        (unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } == 0).then_some(uid)
+    }
+}
+
+/// Ok only when the kernel says this user's program is at the other end: a check of the connection itself, so
+/// a socket swapped in after `check` looked at the path still gets nothing.
+#[cfg(unix)]
+pub fn peer_ok(conn: &std::os::unix::net::UnixStream) -> Result<(), String> {
+    // SAFETY: getuid has no preconditions and cannot fail.
+    match peer_uid(conn) {
+        Some(uid) if uid == unsafe { libc::getuid() } => Ok(()),
+        _ => Err("not_ours".to_string()),
+    }
+}
+
+/// On Windows (#193) the widget still talks over TCP, and nothing here can tell whose program listens.
+#[cfg(not(unix))]
+pub fn check(_panel: &crate::panel::Panel) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
-    const HEADER: &str = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
-
-    fn table(rows: &[&str]) -> String {
-        format!("{HEADER}{}\n", rows.join("\n"))
+    fn me() -> u32 {
+        unsafe { libc::getuid() }
     }
 
     #[test]
-    fn finds_who_listens_on_the_port_on_loopback() {
-        let t = table(&["   0: 0100007F:223D 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1 1"]);
-        assert_eq!(listener_uid(&t, 8765), Some(1000));
+    fn the_kernel_says_this_user_s_program_is_at_the_other_end() {
+        let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
+        assert_eq!(peer_uid(&a), Some(me()));
+        assert_eq!(peer_ok(&a), Ok(()));
     }
 
     #[test]
-    fn a_connection_to_the_port_is_not_a_listener() {
-        let t = table(&["   0: 0100007F:223D 0100007F:9C40 01 00000000:00000000 00:00000000 00000000  1000        0 1 1"]);
-        assert_eq!(listener_uid(&t, 8765), None);
+    fn a_socket_of_this_user_s_in_a_closed_folder_is_ours() {
+        let (panel, _listener) = crate::testing::listener("ours");
+        assert_eq!(ours(&panel.socket, me()), Ok(()));
+        assert_eq!(check(&panel), Ok(()));
     }
 
     #[test]
-    fn another_port_or_another_address_does_not_count() {
-        let t = table(&[
-            "   0: 0100007F:2231 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1 1",
-            "   1: 1401A8C0:223D 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1 1",
-        ]);
-        assert_eq!(listener_uid(&t, 8765), None);
+    fn a_folder_others_can_open_is_not_ours() {
+        let (panel, _listener) = crate::testing::listener("open");
+        std::fs::set_permissions(panel.socket.parent().unwrap(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(ours(&panel.socket, me()), Err("not_ours".to_string()));
     }
 
     #[test]
-    fn another_user_listening_is_found_with_their_id() {
-        let t = table(&["   0: 00000000:223D 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 1 1"]);
-        assert_eq!(listener_uid(&t, 8765), Some(1001));
+    fn another_account_s_socket_is_not_ours() {
+        let (panel, _listener) = crate::testing::listener("theirs");
+        assert_eq!(ours(&panel.socket, me() + 1), Err("not_ours".to_string()));
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
-    fn a_listener_this_user_opened_is_ours_and_a_closed_port_is_nobody_s() {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        assert_eq!(check(port, false), Ok(()));
+    fn a_plain_file_is_not_a_socket() {
+        let (panel, listener) = crate::testing::listener("file");
         drop(listener);
-        assert_eq!(check(port, false), Err("not_running".to_string()));
+        std::fs::remove_file(&panel.socket).unwrap();
+        std::fs::write(&panel.socket, "").unwrap();
+        assert_eq!(ours(&panel.socket, me()), Err("not_ours".to_string()));
     }
 
     #[test]
-    fn reads_ipv6_loopback_too() {
-        let t = table(&["   0: 00000000000000000000000001000000:223D 00000000000000000000000000000000:0000 0A \
-                         00000000:00000000 00:00000000 00000000  1000        0 1 1"]);
-        assert_eq!(listener_uid(&t, 8765), Some(1000));
+    fn a_linked_folder_is_not_ours() {
+        let (panel, _listener) = crate::testing::listener("real");
+        let link = std::env::temp_dir().join(format!("rafiq-widget-link-{}", std::process::id()));
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(panel.socket.parent().unwrap(), &link).unwrap();
+        assert_eq!(ours(&link.join("panel.sock"), me()), Err("not_ours".to_string()));
+    }
+
+    #[test]
+    fn no_socket_means_rafiq_is_not_running() {
+        let (panel, listener) = crate::testing::listener("gone");
+        drop(listener);
+        std::fs::remove_file(&panel.socket).unwrap();
+        assert_eq!(ours(&panel.socket, me()), Err("not_running".to_string()));
     }
 }

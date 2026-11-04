@@ -11,7 +11,7 @@ import pytest
 from test_brain_panel import FakeAssistant
 
 from rafiq import __main__ as cli
-from rafiq import config, panel
+from rafiq import config, panel, sock
 from rafiq.panel import serve
 
 TOKEN = "t" * 40
@@ -235,10 +235,9 @@ class Answer:
 
 def test_rafiq_panel_opens_the_browser_with_the_key_after_the_hash(monkeypatch):
     """After "#", the key is never sent to a server (or another program listening on 127.0.0.1)."""
-    import httpx
 
     posted, opened = [], []
-    monkeypatch.setattr(httpx, "post", lambda url, json=None, headers=None, timeout=None:
+    monkeypatch.setattr(sock, "post", lambda url, json=None, headers=None, timeout=None:
                         posted.append((url, headers)) or Answer(200, {"key": "k1"}))
     monkeypatch.setattr(cli, "_open_browser", opened.append)
     assert cli.main(["panel"]) == 0
@@ -248,9 +247,8 @@ def test_rafiq_panel_opens_the_browser_with_the_key_after_the_hash(monkeypatch):
 
 
 def test_rafiq_panel_print_shows_the_address_without_opening_anything(monkeypatch, capsys):
-    import httpx
 
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: Answer(200, {"key": "k2"}))
+    monkeypatch.setattr(sock, "post", lambda *a, **k: Answer(200, {"key": "k2"}))
     monkeypatch.setattr(cli, "_open_browser", lambda url: pytest.fail("opened a browser"))
     assert cli.main(["panel", "--print"]) == 0
     assert "http://127.0.0.1:8765/#key=k2" in capsys.readouterr().out
@@ -262,7 +260,7 @@ def test_rafiq_panel_says_when_rafiq_is_not_running(monkeypatch, capsys):
     def refused(*a, **k):
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(httpx, "post", refused)
+    monkeypatch.setattr(sock, "post", refused)
     assert cli.main(["panel"]) == 1
     assert "rafiq run" in capsys.readouterr().err
 

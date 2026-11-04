@@ -12,7 +12,7 @@ import pytest
 from test_brain_panel import FakeAssistant, request
 
 from rafiq import assistant as assistant_mod
-from rafiq import config, lang, mcp_server
+from rafiq import config, lang, mcp_server, sock
 from rafiq.assistant import Assistant, Events
 from rafiq.panel import serve
 from rafiq.permissions import Approvals
@@ -46,7 +46,7 @@ def test_the_list_tells_the_app_which_tools_only_read_and_which_are_destructive(
 
 def test_a_tool_that_needs_rafiq_goes_to_the_running_rafiq_with_the_panel_token(monkeypatch):
     posted = Posted(data={"result": "Timer set for 5 minutes."})
-    monkeypatch.setattr(httpx, "post", posted)
+    monkeypatch.setattr(sock, "post", posted)
     reply = rpc(mcp_server.Server(config.load()), "tools/call", {"name": "set_timer", "arguments": {"minutes": 5}})
     assert reply["result"] == {"content": [{"type": "text", "text": "Timer set for 5 minutes."}], "isError": False}
     url, body, headers, timeout = posted.calls[0]
@@ -55,7 +55,7 @@ def test_a_tool_that_needs_rafiq_goes_to_the_running_rafiq_with_the_panel_token(
 
 
 def test_without_a_running_rafiq_only_the_safe_tools_work(monkeypatch):
-    monkeypatch.setattr(httpx, "post", Posted(error=httpx.ConnectError("refused")))
+    monkeypatch.setattr(sock, "post", Posted(error=httpx.ConnectError("refused")))
     server = mcp_server.Server(config.load())
     assert rpc(server, "tools/call", {"name": "calculate", "arguments": {"expression": "6*7"}})[
         "result"]["isError"] is False
@@ -65,7 +65,7 @@ def test_without_a_running_rafiq_only_the_safe_tools_work(monkeypatch):
 
 def test_a_call_with_no_result_in_time_is_an_error_that_doesn_t_claim_it_was_not_done(monkeypatch):
     """A slow tool approved late may still be running: "not done" would make the program try again."""
-    monkeypatch.setattr(httpx, "post", Posted(status=504))
+    monkeypatch.setattr(sock, "post", Posted(status=504))
     reply = rpc(mcp_server.Server(config.load()), "tools/call", {"name": "power", "arguments": {"action": "shutdown"}})
     text = reply["result"]["content"][0]["text"]
     assert reply["result"]["isError"] is True and "may or may not have been done" in text
@@ -256,7 +256,7 @@ def test_without_a_private_read_a_safe_search_needs_no_question():
 def test_with_rafiq_running_the_search_tools_go_to_it_too(monkeypatch):
     """Run in `rafiq mcp`, they would miss that a private read came before them."""
     posted = Posted(data={"result": "results"})
-    monkeypatch.setattr(httpx, "post", posted)
+    monkeypatch.setattr(sock, "post", posted)
     rpc(mcp_server.Server(config.load()), "tools/call", {"name": "web_search", "arguments": {"query": "x"}})
     assert posted.calls and posted.calls[0][1]["name"] == "web_search"
 
@@ -338,7 +338,7 @@ def test_another_program_can_t_be_told_always_for_a_critical_tool():
 
 def test_the_mcp_log_hides_private_and_critical_arguments_and_results(monkeypatch, caplog):
     caplog.set_level("INFO", logger="rafiq.mcp_server")
-    monkeypatch.setattr(httpx, "post", Posted(data={"result": "From Rafiq: your OTP is 4411"}))
+    monkeypatch.setattr(sock, "post", Posted(data={"result": "From Rafiq: your OTP is 4411"}))
     server = mcp_server.Server(config.load())
     rpc(server, "tools/call", {"name": "list_timers", "arguments": {}})
     rpc(server, "tools/call", {"name": "power", "arguments": {"action": "shutdown-secret"}})
@@ -436,7 +436,7 @@ def test_a_yes_too_close_to_the_deadline_is_turned_down_out_loud(monkeypatch):
 
 def test_without_a_running_rafiq_a_tool_that_sends_data_out_is_not_run_here(monkeypatch):
     """Only the running Rafiq knows a private read came before (it may have restarted since)."""
-    monkeypatch.setattr(httpx, "post", Posted(error=httpx.ConnectError("refused")))
+    monkeypatch.setattr(sock, "post", Posted(error=httpx.ConnectError("refused")))
     fetched = []
     tools = {"read_page": Tool("read_page", "page", lambda url="": fetched.append(url) or "page",
                                {"url": {"type": "string"}}, level="safe", expose=True, sends=("url",))}
@@ -609,7 +609,7 @@ def test_a_call_that_fails_before_its_tool_runs_still_answers_the_other_program(
 
 def test_the_mcp_log_hides_what_forget_answers(monkeypatch, caplog):
     load_all(config.load())
-    monkeypatch.setattr(httpx, "post", Posted(data={"result": "forgot 1: my doctor is Dr X"}))
+    monkeypatch.setattr(sock, "post", Posted(data={"result": "forgot 1: my doctor is Dr X"}))
     server = mcp_server.Server(config.load())
     with caplog.at_level("INFO", logger="rafiq.mcp_server"):
         rpc(server, "tools/call", {"name": "forget", "arguments": {"words": "doctor"}})

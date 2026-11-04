@@ -14,6 +14,7 @@ import sys
 import time
 from collections.abc import Callable, Iterable
 
+from . import sock
 from .hands import Hand, Recognizer
 
 WINDOW = "Rafiq hand gestures"
@@ -32,7 +33,7 @@ def post_label(url: str, token: str, label: str) -> None:
     import httpx
 
     try:
-        httpx.post(url, json={"gesture": label}, headers={"X-Rafiq-Gesture-Token": token}, timeout=2)
+        sock.post(url, json={"gesture": label}, headers={"X-Rafiq-Gesture-Token": token}, timeout=2)
     except httpx.HTTPError:
         pass    # Rafiq stopped or is busy: the next gesture tries again
 

@@ -113,20 +113,18 @@ fn base64(data: &[u8]) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
 
     fn panel(port: u16) -> Panel {
-        Panel { port, token: "k".repeat(43), ipv6: false }
+        Panel { port, token: "k".repeat(43), ipv6: false, socket: std::path::PathBuf::new() }
     }
 
     const SCREEN: Option<&str> = Some("sssssssssssssssssssssssssssssssssssssssssss");
 
-    fn fake(reply: Vec<u8>) -> (u16, std::thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
+    fn fake(reply: Vec<u8>) -> (Panel, std::thread::JoinHandle<String>) {
+        let (found, listener) = crate::testing::listener("image");
         let got = std::thread::spawn(move || {
             let (mut conn, _) = listener.accept().unwrap();
             conn.set_read_timeout(Some(std::time::Duration::from_millis(300))).unwrap();
@@ -137,7 +135,7 @@ mod tests {
             }
             String::from_utf8_lossy(&first[..n]).to_string()
         });
-        (port, got)
+        (found, got)
     }
 
     fn reply(status: &str, body: &[u8]) -> Vec<u8> {
@@ -168,12 +166,12 @@ mod tests {
     #[test]
     fn fetches_the_png_with_the_token_and_host() {
         let picture = [PNG, b"rest of the picture"].concat();
-        let (port, got) = fake(reply("200 OK", &picture));
-        assert_eq!(fetch(&panel(port), SCREEN, "a1b2c3", || Ok(())), Ok(picture));
+        let (found, got) = fake(reply("200 OK", &picture));
+        assert_eq!(fetch(&found, SCREEN, "a1b2c3", || Ok(())), Ok(picture));
         let sent = got.join().unwrap();
         assert!(sent.starts_with("GET /api/screen?id=a1b2c3 HTTP/1.1\r\n"));
         assert!(sent.contains(&format!("\r\nX-Rafiq-Token: {}\r\n", "k".repeat(43))));
-        assert!(sent.contains(&format!("\r\nHost: 127.0.0.1:{port}\r\n")));
+        assert!(sent.contains(&format!("\r\nHost: 127.0.0.1:8765\r\n")));
         assert!(sent.contains(&format!("\r\nX-Rafiq-Screen-Token: {}\r\n", SCREEN.unwrap())));
     }
 
@@ -184,25 +182,25 @@ mod tests {
 
     #[test]
     fn a_status_line_with_no_end_is_refused() {
-        let (port, _) = fake(vec![b'H'; 100_000]);
-        assert_eq!(fetch(&panel(port), SCREEN, "a1", || Ok(())), Err("refused".to_string()));
+        let (found, _) = fake(vec![b'H'; 100_000]);
+        assert_eq!(fetch(&found, SCREEN, "a1", || Ok(())), Err("refused".to_string()));
     }
 
     #[test]
     fn refuses_what_is_not_a_png_a_refusal_or_too_large() {
-        let (port, _) = fake(reply("200 OK", b"<html>not a picture</html>"));
-        assert_eq!(fetch(&panel(port), SCREEN, "a1", || Ok(())), Err("refused".to_string()));
-        let (port, _) = fake(reply("404 Not Found", b""));
-        assert_eq!(fetch(&panel(port), SCREEN, "a1", || Ok(())), Err("refused".to_string()));
-        let (port, _) = fake(format!("HTTP/1.0 200 OK\r\nContent-Length: {}\r\n\r\n", MAX_IMAGE + 1).into_bytes());
-        assert_eq!(fetch(&panel(port), SCREEN, "a1", || Ok(())), Err("too_long".to_string()));
+        let (found, _) = fake(reply("200 OK", b"<html>not a picture</html>"));
+        assert_eq!(fetch(&found, SCREEN, "a1", || Ok(())), Err("refused".to_string()));
+        let (found, _) = fake(reply("404 Not Found", b""));
+        assert_eq!(fetch(&found, SCREEN, "a1", || Ok(())), Err("refused".to_string()));
+        let (found, _) = fake(format!("HTTP/1.0 200 OK\r\nContent-Length: {}\r\n\r\n", MAX_IMAGE + 1).into_bytes());
+        assert_eq!(fetch(&found, SCREEN, "a1", || Ok(())), Err("too_long".to_string()));
     }
 
     #[test]
     fn nothing_is_sent_for_a_bad_id_or_to_a_listener_that_is_not_ours() {
         assert_eq!(fetch(&panel(1), SCREEN, "../x", || Ok(())), Err("refused".to_string()));
-        let (port, got) = fake(reply("200 OK", PNG));
-        assert_eq!(fetch(&panel(port), SCREEN, "a1", || Err("not_ours".to_string())), Err("not_ours".to_string()));
+        let (found, got) = fake(reply("200 OK", PNG));
+        assert_eq!(fetch(&found, SCREEN, "a1", || Err("not_ours".to_string())), Err("not_ours".to_string()));
         assert!(got.join().unwrap().is_empty());
     }
 

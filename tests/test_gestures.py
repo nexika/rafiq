@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from rafiq import config, gestures, hands, tracker
+from rafiq import config, gestures, hands, sock, tracker
 from rafiq.gestures import GestureControl, SystemDesktop
 from rafiq.panel import serve
 from rafiq.tools import pc
@@ -106,10 +106,9 @@ def test_the_tracker_sends_only_labels():
 
 
 def test_a_label_is_posted_with_the_session_token(monkeypatch):
-    import httpx
 
     calls = []
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: calls.append((url, kw)))
+    monkeypatch.setattr(sock, "post", lambda url, **kw: calls.append((url, kw)))
     tracker.post_label("http://127.0.0.1:8765/api/gesture", "s" * 40, "fist")
     url, kw = calls[0]
     assert url.endswith("/api/gesture") and kw["json"] == {"gesture": "fist"}
@@ -348,7 +347,6 @@ def test_the_voice_tool_turns_gestures_on_and_off(control):
 
 
 def test_the_shortcut_command_asks_the_running_rafiq(monkeypatch):
-    import httpx
 
     from rafiq.__main__ import main
 
@@ -357,7 +355,7 @@ def test_the_shortcut_command_asks_the_running_rafiq(monkeypatch):
     class Resp:
         status_code = 200
 
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: calls.append((url, kw)) or Resp())
+    monkeypatch.setattr(sock, "post", lambda url, **kw: calls.append((url, kw)) or Resp())
     assert main(["gestures", "on"]) == 0
     url, kw = calls[0]
     assert url.endswith("/api/gestures") and kw["json"] == {"on": True}
