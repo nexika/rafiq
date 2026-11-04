@@ -414,6 +414,12 @@ def test_a_paired_phone_s_token_from_another_account_is_refused_on_the_socket(se
     assert resp.status_code == 403 and served.asked == []
 
 
+@pytest.mark.parametrize("server", [mobile.PhoneServer, mobile.PhoneSocketServer])
+def test_the_listener_s_queue_holds_every_allowed_connection(server):
+    """macOS refuses a Unix connect when the queue is full, where Linux waits; socketserver's default queue is 5."""
+    assert server.request_queue_size >= mobile.MAX_CONNECTIONS
+
+
 def test_the_socket_server_closes_connections_over_the_limit(served, monkeypatch):
     held = []
     try:
