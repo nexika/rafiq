@@ -8,6 +8,8 @@ mod owner;
 mod panel;
 mod post;
 mod sse;
+#[cfg(all(test, unix))]
+mod testing;
 
 use std::time::Duration;
 
@@ -30,7 +32,7 @@ async fn send(action: Result<post::Action, String>) -> Result<(), String> {
     let action = action?;
     tauri::async_runtime::spawn_blocking(move || {
         let found = panel::home().ok_or("no_token".to_string()).and_then(|h| panel::find(&h))?;
-        post::send(&found, &action, || owner::check(found.port, found.ipv6))
+        post::send(&found, &action, || owner::check(&found))
     })
     .await
     .map_err(|_| "stopped".to_string())?
@@ -59,7 +61,7 @@ async fn stop() -> Result<(), String> {
 fn show_screen(app: tauri::AppHandle, found: panel::Panel, id: String) {
     std::thread::spawn(move || {
         let screen_token = panel::home().and_then(|h| panel::screen_token(&h));
-        let fetched = image::fetch(&found, screen_token.as_deref(), &id, || owner::check(found.port, found.ipv6));
+        let fetched = image::fetch(&found, screen_token.as_deref(), &id, || owner::check(&found));
         let payload = match fetched {
             Ok(png) => serde_json::json!({"id": id, "src": image::data_url(&png)}),
             Err(problem) => serde_json::json!({"id": id, "problem": problem}),
@@ -77,7 +79,7 @@ fn follow(app: tauri::AppHandle) {
         let problem = match panel::home().ok_or("no_token".to_string()).and_then(|h| panel::find(&h)) {
             Ok(found) => sse::follow(
                 &found,
-                || owner::check(found.port, found.ipv6),
+                || owner::check(&found),
                 || {
                     opened = true;
                     let _ = app.emit("rafiq-connection", serde_json::json!({"connected": true}));

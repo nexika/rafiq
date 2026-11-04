@@ -2,7 +2,6 @@
 //! line starting with `:` keeps the connection open. Errors are problem codes and never contain the token.
 
 use std::io::{BufRead, Read, Write};
-use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
 use crate::panel::Panel;
@@ -35,14 +34,40 @@ fn read_line(reader: &mut impl BufRead, line: &mut String) -> Result<usize, Stri
     Ok(n)
 }
 
-/// A connection to the panel, on IPv6 when that is where it listens. Nothing is sent yet.
-pub fn connect(panel: &Panel) -> Result<TcpStream, String> {
+/// The panel's socket (#234), where the token goes only once owner::check has found it this user's.
+#[cfg(unix)]
+pub type Conn = std::os::unix::net::UnixStream;
+#[cfg(not(unix))]
+pub type Conn = std::net::TcpStream;
+
+/// A connection to the panel's socket, within 2 seconds (a Rafiq that is stuck must not hang the widget), and
+/// only to a program the kernel says is this user's. Nothing is sent yet.
+#[cfg(unix)]
+pub fn connect(panel: &Panel) -> Result<Conn, String> {
+    let socket = panel.socket.clone();
+    let (done, result) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(Conn::connect(&socket));
+    });
+    let conn = result
+        .recv_timeout(Duration::from_secs(2))
+        .map_err(|_| "not_running".to_string())?
+        .map_err(|_| "not_running".to_string())?;
+    crate::owner::peer_ok(&conn)?;
+    Ok(conn)
+}
+
+/// On Windows (#193): the port, on IPv6 when that is where it listens. Nothing is sent yet.
+#[cfg(not(unix))]
+pub fn connect(panel: &Panel) -> Result<Conn, String> {
+    use std::net::SocketAddr;
+
     let address: SocketAddr = if panel.ipv6 {
         (std::net::Ipv6Addr::LOCALHOST, panel.port).into()
     } else {
         (std::net::Ipv4Addr::LOCALHOST, panel.port).into()
     };
-    TcpStream::connect_timeout(&address, Duration::from_secs(2)).map_err(|_| "not_running".to_string())
+    Conn::connect_timeout(&address, Duration::from_secs(2)).map_err(|_| "not_running".to_string())
 }
 
 /// Connect to the panel and read the stream until it ends. `check` runs before anything is sent (whose
@@ -83,19 +108,20 @@ pub fn follow(
     Err("refused".to_string())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
+    use crate::testing;
 
-    fn panel(port: u16, c: char) -> Panel {
-        Panel { port, token: c.to_string().repeat(43), ipv6: false }
+    fn panel(c: char) -> Panel {
+        let (mut found, _) = testing::listener("request");
+        found.token = c.to_string().repeat(43);
+        found
     }
 
     /// A fake panel that reads the request line, then writes `reply`.
-    fn fake(reply: &'static [u8]) -> u16 {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
+    fn fake(reply: &'static [u8]) -> Panel {
+        let (found, listener) = testing::listener("events");
         std::thread::spawn(move || {
             let (mut conn, _) = listener.accept().unwrap();
             let mut first = String::new();
@@ -103,7 +129,7 @@ mod tests {
             assert!(first.starts_with("GET /events?token="));
             conn.write_all(reply).unwrap();
         });
-        port
+        found
     }
 
     #[test]
@@ -121,18 +147,18 @@ mod tests {
 
     #[test]
     fn asks_for_the_stream_on_this_computer_with_the_token() {
-        let request = request(&panel(8765, 't'));
+        let request = request(&panel('t'));
         assert!(request.starts_with(&format!("GET /events?token={} HTTP/1.1\r\n", "t".repeat(43))));
         assert!(request.contains("\r\nHost: 127.0.0.1:8765\r\n") && request.ends_with("\r\n\r\n"));
     }
 
     #[test]
     fn follows_a_stream_from_a_fake_panel_and_says_when_it_opened() {
-        let port = fake(b"HTTP/1.0 200 OK\r\nContent-Type: text/event-stream\r\n\r\n\
+        let found = fake(b"HTTP/1.0 200 OK\r\nContent-Type: text/event-stream\r\n\r\n\
             data: {\"kind\": \"state\", \"state\": \"idle\"}\n\n: keep-alive\n\n\
             data: {\"kind\": \"said\", \"text\": \"Noon.\"}\n\n");
         let (mut opened, mut kinds) = (false, vec![]);
-        let end = follow(&panel(port, 't'), || Ok(()), || opened = true, |e| kinds.push(e["kind"].to_string()));
+        let end = follow(&found, || Ok(()), || opened = true, |e| kinds.push(e["kind"].to_string()));
         assert_eq!(end, Err("stopped".to_string()));
         assert!(opened);
         assert_eq!(kinds, ["\"state\"", "\"said\""]);
@@ -140,16 +166,15 @@ mod tests {
 
     #[test]
     fn a_refused_stream_never_opens() {
-        let port = fake(b"HTTP/1.0 403 Forbidden\r\n\r\n");
+        let found = fake(b"HTTP/1.0 403 Forbidden\r\n\r\n");
         let mut opened = false;
-        assert_eq!(follow(&panel(port, 's'), || Ok(()), || opened = true, |_| {}), Err("refused".to_string()));
+        assert_eq!(follow(&found, || Ok(()), || opened = true, |_| {}), Err("refused".to_string()));
         assert!(!opened);
     }
 
     #[test]
-    fn nothing_is_sent_when_the_listener_is_not_ours() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
+    fn nothing_is_sent_when_the_socket_is_not_ours() {
+        let (found, listener) = testing::listener("notours");
         let got = std::thread::spawn(move || {
             let (mut conn, _) = listener.accept().unwrap();
             let mut sent = vec![];
@@ -157,7 +182,7 @@ mod tests {
             let _ = conn.read_to_end(&mut sent);
             sent
         });
-        let end = follow(&panel(port, 'x'), || Err("not_ours".to_string()), || {}, |_| {});
+        let end = follow(&found, || Err("not_ours".to_string()), || {}, |_| {});
         assert_eq!(end, Err("not_ours".to_string()));
         assert!(got.join().unwrap().is_empty());
     }
@@ -169,8 +194,10 @@ mod tests {
     }
 
     #[test]
-    fn nothing_listening_means_rafiq_is_not_running() {
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();  // dropped: closed
-        assert_eq!(follow(&panel(port, 't'), || Ok(()), || {}, |_| {}), Err("not_running".to_string()));
+    fn no_socket_means_rafiq_is_not_running() {
+        let (found, listener) = testing::listener("closed");
+        drop(listener);
+        std::fs::remove_file(&found.socket).unwrap();
+        assert_eq!(follow(&found, || Ok(()), || {}, |_| {}), Err("not_running".to_string()));
     }
 }

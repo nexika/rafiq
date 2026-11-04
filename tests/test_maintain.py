@@ -39,6 +39,13 @@ def test_backup_keeps_settings_recordings_and_data_but_not_downloads(rafiq_home)
     assert path.name == "rafiq-backup-20261010-093005.tar.gz"
 
 
+def test_backup_leaves_out_the_panel_s_socket_folder(rafiq_home):
+    _settings(rafiq_home)
+    (rafiq_home / "run").mkdir(mode=0o700)
+    (rafiq_home / "run" / "panel.sock").write_text("")   # a socket can't be archived; it's made again on start
+    assert not any(name.startswith("rafiq/run") for name in _names(maintain.backup(now=NOW)))
+
+
 def test_backup_is_readable_only_by_its_owner(rafiq_home):
     _settings(rafiq_home)
     path = maintain.backup(now=NOW)

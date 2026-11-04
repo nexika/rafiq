@@ -5,7 +5,7 @@ import pytest
 from test_brain_panel import FakeAssistant, request
 
 from rafiq import __main__ as cli
-from rafiq import config, notify
+from rafiq import config, notify, sock
 from rafiq.assistant import Assistant, Events
 from rafiq.panel import serve
 
@@ -102,7 +102,6 @@ def test_the_panel_refuses_an_unknown_event(panel):
 
 
 def test_rafiq_notify_posts_to_the_running_rafiq(monkeypatch):
-    import httpx
 
     sent = []
 
@@ -110,7 +109,7 @@ def test_rafiq_notify_posts_to_the_running_rafiq(monkeypatch):
         sent.append((url, json, headers))
         return type("R", (), {"status_code": 200})()
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(sock, "post", post)
     assert cli.main(["notify", "--failed", "CI", "on", "main"]) == 0
     url, body, headers = sent[0]
     assert url.endswith("/api/notify") and body == {"text": "CI on main", "event": "failed", "lang": None}
@@ -123,7 +122,7 @@ def test_rafiq_notify_says_when_rafiq_is_not_running(monkeypatch, capsys):
     def down(*args, **kwargs):
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(httpx, "post", down)
+    monkeypatch.setattr(sock, "post", down)
     assert cli.main(["notify", "done"]) == 1
     assert "not running" in capsys.readouterr().err
 

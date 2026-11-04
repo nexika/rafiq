@@ -10,9 +10,11 @@ could load them, while only this user can read panel.token. `rafiq panel` reads 
 (POST /api/panel-key) and opens /#key=..., after "#" so no server receives it. The page trades the key
 (POST /api/panel-key/redeem) for a session of its own, kept in that tab's sessionStorage, and sends it in the
 X-Rafiq-Session header on every request, the event stream included. No cookie: every port of 127.0.0.1 would
-see one. Rafiq's own programs (`rafiq ask`, the widget, `rafiq mcp`) send the token instead. On Linux a
-connection from another user's program is refused. The hand-gesture tracker posts labels to /api/gesture with
-a token of its own, made each time it starts, which opens nothing else.
+see one. Rafiq's own programs (`rafiq ask`, the widget, `rafiq mcp`) send the token instead, over the panel's
+Unix socket (rafiq/sock.py), where the kernel says whose program connected (#234). On Linux a TCP connection
+from another user's program is refused too; on macOS, where nothing can say whose it is, the port takes no
+token and serves only the pages' sessions. The hand-gesture tracker posts labels to /api/gesture with a token
+of its own, made each time it starts, which opens nothing else.
 
 Besides the conversation, the page has three more: models (Ollama and Whisper), status (is each part
 up) and permissions (each tool's level, remembered approvals). They read with GET and the session (or the
@@ -28,6 +30,8 @@ import json
 import os
 import queue
 import secrets
+import socket
+import socketserver
 import sys
 import threading
 import time
@@ -36,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import config, drive, lang, modes, notify, permissions, persona, status, subscriptions
+from . import config, drive, lang, modes, notify, permissions, persona, sock, status, subscriptions
 from .brain import BrainError
 from .http_body import BodyError, body_length
 from .tools import display
@@ -124,6 +128,12 @@ def connection_owner(client: tuple, server: tuple) -> int | None:
     return None
 
 
+def tcp_programs() -> bool:
+    """May Rafiq's own programs come in over TCP? Only where /proc says whose program opened a connection: off
+    Linux they use the socket, and the port serves only the pages' sessions (#234)."""
+    return sys.platform.startswith("linux")
+
+
 def make_handler(assistant, token: str, port: int, screen_token: str = ""):
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     # One-time keys from `rafiq panel`, and the sessions they became, each with when it ends. In memory:
@@ -174,8 +184,16 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
         def _host_ok(self) -> bool:
             return self.headers.get("Host", "") in allowed_hosts
 
+        def _over_socket(self) -> bool:
+            return self.connection.family == socket.AF_UNIX
+
+        def _programs_here(self) -> bool:
+            """Rafiq's own programs may come in this way. Off Linux a TCP connection can't be told from another
+            account's, so there they use the socket and the port serves only the browser's sessions (#234)."""
+            return self._over_socket() or tcp_programs()
+
         def _token_ok(self, given: str | None) -> bool:
-            return bool(given) and same(given, token)
+            return self._programs_here() and bool(given) and same(given, token)
 
         def _session_ok(self) -> bool:
             given = self.headers.get("X-Rafiq-Session") or ""
@@ -186,8 +204,11 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             return self._token_ok(self.headers.get("X-Rafiq-Token")) or self._session_ok()
 
         def _mine(self) -> bool:
-            """Not another user's program. On Linux the connection's other end must be this user's, and a
-            connection whose owner can't be found is refused; elsewhere there is no /proc to ask."""
+            """Not another user's program. On the socket the kernel says whose program connected; on TCP under
+            Linux, /proc does. A connection whose owner can't be found is refused. On TCP elsewhere there is no
+            /proc to ask, and only a session gets in there."""
+            if self._over_socket():
+                return sock.peer_uid(self.connection) == os.getuid()
             if not sys.platform.startswith("linux"):
                 return True
             return connection_owner(self.client_address, self.connection.getsockname()) == os.getuid()
@@ -267,7 +288,8 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             gestures = getattr(assistant, "gestures", None)
             # The gesture tracker has its own token, good for /api/gesture and nothing else.
             if path == "/api/gesture":
-                allowed = gestures is not None and gestures.token_ok(self.headers.get("X-Rafiq-Gesture-Token"))
+                allowed = (self._programs_here() and gestures is not None
+                           and gestures.token_ok(self.headers.get("X-Rafiq-Gesture-Token")))
             elif path == "/api/panel-key":       # only the token holder: a session can't make more sessions
                 allowed = self._token_ok(self.headers.get("X-Rafiq-Token"))
             elif path == "/api/panel-key/redeem":   # the page, with the key it found after "#"
@@ -446,4 +468,19 @@ def serve(assistant, host: str, port: int, token: str, screen_token: str | None 
     screen_token = config.screen_token() if screen_token is None else screen_token
     server.RequestHandlerClass = make_handler(assistant, token, server.server_address[1], screen_token)
     server.daemon_threads = True
+    return server
+
+
+class _SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+
+
+def serve_socket(tcp: ThreadingHTTPServer) -> socketserver.UnixStreamServer:
+    """The same panel on its Unix socket, for Rafiq's own programs (#234). It shares the TCP server's handler,
+    so a one-time key asked for here opens the page in the browser. ValueError when the socket can't be made
+    safely (a path too long, a folder that isn't this user's)."""
+    where = sock.path()
+    sock.prepare(where)
+    server = _SocketServer(str(where), tcp.RequestHandlerClass)
+    os.chmod(where, 0o600)
     return server

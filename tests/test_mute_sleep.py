@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from rafiq import assistant as assistant_mod
-from rafiq import config, lang
+from rafiq import config, lang, sock
 from rafiq.__main__ import main
 
 
@@ -162,7 +162,6 @@ def test_muting_cancels_a_pending_confirmation(rafiq):
 
 
 def test_rafiq_mute_asks_the_running_rafiq(monkeypatch):
-    import httpx
 
     sent = []
 
@@ -170,7 +169,7 @@ def test_rafiq_mute_asks_the_running_rafiq(monkeypatch):
         sent.append((url, json))
         return SimpleNamespace(status_code=200)
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(sock, "post", post)
     assert main(["mute"]) == 0
     assert main(["mute", "off"]) == 0
     assert [s[0].rsplit("/", 1)[1] for s in sent] == ["mute", "mute"]
@@ -183,7 +182,7 @@ def test_rafiq_mute_says_when_rafiq_is_not_running(monkeypatch, capsys):
     def down(*args, **kwargs):
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(httpx, "post", down)
+    monkeypatch.setattr(sock, "post", down)
     assert main(["mute"]) == 1
     assert "not running" in capsys.readouterr().err
 

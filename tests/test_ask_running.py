@@ -9,6 +9,7 @@ import pytest
 from test_brain_panel import FakeAssistant, request
 
 from rafiq import __main__ as cli
+from rafiq import sock
 from rafiq.assistant import Assistant, Events
 from rafiq.panel import serve
 
@@ -129,7 +130,7 @@ def local_brain(monkeypatch, answer="local answer"):
 
 def test_ask_goes_through_the_running_rafiq(monkeypatch, capsys):
     sent = []
-    monkeypatch.setattr(httpx, "post", lambda url, **k: sent.append((url, k)) or Answer(200, {"answer": "It is noon."}))
+    monkeypatch.setattr(sock, "post", lambda url, **k: sent.append((url, k)) or Answer(200, {"answer": "It is noon."}))
     no_local_brain(monkeypatch)
     assert cli.cmd_ask(ask_args("what", "time", "is", "it", lang="en", speak=True)) == 0
     assert capsys.readouterr().out.strip() == "It is noon."
@@ -142,14 +143,14 @@ def test_with_nothing_running_ask_answers_by_itself(monkeypatch, capsys):
     def refused(url, **k):
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(httpx, "post", refused)
+    monkeypatch.setattr(sock, "post", refused)
     local_brain(monkeypatch)
     assert cli.cmd_ask(ask_args("hello")) == 0
     assert capsys.readouterr().out.strip() == "local answer"
 
 
 def test_an_older_rafiq_without_ask_is_answered_here(monkeypatch, capsys):
-    monkeypatch.setattr(httpx, "post", lambda url, **k: Answer(400, {"error": "unknown request"}))
+    monkeypatch.setattr(sock, "post", lambda url, **k: Answer(400, {"error": "unknown request"}))
     local_brain(monkeypatch)
     assert cli.cmd_ask(ask_args("hello")) == 0
     assert capsys.readouterr().out.strip() == "local answer"
@@ -159,12 +160,12 @@ def test_a_request_the_running_rafiq_took_is_never_run_twice(monkeypatch, capsys
     def slow(url, **k):
         raise httpx.ReadTimeout("no answer yet")
 
-    monkeypatch.setattr(httpx, "post", slow)
+    monkeypatch.setattr(sock, "post", slow)
     no_local_brain(monkeypatch)
     assert cli.cmd_ask(ask_args("turn", "off", "the", "lights")) == 1
 
 
 def test_choosing_a_brain_answers_here(monkeypatch, capsys):
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: pytest.fail("asked the running Rafiq"))
+    monkeypatch.setattr(sock, "post", lambda *a, **k: pytest.fail("asked the running Rafiq"))
     local_brain(monkeypatch)
     assert cli.cmd_ask(ask_args("hello", brain="ollama")) == 0

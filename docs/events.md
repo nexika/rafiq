@@ -5,10 +5,27 @@ happens. This page is the contract: what a client can rely on, and every kind of
 
 ## Reading the stream
 
-`GET http://127.0.0.1:<port>/events?token=<token>` is a
-[server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html) stream. The
-panel listens on `127.0.0.1` only, checks the Host header, and refuses a wrong or missing token
-with 403.
+`GET /events` on the panel's Unix socket, with the token in `X-Rafiq-Token` (or `?token=`), is a
+[server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html) stream:
+
+```bash
+printf 'X-Rafiq-Token: %s\n' "$(cat ~/.config/rafiq/panel.token)" |
+  curl -N -H @- --unix-socket ~/.config/rafiq/run/panel.sock http://127.0.0.1:8765/events
+```
+
+The token goes in through stdin: on a command line, `ps` would show it to every account here.
+
+The socket is `<settings>/run/panel.sock` (`~/.config/rafiq` unless `RAFIQ_HOME` says otherwise). The URL
+still names `127.0.0.1` and the panel's port, because the panel checks the Host header. A wrong or missing
+token gets 403. The panel asks the kernel whose program connected and refuses another account's. A program
+of yours should do the same before it sends the token: ask the kernel who is at the other end (`SO_PEERCRED`
+on Linux, `getpeereid` or `LOCAL_PEERCRED` on macOS) and send only to your own uid, as `rafiq/sock.py` and
+the widget do.
+
+The TCP port, `http://127.0.0.1:<port>`, is for the browser's page. On macOS it takes no token at all,
+since nothing there says whose program opened a TCP connection (#234). On Linux it still takes the token
+from your own programs, which `/proc/net/tcp` names. But a client there can't tell whose program is
+listening, so prefer the socket.
 
 When a client connects, it gets the last 100 kept events, then where things stand now (`state`,
 `privacy`, `mode`, `persona`), then each new event as it happens. A line starting with `:` every
@@ -153,10 +170,10 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 ## The screenshot
 
 A `screen` event names its screenshot by `id`; the picture itself is never on the stream or in the logs.
-`GET /api/screen?id=<id>` answers the PNG (`Cache-Control: no-store`). It needs the panel's token in
-`X-Rafiq-Token` and the screen token in `X-Rafiq-Screen-Token`, with the usual Host check. The screen token
-is in `screen.token`, readable only by this user: the panel's token alone isn't enough, since any program
-on this computer can read it from the panel's page. Rafiq keeps only the latest screenshot, in memory, and
+`GET /api/screen?id=<id>` on the panel's socket answers the PNG (`Cache-Control: no-store`). It needs the
+panel's token in `X-Rafiq-Token` and the screen token in `X-Rafiq-Screen-Token`, with the usual Host check.
+The screen token is in `screen.token`, readable only by this user, so the screenshot takes more than the
+panel's token alone. Rafiq keeps only the latest screenshot, in memory, and
 hands it out once, within 5 minutes; after that, or after "forget that", the answer is 404. Marks outside the picture, upside down or of no size were dropped before the event,
 so the numbers that remain match the text.
 
@@ -164,7 +181,7 @@ so the numbers that remain match the text.
 
 `plan`, `explain` and `card` come from the brain's `show_steps`, `explain` and `show_card` tools
 (`rafiq/tools/display.py`). In a request they carry its `run_id`. From a program using `rafiq mcp`
-they reach the running Rafiq through `POST /api/display` with the panel's token, as
+they reach the running Rafiq through `POST /api/display` on the panel's socket, with its token, as
 `{"kind": "explain", "data": {"text": "…", "tag": "en"}}`. They carry `"source": "mcp"` and no
 `run_id`. Anything else is refused with 400, and more than 5 waiting to be shown with 429. All text is
 shown as text: the panel never renders it as HTML.

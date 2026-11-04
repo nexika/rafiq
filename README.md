@@ -144,9 +144,9 @@ itself when the launchd agent starts it. If Rafiq hears nothing after `rafiq ins
 under Microphone and Accessibility in System Settings > Privacy & Security. This hasn't been tried on a Mac yet:
 please report what macOS asks.
 
-On a Mac shared by several accounts, the panel can't yet tell another account's connection from yours, as it
-does on Linux: its token is the only barrier (#234). Until that's fixed, use Rafiq on a Mac where you are the
-only account.
+On a Mac shared by several accounts, Rafiq's own programs (`rafiq ask`, `rafiq mcp`, the widget) reach it over
+a socket in `~/.config/rafiq/run`, which only you can open, and it refuses another account's program there. The
+panel's port in the browser opens only with the one-time key `rafiq panel` gets.
 
 There is no echo cancellation from the system on macOS, so use headphones if Rafiq hears itself. The graphics
 card tool isn't offered on a Mac.

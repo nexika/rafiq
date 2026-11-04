@@ -86,10 +86,9 @@ pub fn send(panel: &Panel, action: &Action, check: impl FnOnce() -> Result<(), S
 mod tests {
     use super::*;
     use std::io::Read;
-    use std::net::TcpListener;
 
     fn panel(port: u16) -> Panel {
-        Panel { port, token: "k".repeat(43), ipv6: false }
+        Panel { port, token: "k".repeat(43), ipv6: false, socket: std::path::PathBuf::new() }
     }
 
     #[test]
@@ -125,9 +124,9 @@ mod tests {
         assert!(request(&panel(1), &Action::Stop).starts_with("POST /api/stop "));
     }
 
-    fn fake(status: &'static [u8]) -> (u16, std::thread::JoinHandle<Vec<u8>>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
+    #[cfg(unix)]
+    fn fake(status: &'static [u8]) -> (Panel, std::thread::JoinHandle<Vec<u8>>) {
+        let (found, listener) = crate::testing::listener("post");
         let got = std::thread::spawn(move || {
             let (mut conn, _) = listener.accept().unwrap();
             conn.set_read_timeout(Some(std::time::Duration::from_millis(300))).unwrap();
@@ -139,26 +138,29 @@ mod tests {
             }
             sent
         });
-        (port, got)
+        (found, got)
     }
 
+    #[cfg(unix)]
     #[test]
-    fn a_request_the_panel_accepts_is_sent() {
-        let (port, got) = fake(b"HTTP/1.0 200 OK\r\n\r\n{}");
-        assert_eq!(send(&panel(port), &Action::Stop, || Ok(())), Ok(()));
+    fn a_request_the_panel_accepts_is_sent_over_its_socket() {
+        let (found, got) = fake(b"HTTP/1.0 200 OK\r\n\r\n{}");
+        assert_eq!(send(&found, &Action::Stop, || Ok(())), Ok(()));
         assert!(got.join().unwrap().starts_with(b"POST /api/stop "));
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_request_the_panel_refuses_says_so() {
-        let (port, _) = fake(b"HTTP/1.0 403 Forbidden\r\n\r\n");
-        assert_eq!(send(&panel(port), &Action::Stop, || Ok(())), Err("refused".to_string()));
+        let (found, _) = fake(b"HTTP/1.0 403 Forbidden\r\n\r\n");
+        assert_eq!(send(&found, &Action::Stop, || Ok(())), Err("refused".to_string()));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn nothing_is_sent_to_a_listener_that_is_not_ours() {
-        let (port, got) = fake(b"HTTP/1.0 200 OK\r\n\r\n");
-        let sent = send(&panel(port), &Action::Stop, || Err("not_ours".to_string()));
+    fn nothing_is_sent_to_a_socket_that_is_not_ours() {
+        let (found, got) = fake(b"HTTP/1.0 200 OK\r\n\r\n");
+        let sent = send(&found, &Action::Stop, || Err("not_ours".to_string()));
         assert_eq!(sent, Err("not_ours".to_string()));
         assert!(got.join().unwrap().is_empty());
     }
