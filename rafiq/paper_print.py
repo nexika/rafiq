@@ -8,7 +8,6 @@ The PDF itself is made elsewhere; by default it is data/paper/YYYY-MM-DD.pdf.
 
 from __future__ import annotations
 
-import fcntl
 import re
 import subprocess
 from collections.abc import Callable
@@ -17,6 +16,7 @@ from pathlib import Path
 from typing import Protocol
 
 from . import config as config_mod
+from . import desktop
 
 ACTION = "print today's morning paper"
 TIMER = "rafiq-paper.timer"
@@ -54,7 +54,7 @@ class CupsPrinter:
 
 
 class DailyLock:
-    """The date of the last print, in a file every Rafiq process shares; checked and set under flock."""
+    """The date of the last print, in a file every Rafiq process shares; checked and set under a file lock."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -62,7 +62,7 @@ class DailyLock:
     def _locked(self, change: Callable[[str], str | None]) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "a+", encoding="utf-8") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
+            desktop.lock_exclusive(f)
             f.seek(0)
             new = change(f.read().strip())
             if new is None:

@@ -56,7 +56,10 @@ def desktop_entries(dirs: list[str] | None = None) -> list[dict]:
 
 
 def installed_apps() -> list[dict]:
-    """The apps the menu shows: .desktop files on Linux, .app bundles on macOS."""
+    """The apps the menu shows: .desktop files on Linux, .app bundles on macOS, the Start Menu's shortcuts on
+    Windows."""
+    if desktop.system() == "windows":
+        return desktop.win_apps()
     return desktop.mac_apps() if desktop.system() == "mac" else desktop_entries()
 
 
@@ -99,7 +102,7 @@ def launch_args(spec: dict) -> list[str]:
             raise ValueError("steam is a game id like 49520 or a steam://rungameid/ link")
         return desktop.open_command(f"steam://rungameid/{game}")
     if kinds[0] == "flatpak":
-        if desktop.system() == "mac":
+        if desktop.system() != "linux":
             raise ValueError("Flatpak is for Linux only")
         if not isinstance(value, str) or not FLATPAK_ID.fullmatch(value):
             raise ValueError("flatpak is an app id like com.valvesoftware.Steam")
@@ -140,7 +143,8 @@ def catalogue(cfg: dict) -> list[dict]:
 
 
 def _spawn(args: list[str]) -> None:
-    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+                     **desktop.no_window())
 
 
 def _cfg(ctx) -> dict:
@@ -242,13 +246,18 @@ def parse_volume(text: str) -> tuple[int, bool]:
        "change": {"type": "integer", "description": "raise (positive) or lower (negative) by this many percent"},
        "mute": {"type": "boolean", "description": "true to mute, false to unmute"}}, level="act")
 def volume(level: int | None = None, change: int | None = None, mute: bool | None = None) -> str:
-    mac = desktop.system() == "mac"
+    mac, windows = desktop.system() == "mac", desktop.system() == "windows"
     try:
-        current, muted = desktop.mac_volume() if mac else parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
+        if windows:
+            current, muted = desktop.win_volume()
+        else:
+            current, muted = desktop.mac_volume() if mac else parse_volume(_run(["wpctl", "get-volume", SINK]).stdout)
     except desktop.NoVolume as exc:
         return f"error: {exc}"
     if mute is not None:
-        if mac:
+        if windows:
+            desktop.set_win_volume(mute=bool(mute))
+        elif mac:
             desktop.set_mac_volume(mute=bool(mute))
         else:
             _run(["wpctl", "set-mute", SINK, "1" if mute else "0"])
@@ -260,7 +269,9 @@ def volume(level: int | None = None, change: int | None = None, mute: bool | Non
         target = current + int(change)
     if target is not None:
         target = max(0, min(100, target))
-        if mac:
+        if windows:
+            desktop.set_win_volume(level=target)
+        elif mac:
             desktop.set_mac_volume(level=target)
         else:
             _run(["wpctl", "set-volume", SINK, f"{target / 100:.2f}"])

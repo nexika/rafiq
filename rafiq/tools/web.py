@@ -143,5 +143,5 @@ def open_in_browser(url: str) -> str:
     from .. import desktop
 
     subprocess.Popen(desktop.open_command(url), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True)
+                     start_new_session=True, **desktop.no_window())
     return f"opened {url}"

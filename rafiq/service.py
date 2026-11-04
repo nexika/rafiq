@@ -6,6 +6,10 @@ starts (load_env); the keys stay in that file, never in the agent.
 systemd keeps one Rafiq running, restarts it when it fails and sends its output to the journal
 (journalctl --user -u rafiq). A user service does not see the shell's exported keys, so they go in
 an optional file, ~/.config/rafiq/rafiq.env (KEY=value lines), which the unit reads but never copies.
+
+On Windows (#193), a Task Scheduler task named "rafiq" that starts at this user's logon, without a window
+(pythonw.exe), and writes Rafiq's output to task.log in the settings folder. It can't set variables, so Rafiq reads
+rafiq.env from the settings folder itself.
 """
 
 from __future__ import annotations
@@ -190,22 +194,38 @@ def _uninstall_mac(run) -> bool:
     return True
 
 
+def _env_text(data: bytes) -> str:
+    """rafiq.env as text: Windows PowerShell 5.1's `>` writes UTF-16 and its Set-Content -Encoding UTF8 a BOM, which
+    would otherwise stop Rafiq or hide the first key."""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16")
+    return data.decode("utf-8-sig")
+
+
 def load_env(environ=None) -> None:
     """KEY=value lines from the file in RAFIQ_ENV_FILE (rafiq.env), for keys a launchd agent can't otherwise
     get; what the environment already has wins. Nothing is printed or logged."""
+    from . import desktop
+
     environ = os.environ if environ is None else environ
-    name = environ.get("RAFIQ_ENV_FILE")
-    if not name:
+    windows = desktop.system() == "windows"
+    # Task Scheduler can't set a variable for its task, so on Windows the file in the settings folder is read
+    # without being named. The folder's ACL keeps it the user's (config.make_home_private), not an owner check: where
+    # that ACL couldn't be set, another account could have written it (a proxy, another API address), and it is
+    # left unread.
+    name = environ.get("RAFIQ_ENV_FILE") or (str(env_file()) if windows else "")
+    if not name or (windows and not config.home_private()):
         return
     path = Path(name)
     try:
-        info = path.stat()
-        if info.st_uid != os.getuid():           # someone else's file: its keys could be anyone's
-            return
-        if info.st_mode & 0o077:                 # written as other files are (0644): the keys are the user's only
-            path.chmod(0o600)
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
+        if not windows:
+            info = path.stat()
+            if info.st_uid != os.getuid():       # someone else's file: its keys could be anyone's
+                return
+            if info.st_mode & 0o077:             # written as other files are (0644): the keys are the user's only
+                path.chmod(0o600)
+        lines = _env_text(path.read_bytes()).splitlines()
+    except (OSError, UnicodeError):
         return
     for line in lines:
         line = line.strip()
@@ -226,6 +246,8 @@ def install(run: Systemctl | None = None, python: str | None = None) -> Path:
     and restarts the one Rafiq, so there are never two. On macOS, the launchd agent."""
     from . import desktop
 
+    if desktop.system() == "windows":
+        return _install_windows(run or globals()["windows_run"], python)
     if desktop.system() == "mac":
         return _install_mac(run or launchctl, python)
     run = run or systemctl
@@ -242,6 +264,8 @@ def uninstall(run: Systemctl | None = None) -> bool:
     """Stop Rafiq, stop starting it at login and remove the unit. False when it was not installed."""
     from . import desktop
 
+    if desktop.system() == "windows":
+        return _uninstall_windows(run or globals()["windows_run"])
     if desktop.system() == "mac":
         return _uninstall_mac(run or launchctl)
     run = run or systemctl
@@ -252,3 +276,136 @@ def uninstall(run: Systemctl | None = None) -> bool:
     path.unlink()
     _call(run, "daemon-reload")
     return True
+
+
+# ---------------------------------------------------------------------- Windows: Task Scheduler
+
+TASK = "Rafiq"
+
+
+def task_name(sid: str | None = None) -> str:
+    """One task per account: Task Scheduler's names are the whole computer's, and another account's "Rafiq" task
+    couldn't be replaced. The SID is digits and dashes only, so the name is safe inside a script."""
+    import re
+
+    from . import desktop
+
+    sid = sid or desktop.user_sid() or ""
+    return f"{TASK}-{sid}" if re.fullmatch(r"S-1(-\d+)+", sid) else TASK
+TASK_LOG_BYTES = 5_000_000          # task.log starts again past this when Rafiq starts, at each logon
+
+
+def windows_run(args: list[str], **kwargs) -> subprocess.CompletedProcess:
+    from . import desktop
+
+    kwargs.setdefault("timeout", 30)
+    return desktop.run(args, **kwargs)
+
+
+def task_path() -> Path:
+    return config.home() / "rafiq-task.xml"
+
+
+def _pythonw(python: str) -> str:
+    """The windowless interpreter beside python.exe: a task that ran python.exe would open a console at logon."""
+    from pathlib import PureWindowsPath
+
+    path = PureWindowsPath(python)
+    return python if path.name.lower() == "pythonw.exe" else str(path.with_name("pythonw.exe"))
+
+
+def task_xml(python: str | None = None, sid: str = "") -> str:
+    """The task: at this user's logon, as this user without raised rights, for as long as it runs, one at a time.
+    Every value goes in through ElementTree, so a path with & or < in it stays a path."""
+    import xml.etree.ElementTree as ET
+
+    ns = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+    task = ET.Element("Task", {"version": "1.2", "xmlns": ns})
+
+    def add(parent, tag: str, text: str | None = None, **attrs):
+        child = ET.SubElement(parent, tag, attrs)
+        if text is not None:
+            child.text = text
+        return child
+
+    add(add(task, "RegistrationInfo"), "Description", "Rafiq voice assistant")
+    trigger = add(add(task, "Triggers"), "LogonTrigger")
+    add(trigger, "Enabled", "true")
+    add(trigger, "UserId", sid)
+    principal = add(add(task, "Principals"), "Principal", id="Author")
+    add(principal, "UserId", sid)
+    add(principal, "LogonType", "InteractiveToken")
+    add(principal, "RunLevel", "LeastPrivilege")
+    settings = add(task, "Settings")
+    # Installing again runs the task again: the new Rafiq replaces the old one, as `systemctl restart` does.
+    add(settings, "MultipleInstancesPolicy", "StopExisting")
+    add(settings, "DisallowStartIfOnBatteries", "false")
+    add(settings, "StopIfGoingOnBatteries", "false")
+    add(settings, "ExecutionTimeLimit", "PT0S")            # no limit: Task Scheduler would stop it after 3 days
+    add(settings, "Priority", "5")                         # normal; a task's default, 7, is below normal and would
+    #                                                        starve the voice loop while a game or a build runs
+    restart = add(settings, "RestartOnFailure")
+    add(restart, "Interval", "PT1M")
+    add(restart, "Count", "3")
+    add(settings, "Enabled", "true")
+    action = add(add(task, "Actions", Context="Author"), "Exec")
+    add(action, "Command", _pythonw(python or sys.executable))
+    # -X utf8: Rafiq's files and pipes in UTF-8 whatever the code page; -P: the working folder isn't imported.
+    add(action, "Arguments", "-X utf8 -P -m rafiq run")
+    add(action, "WorkingDirectory", str(config.home()))
+    return '<?xml version="1.0" encoding="UTF-16"?>\n' + ET.tostring(task, encoding="unicode")
+
+
+def _schtasks(run, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    from . import desktop
+
+    done = run([desktop.win_exe("schtasks.exe"), *args], timeout=30)
+    if check and done.returncode != 0:
+        raise ServiceError(f"schtasks {' '.join(args[:1])} failed: {(done.stderr or done.stdout or '').strip()}")
+    return done
+
+
+def _install_windows(run, python: str | None) -> Path:
+    from . import desktop
+
+    sid = desktop.user_sid(run)
+    if not sid:
+        raise ServiceError("couldn't read this account's SID from `whoami /user`")
+    home = config.home()
+    home.mkdir(parents=True, exist_ok=True)
+    path = task_path()
+    path.write_text(task_xml(python, sid), encoding="utf-16")      # schtasks reads the XML as UTF-16
+    name = task_name(sid)
+    _schtasks(run, "/Create", "/XML", str(path), "/TN", name, "/F")
+    _schtasks(run, "/Run", "/TN", name)                           # StopExisting: the one running, if any, stops
+    return path
+
+
+def _uninstall_windows(run) -> bool:
+    from . import desktop
+
+    name = task_name(desktop.user_sid(run))
+    if _schtasks(run, "/Query", "/TN", name, check=False).returncode != 0:
+        return False
+    _schtasks(run, "/End", "/TN", name, check=False)
+    _schtasks(run, "/Delete", "/TN", name, "/F")
+    task_path().unlink(missing_ok=True)
+    return True
+
+
+def detached_output() -> None:
+    """Started by the logon task, under pythonw, Rafiq has no stdout: what it prints goes to task.log instead. The
+    programs it starts open no window of their own (desktop.no_window), since there is no console to share."""
+    from . import desktop
+
+    if desktop.system() != "windows" or sys.stdout is not None:
+        return
+    log = config.home() / "task.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if log.stat().st_size > TASK_LOG_BYTES:
+            log.unlink()
+    except OSError:
+        pass
+    out = open(log, "a", encoding="utf-8", buffering=1)           # noqa: SIM115 (open for the life of the process)
+    sys.stdout = sys.stderr = out

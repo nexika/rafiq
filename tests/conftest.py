@@ -47,6 +47,27 @@ def never_the_real_service(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def never_the_real_windows(monkeypatch):
+    """No test may change a real Windows machine's permissions or tasks (#193): `rafiq` closes its settings folder
+    with icacls before every command there, and install-service registers a logon task. A test of either gives its
+    own runner, and resets config._private_done itself."""
+    from rafiq import __main__ as cli
+    from rafiq import config, desktop, service
+
+    def no_windows(args, **kwargs):
+        raise OSError(f"no real {args[0]} in tests")
+
+    monkeypatch.setattr(config, "_private_done", True)
+    monkeypatch.setattr(config, "_private_ok", True)
+    monkeypatch.setattr(service, "windows_run", no_windows)
+    # whoami only through the runner a test gives: the task's name would otherwise ask the real one.
+    real_sid = desktop.user_sid
+    monkeypatch.setattr(desktop, "user_sid", lambda run=None: None if run is None else real_sid(run))
+    # A test that sees Windows must not start a second Rafiq in UTF-8 mode (test_windows.py checks that itself).
+    monkeypatch.setattr(cli, "_rerun_in_utf8", lambda argv, popen=None: None)
+
+
+@pytest.fixture(autouse=True)
 def rafiq_home(tmp_path, monkeypatch):
     """Every test gets its own settings folder, its own (empty) prof data, no prof installed unless it gives
     one, and no real keys."""

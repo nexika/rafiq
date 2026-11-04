@@ -173,6 +173,12 @@ def _songs(cfg: dict, probe: Probe) -> Check:
                      optional=True)
     from . import desktop
 
+    if desktop.system() == "windows":
+        if not probe.which("ffmpeg"):
+            return Check("Song recognition", False, "room only, missing ffmpeg", "winget install -e --id Gyan.FFmpeg",
+                         optional=True)
+        return Check("Song recognition", True, "AudD, from the microphone (the computer's own sound is not on "
+                     "Windows yet)")
     missing = [n for n in (("ffmpeg",) if desktop.system() == "mac" else ("parec", "ffmpeg")) if not probe.which(n)]
     if missing:
         return Check("Song recognition", False, f"room only, missing {', '.join(missing)}",
@@ -227,10 +233,10 @@ def _music(cfg: dict, probe: Probe) -> Check:
                  "new developer apps)")
 
 
-def _on_mac() -> bool:
+def _not_linux() -> bool:
     from . import desktop
 
-    return desktop.system() == "mac"
+    return desktop.system() != "linux"
 
 
 def _operator(cfg: dict) -> Check:
@@ -255,6 +261,8 @@ def _phone_page(cfg: dict) -> Check:
     port, listen = int(settings["port"]), settings.get("listen", "socket")
     if not settings.get("enabled"):
         return Check("Phone page", True, "off ([mobile] enabled = false)", optional=True)
+    if not sock.available():
+        return Check("Phone page", True, "not on Windows yet ([mobile] enabled is ignored)", optional=True)
     if listen not in ("socket", "port"):
         return Check("Phone page", False, f'[mobile] listen = {listen!r}', 'set it to "socket" (or "port")')
     move = f"tailscale serve --https=443 off, then tailscale serve --bg unix:{mobile.socket_path()}"
@@ -365,7 +373,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _songs(cfg, probe),
         _dmx(cfg),
         _browser(cfg, probe),
-        *([] if _on_mac() else [_pointer(probe), _operator(cfg)]),   # neither is offered on macOS yet
+        *([] if _not_linux() else [_pointer(probe), _operator(cfg)]),   # neither is offered off Linux yet
         _music(cfg, probe),
         _follow_ups(cfg),
         _phone_page(cfg),
@@ -378,6 +386,8 @@ def _desktop(probe: Probe) -> list[Check]:
     """The programs behind the volume, opening, locking and notifications, per platform (#192)."""
     from . import desktop
 
+    if desktop.system() == "windows":
+        return _windows_desktop(probe)
     if desktop.system() != "mac":
         return [_programs("Volume", ["wpctl"], probe, "install PipeWire (wireplumber)"),
                 _programs("Open apps and pages", ["xdg-open"], probe, "install xdg-utils"),
@@ -396,6 +406,33 @@ def _desktop(probe: Probe) -> list[Check]:
                         "" if has_blackhole else "brew install blackhole-2ch, then a Multi-Output Device with it in "
                         "Audio MIDI Setup", optional=True))
     return checks
+
+
+NOT_ON_WINDOWS = ("dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, "
+                  "the computer's own sound, presence, the phone page, and `rafiq listen`, `dictate`, `panel` and "
+                  "`mcp` from a terminal")
+
+
+def _windows_desktop(probe: Probe) -> list[Check]:
+    """The Windows calls behind the volume, opening, locking and notifications, and whether the settings folder's
+    ACL keeps the keys the user's (#193). Nothing is changed to check."""
+    from . import config, desktop
+
+    volume = probe.has_module("pycaw")
+    private = desktop.is_private(config.home())
+    return [
+        Check("Volume", volume, "Core Audio (pycaw)" if volume else "pycaw is not installed",
+              "" if volume else 'pip install -e ".[windows]"'),
+        _programs("Open apps and pages", ["explorer.exe"], probe, "explorer.exe comes with Windows"),
+        _programs("Lock screen", ["rundll32.exe"], probe, "rundll32.exe comes with Windows"),
+        _programs("Desktop notifications", ["powershell.exe"], probe, "Windows PowerShell comes with Windows"),
+        Check("Settings folder private", private is True,
+              f"{config.home()} is yours only" if private else
+              (f"{config.home()}: its permissions couldn't be read" if private is None else
+               f"{config.home()} can be opened by other accounts"),
+              "" if private else "run any rafiq command once to close it, or move it with RAFIQ_HOME to an NTFS drive"),
+        Check("Not on Windows yet", True, NOT_ON_WINDOWS, optional=True),
+    ]
 
 
 def _accessibility(probe: Probe) -> Check:

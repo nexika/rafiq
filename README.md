@@ -151,6 +151,37 @@ panel's port in the browser opens only with the one-time key `rafiq panel` gets.
 There is no echo cancellation from the system on macOS, so use headphones if Rafiq hears itself. The graphics
 card tool isn't offered on a Mac.
 
+### Windows
+
+On Windows 10 or 11, install Git (`winget install -e --id Git.Git`), then in PowerShell:
+
+```powershell
+git clone https://github.com/nexika/rafiq.git; cd rafiq
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+`install.ps1` finds Python 3.11 or newer (or installs 3.13 with winget), makes `.venv`, installs Rafiq with
+the `windows` extra and ffmpeg, and puts `rafiq` on your PATH. The settings live in `%APPDATA%\rafiq`. Rafiq
+sets that folder's permissions so only you (and Windows itself) can open it, since `chmod` does nothing there,
+and `rafiq doctor` says whether it's private. Windows support is new, and some parts aren't there yet:
+
+| | On Windows |
+|---|---|
+| Volume and mute | Core Audio, through `pycaw` (the `windows` extra) |
+| Notifications | a Windows notification, from Windows PowerShell |
+| Opening apps and pages | the Start Menu's shortcuts, and `explorer.exe` for pages and links |
+| Locking and power | `LockWorkStation`, `shutdown`; shutting down still asks first |
+| Clipboard | PowerShell, in UTF-8 so Arabic survives. There is no selection Rafiq can read: copy the text and say "read what I copied" |
+| Start at login | `rafiq install-service` makes a Task Scheduler task that starts Rafiq at your logon without a window, logging to `%APPDATA%\rafiq\task.log` |
+| The panel | `rafiq run` started in a terminal opens it in your browser. `rafiq panel` can't open it yet |
+| Not there yet | dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, what the computer plays, presence, the phone page, and `rafiq listen`, `dictate`, `panel`, `mcp` and the widget |
+
+Rafiq's own programs reach it over a socket only you can open on Linux and macOS. Python has no such socket
+on Windows yet, so those commands say "not on Windows yet" instead of sending Rafiq's token over a port another
+account could take, and `rafiq ask` answers by itself only while no Rafiq is running. The logon task can't hold keys: set them with `setx ANTHROPIC_API_KEY ...`, or put them
+in `%APPDATA%\rafiq\rafiq.env`. There is no echo cancellation from the system, so use headphones if Rafiq hears
+itself. This hasn't been tried on a Windows PC yet: please report what works.
+
 ## The brain: your ChatGPT plan, Claude or Ollama
 
 - **Your ChatGPT plan**: if you pay for ChatGPT Plus or Pro, `rafiq chatgpt-login` signs Rafiq in with your

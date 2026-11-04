@@ -261,6 +261,8 @@ def system_audio(seconds: float, spawn=subprocess.Popen) -> np.ndarray:
 
     if desktop.system() == "mac":
         return mac_system_audio(seconds)
+    if desktop.system() == "windows":
+        raise FileNotFoundError("hearing what this computer plays is not on Windows yet")
     want = int(seconds * RATE) * 2
     rec = spawn(["parec", "-d", "@DEFAULT_MONITOR@", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=1"],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)

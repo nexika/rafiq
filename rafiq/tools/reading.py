@@ -27,9 +27,10 @@ def read_aloud(source: str, url: str = "", path: str = "", ctx=None) -> str:
         if source == "selection":
             from .. import desktop
 
-            if desktop.system() == "mac":
-                return ("error: on a Mac Rafiq can't read what is highlighted. Tell the user to copy the text and ask "
-                        "to read what they copied")
+            if desktop.system() in ("mac", "windows"):
+                where = "a Mac" if desktop.system() == "mac" else "Windows"
+                return (f"error: on {where} Rafiq can't read what is highlighted. Tell the user to copy the text and "
+                        "ask to read what they copied")
             text = reader.selection()
         elif source == "clipboard":
             text = reader.clipboard()

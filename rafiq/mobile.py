@@ -110,11 +110,11 @@ class Devices:
 
     @contextmanager
     def _changing(self) -> Iterator[None]:
-        import fcntl
+        from . import desktop
 
         self.folder.mkdir(parents=True, exist_ok=True)
         with self._lock, open(self.folder / ".lock", "a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)     # released when the file closes
+            desktop.lock_exclusive(lock)          # released when the file closes
             yield
 
     def _devices(self) -> dict:
@@ -522,7 +522,7 @@ class PhoneServer(_Slots, ThreadingHTTPServer):
     pass
 
 
-class PhoneSocketServer(_Slots, socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+class PhoneSocketServer(_Slots, socketserver.ThreadingMixIn, sock.UnixServer):
     pass
 
 

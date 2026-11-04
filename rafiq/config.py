@@ -266,7 +266,69 @@ DEFAULTS: dict = {
 
 
 def home() -> Path:
-    return Path(os.environ.get("RAFIQ_HOME") or Path.home() / ".config" / "rafiq")
+    """~/.config/rafiq, or %APPDATA%\\rafiq on Windows (#193); RAFIQ_HOME moves it anywhere."""
+    if os.environ.get("RAFIQ_HOME"):
+        return Path(os.environ["RAFIQ_HOME"])
+    from . import desktop
+
+    if desktop.system() == "windows":
+        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "rafiq"
+    return Path.home() / ".config" / "rafiq"
+
+
+_private_done = False      # tried in this process
+_private_ok = False        # and the folder is closed to other accounts
+
+
+def _private_record() -> Path:
+    """The settings folders already closed, kept in %LOCALAPPDATA%, which no other account can write: a mark inside
+    the folder itself could have been put there by whoever made the folder before Rafiq closed it."""
+    local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    return Path(local) / "rafiq" / "private-folders.txt"
+
+
+def make_home_private() -> None:
+    """On Windows, close the settings folder to every other account. chmod can't: it only sets the read-only flag
+    there, so the 0600 keys and 0700 profiles inside rely on this folder's ACL, which everything in it inherits
+    (#193). It is done once per folder (icacls goes through every file, the browser profile's included); `rafiq
+    doctor` checks it stays so. Where it fails Rafiq says so, runs on, and leaves rafiq.env unread."""
+    global _private_done, _private_ok
+    from . import desktop
+
+    if _private_done or desktop.system() != "windows":
+        return
+    _private_done = True
+    folder = home()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        key = str(folder.resolve()).lower()
+        record = _private_record()
+        done = record.read_text(encoding="utf-8").splitlines() if record.is_file() else []
+    except OSError:
+        return
+    if key in done:
+        _private_ok = True
+        return
+    if desktop.make_private(folder):
+        _private_ok = True
+        try:
+            record.parent.mkdir(parents=True, exist_ok=True)
+            with open(record, "a", encoding="utf-8") as out:
+                out.write(key + "\n")
+        except OSError:
+            pass
+        return
+    import sys
+
+    print(f"Rafiq couldn't make {folder} readable by only you (a drive without permissions, such as FAT?), so it "
+          "won't read rafiq.env there. Keep your keys elsewhere, or move the folder with RAFIQ_HOME.", file=sys.stderr)
+
+
+def home_private() -> bool:
+    """May keys be read from the settings folder? Always off Windows, where each file's own mode and owner say."""
+    from . import desktop
+
+    return desktop.system() != "windows" or _private_ok
 
 
 def data_dir() -> Path:

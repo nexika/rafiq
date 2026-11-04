@@ -34,6 +34,8 @@ LISTENING = {"en": "Let me listen to the song.", "fr": "J'écoute la chanson.", 
 def _no_system_sound() -> str:
     from .. import desktop
 
+    if desktop.system() == "windows":
+        return "hearing what this computer plays is not on Windows yet; play the song near the microphone"
     if desktop.system() == "mac":
         return ("hearing what this Mac plays needs BlackHole: brew install blackhole-2ch, then a Multi-Output Device "
                 "with it in Audio MIDI Setup")
