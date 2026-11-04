@@ -42,8 +42,20 @@ def run(args: list[str], timeout: float = OSASCRIPT_SECONDS, **kwargs) -> subpro
     if system() == "windows":
         kwargs.setdefault("encoding", "utf-8")
         kwargs.setdefault("errors", "replace")
-        kwargs.update(no_window())
+        kwargs.update(windows_options(args, kwargs.get("env")))
     return subprocess.run(args, text=True, timeout=timeout, check=False, **kwargs)
+
+
+def windows_options(args: list[str], env: dict | None = None) -> dict:
+    """What a Windows program Rafiq runs needs: no window, and for Windows PowerShell its own module path. A
+    PSModulePath from PowerShell 7 (a pwsh terminal Rafiq was started in) makes 5.1 fail to load Get-Acl and
+    Get-ScheduledTask; without the variable it uses its own."""
+    if system() != "windows":
+        return {}
+    options = no_window()
+    if args and os.path.basename(str(args[0])).lower() == "powershell.exe":
+        options["env"] = {k: v for k, v in (os.environ if env is None else env).items() if k.upper() != "PSMODULEPATH"}
+    return options
 
 
 def no_window() -> dict:

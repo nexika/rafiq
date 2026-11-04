@@ -16,13 +16,16 @@ EMPTY = "the clipboard is empty or holds no text"
 
 
 def _run(args: list[str], text_in: str | None = None) -> subprocess.CompletedProcess:
+    from .. import desktop
+
     # UTF-8 both ways: on Windows Python would otherwise use the ANSI code page, which has no Arabic.
+    windows = desktop.windows_options(args)
     if text_in is None:
         return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
-                              check=False)
+                              check=False, **windows)
     # wl-copy and xclip stay behind to serve the selection: give them no pipes to hold open.
     return subprocess.run(args, input=text_in, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True,
-                          encoding="utf-8", timeout=10, check=False)
+                          encoding="utf-8", timeout=10, check=False, **windows)
 
 
 def commands() -> tuple[list[str], list[str]] | None:

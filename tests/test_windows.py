@@ -421,6 +421,20 @@ def test_programs_rafiq_starts_on_windows_open_no_window(windows, monkeypatch):
     assert seen["creationflags"] == 0x08000000              # CREATE_NO_WINDOW
 
 
+def test_windows_powershell_starts_without_powershell_7_s_module_path(windows, monkeypatch):
+    """Started from a pwsh 7 terminal, powershell.exe 5.1 inherits PS7's PSModulePath and can't load Get-Acl or
+    Get-ScheduledTask: found on the Windows runner, where the ACL check said its permissions couldn't be read."""
+    monkeypatch.setenv("PSModulePath", "C:\\Program Files\\PowerShell\\7\\Modules")
+    seen = {}
+    monkeypatch.setattr(desktop.subprocess, "run", lambda args, **kw: seen.update(kw) or
+                        subprocess.CompletedProcess(args, 0, "", ""))
+    desktop.run(desktop.powershell("Get-Acl x"))
+    assert "PSModulePath" not in seen["env"] and seen["env"].get("PATH") == os.environ.get("PATH")
+    seen.clear()
+    desktop.run([desktop.win_exe("whoami.exe")])
+    assert "env" not in seen                                  # other programs keep the environment as it is
+
+
 def test_linux_programs_get_no_windows_flags():
     assert desktop.no_window() == {}
 

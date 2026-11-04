@@ -33,8 +33,10 @@ class Check:
 
 
 def run_command(cmd: list[str], timeout: float = 60) -> tuple[int, str]:
+    from . import desktop
+
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **desktop.windows_options(cmd))
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, f"{cmd[0]}: {type(exc).__name__}"
     return done.returncode, (done.stdout + done.stderr).strip()
