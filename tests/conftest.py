@@ -30,6 +30,7 @@ def never_the_real_screen(monkeypatch):
     monkeypatch.setattr(screen, "run_command", lambda args, **kwargs: (_ for _ in ()).throw(FileNotFoundError(args[0])))
     monkeypatch.setattr(pointer, "portal_click", no_pointer)
     monkeypatch.setattr(pointer, "JeepneyBus", no_pointer)
+    monkeypatch.setattr(pointer, "wl_copy", lambda text, **kwargs: False)     # never the user's real clipboard
 
 
 @pytest.fixture(autouse=True)

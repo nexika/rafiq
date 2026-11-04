@@ -173,6 +173,10 @@ DEFAULTS: dict = {
     "spotify": {"enabled": False, "client_id": "", "port": 8888},
     # Where "play some jazz" goes when no service is named: "spotify", "deezer", or "" to let the model ask
     "music": {"service": ""},
+    # The operator (#18), which works the desktop on request: "auto" picks Claude, then OpenAI (a key or the ChatGPT
+    # plan), then a local vision model; or "claude", "openai", "ollama". At most 12 actions and 90 seconds a run.
+    "operator": {"driver": "auto", "claude_model": "claude-opus-5-5", "openai_model": "gpt-6.1-sol",
+                 "ollama_model": ""},
     "paper": {
         "title": "Rafiq",
         "languages": [],                 # e.g. ["en", "ar"] for a bilingual paper; empty: the first speech language

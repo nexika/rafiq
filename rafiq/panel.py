@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from . import config, lang, modes, notify, permissions, persona, sock, status, subscriptions
+from . import config, drive, lang, modes, notify, permissions, persona, sock, status, subscriptions
 from .brain import BrainError
 from .http_body import BodyError, body_length
 from .tools import display
@@ -321,6 +321,9 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
                     gestures.start()
                 else:
                     gestures.stop()
+            elif path in ("/api/text", "/api/ask") and drive.RUNNING.is_set():
+                # The operator's model could type into this page: nothing typed here runs while it drives.
+                return self._send(409, b'{"error":"Rafiq is controlling the computer; try again when it is done"}')
             elif path == "/api/text" and isinstance(data.get("text"), str) and data["text"].strip():
                 assistant.submit("text", text=data["text"][:2000])
             elif (path == "/api/ask" and isinstance(data.get("text"), str) and data["text"].strip()

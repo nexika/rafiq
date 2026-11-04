@@ -32,7 +32,8 @@ def safe_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
     return {name: t for name, t in tools.items() if t.expose and t.level == "safe" and t.confirm is None}
 
 
-NEVER = {"click_on_screen"}     # the user's own request only (#26): Rafiq refuses it from another program anyway
+# The user's own request only (#26, #18): Rafiq refuses them from another program anyway.
+NEVER = {"click_on_screen", "operate_computer"}
 
 
 def offered(tools: dict[str, Tool], cfg: dict) -> dict[str, Tool]:

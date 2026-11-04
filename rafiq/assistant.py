@@ -77,7 +77,8 @@ MCP_QUIET_SECONDS = 180      # after a no (or no answer) to another program, it 
 # The tools another program may be told "yes, always" for: small changes, which send nothing out and open nothing.
 # Claude takes images up to 5 MB, base64 included: 3.7 MB of PNG. A 1568-pixel screenshot is far smaller.
 MCP_PICTURE_BYTES = 3_700_000
-CLICK_TOOL = "click_on_screen"   # never for another program: it could get a yes from the speakers (#26)
+# Never for another program: it could get a yes from the speakers (#26), and a model works the desktop (#18).
+HOME_ONLY = frozenset({"click_on_screen", "operate_computer"})
 SCREEN_TOOL = "look_at_screen"   # for another program it answers with the screenshot, not Rafiq's own vision
 MCP_ALWAYS = ("set_timer", "cancel_timer", "volume", "media", "spotify_control")
 SCREEN_SECONDS = 300         # how long a screenshot waits to be fetched by the widget, once
@@ -982,8 +983,8 @@ class Assistant:
         tool = self.tools.get(name)
         if tool is None or name in self.cfg.get("mcp", {}).get("off", []):
             return f"error: there is no tool named {name}"
-        if name == CLICK_TOOL:
-            return "refused: Rafiq clicks on the screen only for the user's own request, never for another program"
+        if name in HOME_ONLY:
+            return "refused: Rafiq works the screen only for the user's own request, never for another program"
         problem = self._mcp_args(tool, args)
         if problem:
             return f"error: {problem}"
