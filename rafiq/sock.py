@@ -3,7 +3,11 @@ connection (there is no /proc), so `rafiq ask`, `rafiq panel`, `rafiq mcp`, the 
 talk over a socket in `<settings>/run`, a folder only this user can open. Both ends ask the kernel who is at the
 other end: the server refuses another account's program, and a client sends nothing until the kernel says the
 listening program is this user's, so the token never reaches a program of another account that took the
-panel's place while Rafiq was down."""
+panel's place while Rafiq was down.
+
+Windows has no AF_UNIX in CPython (#193): there these programs say they can't reach Rafiq yet, and nothing falls
+back to TCP, where the token could reach another account's program.
+"""
 
 from __future__ import annotations
 
@@ -12,11 +16,14 @@ import http.client
 import json as jsonlib
 import os
 import socket
+import socketserver
 import stat
 import struct
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+
+import httpx
 
 from . import config
 
@@ -27,6 +34,21 @@ SOL_LOCAL, LOCAL_PEERCRED, XUCRED_VERSION = 0, 1, 0
 XUCRED_SIZE = 76                                # u_int, uid_t, short, 2 bytes of padding, gid_t[16]
 UCRED = "iII"                                   # Linux struct ucred: pid, uid, gid (uid_t is unsigned)
 NAME = "panel.sock"
+# The base of the socket servers. Windows has no UnixStreamServer: the class is still defined there, so the modules
+# import, but it is never made (available() is False).
+UnixServer = getattr(socketserver, "UnixStreamServer", socketserver.BaseServer)
+NOT_YET = ("This command is not on Windows yet: it reaches the running Rafiq through a socket only you can open, "
+           "and Windows has none for Python yet. Say it to Rafiq, or use the panel `rafiq run` opens in a terminal.")
+
+
+class Unavailable(httpx.ConnectError):
+    """No socket on this platform: what `rafiq listen` and the others print, instead of "Rafiq is not running"."""
+
+
+def available() -> bool:
+    from . import desktop
+
+    return desktop.system() != "windows" and hasattr(socket, "AF_UNIX")
 
 
 def path() -> Path:
@@ -148,10 +170,10 @@ def post(url: str, *, json=None, headers: dict | None = None, timeout=5.0):
     and the port, for the panel's Host check. Raises httpx.ConnectError, as for a Rafiq that isn't running,
     when the socket isn't there or isn't this user's: the token is never sent to it, and nothing falls back to
     TCP. A reply that doesn't come in time raises httpx.ReadTimeout."""
-    import httpx
-
-    where = path()
     request = httpx.Request("POST", url)
+    if not available():
+        raise Unavailable(NOT_YET, request=request)
+    where = path()
     if not ours(where):
         raise httpx.ConnectError("Rafiq's socket isn't there, or isn't this user's", request=request)
     parts = urlsplit(url)

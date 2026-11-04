@@ -210,7 +210,7 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             return self.headers.get("Host", "") in allowed_hosts
 
         def _over_socket(self) -> bool:
-            return self.connection.family == socket.AF_UNIX
+            return self.connection.family == getattr(socket, "AF_UNIX", None)
 
         def _programs_here(self) -> bool:
             """Rafiq's own programs may come in this way. Off Linux a TCP connection can't be told from another
@@ -482,13 +482,32 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
                 return self._send(502, json.dumps({"error": f"Gmail: {exc}"}).encode())
             return self._send(200, json.dumps(result).encode())
 
+    # A key made here, in Rafiq itself: where no program can ask for one (Windows has no socket, #193), `rafiq run`
+    # opens the panel with it.
+    Handler.new_key = staticmethod(lambda: add(keys, KEY_SECONDS, MAX_KEYS))
     return Handler
+
+
+def exclusive_port() -> bool:
+    """Must the port be Rafiq's alone? On Windows SO_REUSEADDR lets another program bind a port already in use, so
+    the browser that `rafiq run` opens with its key could reach another account's page instead (#193)."""
+    from . import desktop
+
+    return desktop.system() == "windows" and hasattr(socket, "SO_EXCLUSIVEADDRUSE")
+
+
+class PanelServer(ThreadingHTTPServer):
+    def server_bind(self):
+        if exclusive_port():
+            self.allow_reuse_address = False
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def serve(assistant, host: str, port: int, token: str, screen_token: str | None = None) -> ThreadingHTTPServer:
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("the panel only listens on this computer (127.0.0.1)")
-    server = ThreadingHTTPServer((host, port), BaseHTTPRequestHandler)
+    server = PanelServer((host, port), BaseHTTPRequestHandler)
     # The allowed Host names use the port actually bound (port 0 picks a free one).
     screen_token = config.screen_token() if screen_token is None else screen_token
     server.RequestHandlerClass = make_handler(assistant, token, server.server_address[1], screen_token)
@@ -496,7 +515,7 @@ def serve(assistant, host: str, port: int, token: str, screen_token: str | None 
     return server
 
 
-class _SocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+class _SocketServer(socketserver.ThreadingMixIn, sock.UnixServer):
     daemon_threads = True
 
 

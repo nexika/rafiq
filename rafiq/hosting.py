@@ -33,8 +33,10 @@ class Check:
 
 
 def run_command(cmd: list[str], timeout: float = 60) -> tuple[int, str]:
+    from . import desktop
+
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **desktop.windows_options(cmd))
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, f"{cmd[0]}: {type(exc).__name__}"
     return done.returncode, (done.stdout + done.stderr).strip()
@@ -67,24 +69,54 @@ def _mac() -> bool:
     return desktop.system() == "mac"
 
 
+def _windows() -> bool:
+    from . import desktop
+
+    return desktop.system() == "windows"
+
+
 def _service_manager() -> str:
+    if _windows():
+        return "schtasks"
     return "launchctl" if _mac() else "systemctl"
 
 
+def _powershell(script: str) -> list[str]:
+    from . import desktop
+
+    return [desktop.win_exe("powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", script]
+
+
 def service_command() -> list[str]:
+    if _windows():
+        from . import service
+
+        # The state as an English word whatever the language Windows speaks: schtasks /Query translates it. The
+        # name is "Rafiq-" and a SID, digits and dashes only (service.task_name).
+        return _powershell(f"(Get-ScheduledTask -TaskName '{service.task_name()}' -ErrorAction Stop).State")
     if _mac():
         return ["launchctl", "print", f"gui/{os.getuid()}/{MAC_LABEL}"]
     return ["systemctl", "--user", "is-active", SERVICE]
 
 
 def restart_command() -> list[str]:
+    if _windows():
+        from . import service
+
+        name = service.task_name()
+        return _powershell(f"Stop-ScheduledTask -TaskName '{name}'; Start-ScheduledTask -TaskName '{name}'")
     if _mac():
         return ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{MAC_LABEL}"]
     return ["systemctl", "--user", "restart", SERVICE]
 
 
 def _service_state(run: Run) -> str:
-    _code, out = run(service_command())
+    code, out = run(service_command())
+    if _windows():
+        if code != 0:                        # no task: PowerShell's error is no state to show
+            return "not installed"
+        state = (out or "").strip().splitlines()[-1:] or ["unknown"]
+        return "active" if state[0].strip() == "Running" else state[0].strip()
     if _mac():                               # launchctl print says "state = running" while it runs
         found = re.search(r"^\s*state = (\w+)", out or "", re.MULTILINE)
         return "active" if found and found.group(1) == "running" else (found.group(1) if found else "inactive")

@@ -81,7 +81,7 @@ def selection_commands() -> list[list[str]]:
     read a copied password aloud: nothing there, so the user copies the text and asks for the clipboard."""
     from . import desktop
 
-    return [] if desktop.system() == "mac" else PRIMARY
+    return [] if desktop.system() in ("mac", "windows") else PRIMARY
 
 
 def selection(run=_run) -> str:
@@ -92,6 +92,8 @@ def selection(run=_run) -> str:
 def clipboard(run=_run) -> str:
     from . import desktop
 
+    if desktop.system() == "windows":
+        return _first_output([desktop.clipboard_commands()[0]], run)
     return _first_output([["pbpaste"]] if desktop.system() == "mac" else CLIPBOARD, run)
 
 

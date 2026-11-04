@@ -182,6 +182,8 @@ class Keyboard:
 
         if desktop.system() == "mac":
             return self._mac_type(text)
+        if desktop.system() == "windows":
+            raise TypingFailed("typing what you say into other apps is not on Windows yet")
         if self.wayland:
             tries = [("wtype", ["wtype", "--", text])]
             if text.isascii():

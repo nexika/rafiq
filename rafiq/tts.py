@@ -227,7 +227,10 @@ class Speaker:
         player = shutil.which("ffplay")
         if not player:
             raise RuntimeError("ffplay is not installed")
-        self._proc = subprocess.Popen([player, "-nodisp", "-autoexit", "-loglevel", "quiet", str(path)])
+        from . import desktop
+
+        self._proc = subprocess.Popen([player, "-nodisp", "-autoexit", "-loglevel", "quiet", str(path)],
+                                      **desktop.no_window())
         self._proc.wait()
         self._proc = None
 

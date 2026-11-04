@@ -49,6 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       macos: ${{ steps.diff.outputs.macos }}
+      windows: ${{ steps.diff.outputs.windows }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,13 +58,20 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
-          if [ -z "$BASE" ]; then echo "macos=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ -z "$BASE" ]; then echo "macos=true" >> "$GITHUB_OUTPUT"; echo "windows=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           # The platform layer and everything that calls it, the installer, the dependencies and the test setup.
           pattern='^(rafiq/(desktop|audio|service|hosting|presence|dictation|gestures|reader|tts|panel|sock|mobile|doctor|__main__)\.py|rafiq/tools/(__init__|pc|clipboard|screen|web|songs|reading)\.py|rafiq/video\.py|install\.sh|pyproject\.toml|tests/(conftest|test_macos|test_sock|test_mobile_socket)\.py|\.github/workflows/ci\.yml)$'
           if git diff --name-only "$BASE" HEAD | grep -Eq "$pattern"; then
             echo "macos=true" >> "$GITHUB_OUTPUT"
           else
             echo "macos=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Windows (#193): the same layer, plus the modules whose locks and paths differ there, and its installer.
+          windows='^(rafiq/[a-z_]+\.py|rafiq/tools/(__init__|pc|clipboard|songs|reading)\.py|install\.ps1|pyproject\.toml|tests/(conftest|test_windows|test_doctor|test_hosting|test_service)\.py|\.github/workflows/ci\.yml)$'
+          if git diff --name-only "$BASE" HEAD | grep -Eq "$windows"; then
+            echo "windows=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "windows=false" >> "$GITHUB_OUTPUT"
           fi
 
   # macOS (#192): the install script on a clean Mac, the suite (every device is faked), and what doctor says there.
@@ -91,6 +99,37 @@ jobs:
       - name: Doctor
         run: .venv/bin/rafiq doctor || true     # no microphone or desktop on the runner: for the log only
 
+  # Windows (#193): install.ps1 on a clean runner, every module imported, the Windows tests and the suites that don't
+  # depend on POSIX (the others pin Linux in conftest.py and would reach os.getuid or AF_UNIX), and what doctor says.
+  test-windows:
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install with install.ps1
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -NoSetup   # Windows PowerShell 5.1, as users run it
+      # test_windows.py imports every module; this is what `rafiq run` loads, with the real dependencies.
+      - name: rafiq run's modules import
+        shell: pwsh
+        run: .venv\Scripts\python -c "import rafiq.__main__, rafiq.assistant, rafiq.panel, rafiq.mobile, rafiq.doctor, rafiq.tools"
+      - name: Test
+        shell: pwsh
+        run: |
+          .venv\Scripts\python -m pip install --quiet -e ".[dev]"
+          .venv\Scripts\python -m pytest -q -n auto tests/test_windows.py tests/test_docs.py tests/test_lang_wake.py tests/test_interpret.py tests/test_router.py tests/test_budget.py tests/test_http_body.py tests/test_hallucinations.py
+      - name: Doctor
+        shell: pwsh
+        run: .venv\Scripts\rafiq doctor; exit 0     # no microphone or desktop on the runner: for the log only
+      # The real Windows calls, read-only: the settings folder `rafiq doctor` closed must read as private.
+      - name: Windows calls
+        shell: pwsh
+        run: .venv\Scripts\python -X utf8 -c "from rafiq import config, desktop; print('sid', desktop.user_sid()); d = desktop.run(desktop.powershell(desktop._ACL), input=str(config.home()), timeout=30); print('acl', d.returncode, repr(d.stdout), repr(d.stderr[:600])); private = desktop.is_private(config.home()); print('private', private); r = desktop.run(desktop.clipboard_commands()[0], timeout=30); print('clipboard', r.returncode, repr(r.stderr[-800:])); assert private is True, 'doctor closed the settings folder, but it is not private'"
+
   # The widget (widget/): the page's logic with Node's own test runner, and the Tauri side with cargo.
   widget:
     runs-on: ubuntu-latest
@@ -116,11 +155,12 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [lint, test, changes, test-macos, widget]
+    needs: [lint, test, changes, test-macos, test-windows, widget]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed
         run: |
           [ "${{ needs.lint.result }}" = success ] && [ "${{ needs.test.result }}" = success ] \
             && [ "${{ needs.changes.result }}" = success ] && [ "${{ needs.widget.result }}" = success ] \
-            && { [ "${{ needs.test-macos.result }}" = success ] || [ "${{ needs.test-macos.result }}" = skipped ]; }
+            && { [ "${{ needs.test-macos.result }}" = success ] || [ "${{ needs.test-macos.result }}" = skipped ]; } \
+            && { [ "${{ needs.test-windows.result }}" = success ] || [ "${{ needs.test-windows.result }}" = skipped ]; }

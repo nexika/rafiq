@@ -272,10 +272,10 @@ class Session:
         self.http = http or httpx
 
     def token(self, force: bool = False) -> str:
-        import fcntl
+        from . import desktop
 
         with self._lock, open(folder() / ".refresh.lock", "a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)     # released when the file closes
+            desktop.lock_exclusive(lock)          # released when the file closes
             found = account()
             if not found.get("refresh_token"):
                 raise SignedOut("not signed in to ChatGPT: run `rafiq chatgpt-login`")

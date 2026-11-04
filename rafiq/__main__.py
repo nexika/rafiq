@@ -23,7 +23,7 @@ def cmd_run(args) -> int:
     from .assistant import Assistant
     from .panel import serve
 
-    service.load_env()           # the launchd agent's keys, from rafiq.env (#192); nothing where it isn't set
+    service.load_env()         # the launchd agent's keys, from rafiq.env (#192); nothing where it isn't set
     cfg = config.load()
     if args.brain:
         cfg["brain"]["mode"] = args.brain
@@ -43,7 +43,10 @@ def cmd_run(args) -> int:
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
         _start_socket(server)
         assistant.gestures.url = f"http://{host}:{server.server_address[1]}/api/gesture"
-        print("Panel: open it with `rafiq panel`", flush=True)
+        if sock.available():
+            print("Panel: open it with `rafiq panel`", flush=True)
+        else:
+            _open_panel_here(server)
     _start_hub(cfg, assistant)
     if cfg["phone"].get("enabled"):
         _start_phone(cfg, assistant)
@@ -62,6 +65,8 @@ def _start_socket(tcp):
     reachable."""
     from . import panel
 
+    if not sock.available():               # Windows (#193): its programs say they can't reach Rafiq yet
+        return None
     try:
         server = panel.serve_socket(tcp)
     except (OSError, ValueError) as exc:
@@ -69,6 +74,17 @@ def _start_socket(tcp):
         return None
     threading.Thread(target=server.serve_forever, name="rafiq-panel-socket", daemon=True).start()
     return server
+
+
+def _open_panel_here(server) -> None:
+    """Where `rafiq panel` can't ask the running Rafiq for a key (Windows, #193), Rafiq started in a terminal opens
+    its panel itself, once, with a key it makes. The logon task opens no browser at every login."""
+    port = server.server_address[1]
+    if not (sys.stdout and sys.stdout.isatty()):
+        print(f"Panel: http://127.0.0.1:{port}, opened when you start `rafiq run` in a terminal", flush=True)
+        return
+    _open_browser(f"http://127.0.0.1:{port}/#key={server.RequestHandlerClass.new_key()}")
+    print("Panel: opened in your browser (once; start `rafiq run` again in a terminal to open it again)", flush=True)
 
 
 def _stop_on_sigterm() -> None:
@@ -83,6 +99,9 @@ def _start_mobile(cfg: dict, assistant):
     whatever another account put there, with the paired phones' tokens (#238)."""
     from . import mobile
 
+    if not sock.available():               # it needs a socket only this user can open, or /proc (#193)
+        print(MOBILE_NOT_YET, file=sys.stderr, flush=True)
+        return None
     port, listen = int(cfg["mobile"]["port"]), cfg["mobile"].get("listen", "socket")
     devices = mobile.Devices(config.home() / "mobile")
     try:
@@ -114,9 +133,14 @@ def _mobile_cannot_start(exc: Exception):
     sys.exit(EXIT_CONFIG)
 
 
+MOBILE_NOT_YET = "The phone page is not on Windows yet; Rafiq runs without it ([mobile] enabled is ignored)."
+
+
 def _check_mobile(cfg: dict) -> None:
     from . import mobile
 
+    if not sock.available():
+        return
     try:
         mobile.check_start(cfg)
     except (ValueError, OSError) as exc:
@@ -363,6 +387,17 @@ def _ask_through_running(cfg: dict, text: str, tag: str | None, speak: bool) -> 
     from .panel import ASK_SECONDS
 
     host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
+    if not sock.available():
+        from . import hosting
+
+        # Windows (#193): this can't reach the running Rafiq yet, and answering here next to it would save timers
+        # and facts that it overwrites from its own copy. Only an answer here when none runs; the probe sends no
+        # token.
+        if hosting.panel_up(host, port):
+            print("Rafiq is running, and `rafiq ask` can't reach it on Windows yet: say it to Rafiq, or type it in "
+                  "the panel.", file=sys.stderr)
+            return 1
+        return None
     try:
         resp = sock.post(f"http://{host}:{port}/api/ask", json={"text": text, "lang": tag, "speak": speak},
                           headers={"X-Rafiq-Token": config.panel_token()},
@@ -461,7 +496,9 @@ def cmd_doctor(_args) -> int:
     from . import desktop
     from .dictation import Keyboard
 
-    if desktop.system() != "mac":           # on macOS, System Events: "Typing and keys (Accessibility)" below
+    if desktop.system() == "windows":
+        _check("dictation (typing into windows)", True, "not on Windows yet", optional=True)
+    elif desktop.system() != "mac":         # on macOS, System Events: "Typing and keys (Accessibility)" below
         typing = ("wtype", "ydotool", "wl-copy") if Keyboard().wayland else ("xdotool", "xclip")
         found = [t for t in typing if shutil.which(t)]
         _check("dictation (typing into windows)", bool(found), ", ".join(found) or "install " + " or ".join(typing))
@@ -564,9 +601,8 @@ def cmd_panel(args) -> int:
     try:
         resp = sock.post(f"http://{host}:{port}/api/panel-key", json={}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
-    except httpx.HTTPError:
-        print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
-        return 1
+    except httpx.HTTPError as exc:
+        return _not_reached(exc)
     if resp.status_code != 200:
         print("The running Rafiq refused to open its panel; restart it (an older one has no rafiq panel).",
               file=sys.stderr)
@@ -580,6 +616,15 @@ def cmd_panel(args) -> int:
     else:
         _open_browser(url)
     return 0
+
+
+def _not_reached(exc: Exception) -> int:
+    """Why the running Rafiq couldn't be asked: not running, or (on Windows, #193) no way to ask it yet."""
+    if isinstance(exc, sock.Unavailable):
+        print(exc, file=sys.stderr)
+    else:
+        print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
+    return 1
 
 
 def cmd_hooks(args) -> int:
@@ -649,9 +694,8 @@ def _ask_running(path: str, body: dict) -> int:
     try:
         resp = sock.post(f"http://{host}:{port}{path}", json=body, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
-    except httpx.HTTPError:
-        print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
-        return 1
+    except httpx.HTTPError as exc:
+        return _not_reached(exc)
     return 0 if resp.status_code == 200 else 1
 
 
@@ -671,9 +715,8 @@ def cmd_gestures(args) -> int:
     try:
         resp = sock.post(f"http://{host}:{port}/api/gestures", json={"on": args.action == "on"}, timeout=5,
                           headers={"X-Rafiq-Token": config.panel_token()})
-    except httpx.HTTPError:
-        print("Rafiq is not running (start it with: rafiq run)", file=sys.stderr)
-        return 1
+    except httpx.HTTPError as exc:
+        return _not_reached(exc)
     return 0 if resp.status_code == 200 else 1
 
 
@@ -879,6 +922,10 @@ def cmd_mobile(args) -> int:
     """Pair a phone with Rafiq's companion page, list the paired phones, or unpair one (#207)."""
     from . import mobile
 
+    if not sock.available():
+        print(MOBILE_NOT_YET, file=sys.stderr)
+        return 1
+
     cfg = config.load()
     devices = mobile.Devices(config.home() / "mobile")
     if args.action == "devices":
@@ -1044,7 +1091,7 @@ def cmd_hue_setup(args) -> int:
 
 
 def cmd_install_service(_args) -> int:
-    """Start Rafiq at every login, as a systemd user service."""
+    """Start Rafiq at every login: a systemd user service, a launchd agent, or a Windows logon task."""
     from . import service
 
     try:
@@ -1055,6 +1102,12 @@ def cmd_install_service(_args) -> int:
     print(f"Rafiq now starts at login ({path}) and is running.")
     from . import desktop
 
+    if desktop.system() == "windows":
+        print(f"Logs: Get-Content -Wait \"{config.home() / 'task.log'}\"")
+        print(f"The task sees keys set with setx, or ANTHROPIC_API_KEY=... lines in {service.env_file()}")
+        if os.environ.get("RAFIQ_HOME"):
+            print("Set RAFIQ_HOME with setx too, or the task uses the folder in %APPDATA%")
+        return 0
     if desktop.system() == "mac":
         print(f"Logs: tail -f {config.home() / 'launchd.log'}")
     else:
@@ -1075,7 +1128,28 @@ def cmd_uninstall_service(_args) -> int:
     return 0
 
 
+def _rerun_in_utf8(argv, popen=subprocess.Popen) -> int | None:
+    """On Windows, `rafiq` from a terminal runs once more in Python's UTF-8 mode, as the logon task does (-X utf8):
+    otherwise every file and pipe without an encoding is in the ANSI code page, where an Arabic reminder can't be
+    saved and the clipboard's Arabic can't be read. None where nothing needs to run again."""
+    from . import desktop
+
+    if desktop.system() != "windows" or sys.flags.utf8_mode:
+        return None
+    env = {**os.environ, "PYTHONUTF8": "1"}       # this Rafiq's own Python children, too
+    child = popen([sys.executable, "-X", "utf8", "-P", "-m", "rafiq", *(sys.argv[1:] if argv is None else argv)],
+                  env=env)
+    while True:
+        try:
+            return child.wait()
+        except KeyboardInterrupt:             # Ctrl+C reaches the child too; wait for it to end its own way
+            continue
+
+
 def main(argv=None) -> int:
+    rerun = _rerun_in_utf8(argv)
+    if rerun is not None:
+        return rerun
     parser = argparse.ArgumentParser(prog="rafiq", description="Rafiq (رفيق), a voice assistant in six languages")
     sub = parser.add_subparsers(dest="command", required=True)
     wizard = sub.add_parser("setup", help="first-run wizard: keys, voices, models, microphone, wake word")
@@ -1223,6 +1297,10 @@ def main(argv=None) -> int:
     sub.add_parser("uninstall-service", help="stop starting Rafiq at login").set_defaults(fn=cmd_uninstall_service)
     args = parser.parse_args(argv)
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    from . import service
+
+    service.detached_output()           # Windows' logon task has no console: what follows goes to task.log
+    config.make_home_private()          # Windows only: its ACL is what keeps the keys in it the user's (#193)
     return args.fn(args)
 
 

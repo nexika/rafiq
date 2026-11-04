@@ -37,6 +37,25 @@ def _skipped(rel: Path, extra: Path | None) -> bool:
         extra is not None and (rel == extra or extra in rel.parents))
 
 
+def _windows_dest(dest: Path) -> Path:
+    """On Windows chmod does nothing, and a folder the user chose, such as D:\\Backups, may be open to every account
+    (#193). The archive goes in a folder of Rafiq's own inside it, closed with an ACL; the chosen folder and the rest
+    of what it holds stay as they are."""
+    from . import desktop
+
+    if desktop.system() != "windows":
+        return dest
+    home = config.home()
+    if dest.resolve() == (home / "backups").resolve() and config.home_private():
+        return dest
+    own = dest / "rafiq-backups"
+    own.mkdir(parents=True, exist_ok=True)
+    if not desktop.make_private(own):
+        raise MaintenanceError(f"couldn't make {own} readable by only you, and the backup holds your keys: choose "
+                               "a folder on an NTFS drive")
+    return own
+
+
 def backup(dest: Path | None = None, now: datetime | None = None) -> Path:
     """Archive the settings folder into `dest` (default: <settings>/backups) and return the archive's path."""
     home = config.home()
@@ -47,6 +66,7 @@ def backup(dest: Path | None = None, now: datetime | None = None) -> Path:
         # A folder we make (or our own) is closed to others; one the user chose already keeps its permissions.
         dest.mkdir(parents=True, exist_ok=True)
         dest.chmod(0o700)
+    dest = _windows_dest(dest)
     try:
         inside = dest.resolve().relative_to(home.resolve())
     except ValueError:

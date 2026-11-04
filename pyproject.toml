@@ -32,6 +32,7 @@ obs = ["obsws-python>=1.6"]
 nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
 pdf = ["pypdf>=4"]
+windows = ["pycaw>=20230407"]          # the volume through Core Audio (#193); comtypes comes with it
 dev = ["pytest>=8", "pytest-xdist>=3.5", "ruff>=0.5"]
 
 [project.scripts]

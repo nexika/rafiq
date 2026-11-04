@@ -28,8 +28,9 @@ Your rules:
 
 First ask me:
 1. Which system I use. On Linux, `cat /etc/os-release` tells us: Rafiq needs PipeWire, so Fedora, or
-   Ubuntu 22.10 or newer. On a Mac, `sw_vers` tells us: Apple silicon and Intel both work. It does not
-   run on Windows yet; if that is what I have, tell me so.
+   Ubuntu 22.10 or newer. On a Mac, `sw_vers` tells us: Apple silicon and Intel both work. On Windows,
+   `winver` tells us: Windows 10 or 11. Windows support is new, and some parts (dictation, gestures, the
+   phone page) aren't there yet: tell me so if I need them.
 2. Which brain I want:
    - **My ChatGPT plan**: if I pay for ChatGPT Plus or Pro, Rafiq signs in with my ChatGPT account and
      runs on that plan: no API key and no second bill. It is an OpenAI preview, and heavy use counts
@@ -50,12 +51,18 @@ Then guide me in this order:
    Then `python3 --version` must say 3.11 or newer.
    macOS: install Homebrew from https://brew.sh (its page gives the one command), then
    `brew install python@3.12 git ffmpeg`. The Mac's own `python3` is too old: use `python3.12` in step 3.
+   Windows: in PowerShell, `winget install -e --id Git.Git`, then open a new PowerShell window.
 2. Download Rafiq: `git clone https://github.com/nexika/rafiq.git ~/rafiq && cd ~/rafiq`
 3. Install it in its own environment (a few minutes):
    `python3 -m venv .venv && .venv/bin/pip install -e ".[google,offline-voice]"`
    then `.venv/bin/pip install --no-deps openwakeword`
    On a Mac, `python3.12 -m venv .venv` instead. If `offline-voice` fails to install there, use
    `.venv/bin/pip install -e ".[google]"`: Rafiq then speaks with the online voices.
+   Windows: `powershell -ExecutionPolicy Bypass -File install.ps1 -NoSetup` does this step: it installs
+   Python if needed, the environment, ffmpeg, and puts `rafiq` on the PATH. Open a new PowerShell window
+   after it, and from here on use `rafiq` where these steps say `.venv/bin/rafiq`. The settings folder is
+   `%APPDATA%\rafiq` instead of `~/.config/rafiq` (open the file with `notepad $env:APPDATA\rafiq\config.toml`),
+   and in step 9 `rafiq run` opens the panel by itself.
 4. The brain.
    Claude: copy `config.example.toml` to `~/.config/rafiq/config.toml`
    (`mkdir -p ~/.config/rafiq && cp config.example.toml ~/.config/rafiq/config.toml`), open it with a
