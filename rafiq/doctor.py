@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import socket
 import subprocess
 from dataclasses import dataclass
 
@@ -245,6 +246,65 @@ def _operator(cfg: dict) -> Check:
                  f"steps and {drive.MAX_SECONDS} s, Escape or Stop ends it")
 
 
+def _phone_page(cfg: dict) -> Check:
+    """Is the phone page up where `tailscale serve` reaches it, and does Tailscale send the phone there (#238)? It
+    connects to check and sends nothing."""
+    from . import mobile, sock
+
+    settings = cfg["mobile"]
+    port, listen = int(settings["port"]), settings.get("listen", "socket")
+    if not settings.get("enabled"):
+        return Check("Phone page", True, "off ([mobile] enabled = false)", optional=True)
+    if listen not in ("socket", "port"):
+        return Check("Phone page", False, f'[mobile] listen = {listen!r}', 'set it to "socket" (or "port")')
+    move = f"tailscale serve --https=443 off, then tailscale serve --bg unix:{mobile.socket_path()}"
+    if listen == "port":
+        return _phone_port(port, move)
+    targets = mobile.serve_targets()
+    if targets is not None and mobile.on_port(targets, port):
+        return Check("Phone page", False, f"`tailscale serve` still sends the phone to 127.0.0.1:{port}, which "
+                     "another account could take", move)
+    where = mobile.socket_path()
+    if not sock.ours(where):
+        return Check("Phone page", False, f"no socket of yours at {where}", "start it with: rafiq run")
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(2)
+    try:
+        probe.connect(str(where))
+    except OSError:
+        return Check("Phone page", False, "its socket is there, but nothing answers", "start it with: rafiq run")
+    finally:
+        probe.close()
+    if targets is not None and f"unix:{where}" not in targets:
+        return Check("Phone page", False, f"answers on its socket, {where}, but `tailscale serve` doesn't send the "
+                     "phone there", f"tailscale serve --bg unix:{where}")
+    return Check("Phone page", True, f"answers on its socket, {where}")
+
+
+def _phone_port(port: int, move: str) -> Check:
+    """`listen = "port"`: whose program holds it, where /proc can say. Never ok without a note: while Rafiq is
+    stopped another account could take the port and collect the phones' tokens."""
+    import os
+
+    from . import mobile, panel
+
+    warning = "; while Rafiq is stopped another account could take it and collect your phones' tokens"
+    probe = socket.socket()
+    probe.settimeout(2)
+    try:
+        probe.connect(("127.0.0.1", port))
+        owner = panel.listener_owner(port) if mobile.owner_known() else None
+    except OSError:
+        return Check("Phone page", False, f"nothing answers on 127.0.0.1:{port}{warning}", "start it with: rafiq run")
+    finally:
+        probe.close()
+    if owner is not None and owner != os.getuid():
+        return Check("Phone page", False, f"another account's program holds 127.0.0.1:{port}: your phone may be "
+                     "talking to it", "tailscale serve --https=443 off now; then rafiq mobile unpair and pair each "
+                     "phone again")
+    return Check("Phone page", False, f"on 127.0.0.1:{port}{warning}", f'set [mobile] listen = "socket": {move}',
+                 optional=True)
+
 def _follow_ups(cfg: dict) -> Check:
     """How often a follow-up was asked about or refused only because an earlier request read something (#235)."""
     from . import brain
@@ -304,6 +364,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         *([] if _on_mac() else [_pointer(probe), _operator(cfg)]),   # neither is offered on macOS yet
         _music(cfg, probe),
         _follow_ups(cfg),
+        _phone_page(cfg),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         *_desktop(probe),
     ]

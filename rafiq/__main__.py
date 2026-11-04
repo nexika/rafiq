@@ -33,6 +33,8 @@ def cmd_run(args) -> int:
     _stop_on_sigterm()
     if args.server:
         return run_server(cfg)
+    if cfg["mobile"].get("enabled"):
+        _check_mobile(cfg)                  # before the models load: a setting to fix stops at once
     print("Loading the speech models (the first start downloads them)...", flush=True)
     assistant = Assistant(cfg)
     if not args.no_panel:
@@ -76,19 +78,46 @@ def _stop_on_sigterm() -> None:
 
 
 def _start_mobile(cfg: dict, assistant):
-    """Serve the phone companion's page on 127.0.0.1, for `tailscale serve`; a taken port leaves Rafiq without it."""
+    """Serve the phone companion's page for `tailscale serve`: on its socket, or on 127.0.0.1's port when the settings
+    ask for it. One that can't start stops Rafiq: running on without it would leave `tailscale serve` pointing at
+    whatever another account put there, with the paired phones' tokens (#238)."""
     from . import mobile
 
-    port = int(cfg["mobile"]["port"])
+    port, listen = int(cfg["mobile"]["port"]), cfg["mobile"].get("listen", "socket")
+    devices = mobile.Devices(config.home() / "mobile")
     try:
-        server = mobile.serve(assistant, "127.0.0.1", port, mobile.Devices(config.home() / "mobile"),
-                              tailnet=tailnet_name())
+        if listen == "socket":
+            server = mobile.serve_socket(assistant, port, devices, tailnet=tailnet_name())
+            where = f"{mobile.socket_path()}, for `tailscale serve --bg unix:{mobile.socket_path()}`"
+        elif listen == "port":
+            server = mobile.serve(assistant, "127.0.0.1", port, devices, tailnet=tailnet_name())
+            where = f"http://127.0.0.1:{port}, for `tailscale serve` (another account here could take this port)"
+        else:
+            raise ValueError(f'[mobile] listen is "socket" or "port", not {listen!r}')
     except (ValueError, OSError) as exc:
-        print(f"Phone page off: {exc}", flush=True)
-        return None
+        _mobile_cannot_start(exc)
     threading.Thread(target=server.serve_forever, name="rafiq-mobile", daemon=True).start()
-    print(f"Phone page: http://127.0.0.1:{port}, for `tailscale serve` (rafiq mobile pair NAME)", flush=True)
+    print(f"Phone page: {where} (rafiq mobile pair NAME)", flush=True)
     return server
+
+
+# A setting to fix (sysexits' EX_CONFIG): the systemd unit doesn't start Rafiq again on it, which would only load
+# the speech models and stop, every few seconds, for good.
+EXIT_CONFIG = 78
+
+
+def _mobile_cannot_start(exc: Exception):
+    print(f"The phone page can't start: {exc}. Fix it, or set [mobile] enabled = false.", file=sys.stderr)
+    sys.exit(EXIT_CONFIG)
+
+
+def _check_mobile(cfg: dict) -> None:
+    from . import mobile
+
+    try:
+        mobile.check_start(cfg)
+    except (ValueError, OSError) as exc:
+        _mobile_cannot_start(exc)
 
 
 def _start_phone(cfg: dict, assistant):
@@ -876,7 +905,14 @@ def cmd_mobile(args) -> int:
               "restart Rafiq.")
     else:
         print("1. The phone page is on.")
-    print(f"2. Once, so your tailnet reaches it over HTTPS: tailscale serve --bg http://127.0.0.1:{port}")
+    if cfg["mobile"].get("listen", "socket") == "port":
+        print(f"2. Once, so your tailnet reaches it over HTTPS: tailscale serve --bg http://127.0.0.1:{port}")
+        print("   On a port, another account here could take it while Rafiq is stopped and collect your phone's")
+        print('   token: set [mobile] listen = "socket" when your Tailscale can serve a socket.')
+    else:
+        print(f"2. Once, so your tailnet reaches it over HTTPS: tailscale serve --bg unix:{mobile.socket_path()}")
+        print(f"   Set up before with http://127.0.0.1:{port}? First: tailscale serve --https=443 off")
+        print('   (A Tailscale that can\'t serve a socket says so: then set [mobile] listen = "port".)')
     print("   (Tailscale asks you to turn on HTTPS for your tailnet the first time. Never use `tailscale funnel`:")
     print("   that would put Rafiq on the internet.)")
     where = f"https://{name}/" if name else "the https://…ts.net address that `tailscale serve status` shows"

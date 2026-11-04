@@ -582,7 +582,7 @@ def test_rafiq_mobile_pair_shows_a_code_and_the_steps(capsys, monkeypatch):
     out = capsys.readouterr().out
     code = out.split("Sam's iPhone: ")[1].split()[0]
     assert len(code) == 9 and code[4] == "-"
-    assert "tailscale serve --bg http://127.0.0.1:8768" in out
+    assert "tailscale serve --bg unix:" in out and str(mobile.socket_path()) in out
     assert "https://desk.tail1234.ts.net/" in out
     assert "enabled = true" in out                       # it's off by default
     from rafiq import config
@@ -623,7 +623,7 @@ def test_the_tailnet_name_comes_from_tailscale_status():
 def test_the_phone_page_is_off_by_default():
     from rafiq import config
 
-    assert config.load()["mobile"] == {"enabled": False, "port": 8768}
+    assert config.load()["mobile"] == {"enabled": False, "listen": "socket", "port": 8768}
 
 
 # ---------------------------------------------------------------------- re-review (#230): runs, memory, reading

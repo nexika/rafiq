@@ -65,7 +65,7 @@ def prepare(where: Path) -> None:
     opened goes through its descriptor, so a folder swapped in meanwhile changes nothing. ValueError when the
     path is too long to bind, the folder isn't safely this user's, or another Rafiq answers on the socket."""
     if len(os.fsencode(where)) > MAX_PATH:
-        raise ValueError(f"the panel's socket path is longer than {MAX_PATH} bytes; set a shorter RAFIQ_HOME")
+        raise ValueError(f"the socket path {where} is longer than {MAX_PATH} bytes; set a shorter RAFIQ_HOME")
     folder = where.parent
     folder.parent.mkdir(parents=True, exist_ok=True)
     try:

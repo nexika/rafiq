@@ -148,7 +148,8 @@ DEFAULTS: dict = {
     "phone": {"enabled": False, "host": "127.0.0.1", "port": 8767},
     # The phone companion (#207): Rafiq's page on a paired phone, from anywhere. Off until you turn it on; it
     # listens on this computer only, and `tailscale serve` brings the phone to it over HTTPS (see the README).
-    "mobile": {"enabled": False, "port": 8768},
+    # listen "socket": <settings>/run/mobile.sock, which no other account can take (#238); "port": 127.0.0.1:port.
+    "mobile": {"enabled": False, "listen": "socket", "port": 8768},
     # `rafiq run --server`: the brain without devices, for `rafiq agent` on the PC. Without a TLS
     # certificate it only listens on a private address (the LAN or Tailscale).
     "server": {"host": "127.0.0.1", "port": 8766, "tls_cert": "", "tls_key": ""},

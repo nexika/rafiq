@@ -59,7 +59,7 @@ jobs:
         run: |
           if [ -z "$BASE" ]; then echo "macos=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           # The platform layer and everything that calls it, the installer, the dependencies and the test setup.
-          pattern='^(rafiq/(desktop|audio|service|hosting|presence|dictation|gestures|reader|tts|panel|sock|doctor|__main__)\.py|rafiq/tools/(__init__|pc|clipboard|screen|web|songs|reading)\.py|rafiq/video\.py|install\.sh|pyproject\.toml|tests/(conftest|test_macos|test_sock)\.py|\.github/workflows/ci\.yml)$'
+          pattern='^(rafiq/(desktop|audio|service|hosting|presence|dictation|gestures|reader|tts|panel|sock|mobile|doctor|__main__)\.py|rafiq/tools/(__init__|pc|clipboard|screen|web|songs|reading)\.py|rafiq/video\.py|install\.sh|pyproject\.toml|tests/(conftest|test_macos|test_sock|test_mobile_socket)\.py|\.github/workflows/ci\.yml)$'
           if git diff --name-only "$BASE" HEAD | grep -Eq "$pattern"; then
             echo "macos=true" >> "$GITHUB_OUTPUT"
           else

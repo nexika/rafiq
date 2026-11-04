@@ -162,7 +162,10 @@ port = 8767
 
 [mobile]                        # Rafiq's page on a paired phone: `rafiq mobile pair NAME` (see the README)
 enabled = false
-port = 8768                     # on 127.0.0.1 only; `tailscale serve --bg http://127.0.0.1:8768` brings the phone
+listen = "socket"               # <settings>/run/mobile.sock: `tailscale serve --bg unix:<that path>` brings the
+                                # phone, and no other account here can take its place. "port": 127.0.0.1:port,
+                                # for a Tailscale that can't serve a socket (an older one, Windows)
+port = 8768                     # with listen = "port": `tailscale serve --bg http://127.0.0.1:8768`
 
 [screen]
 ollama_model = ""               # a local vision model (e.g. "qwen2.5vl:7b") to read the screen offline
