@@ -18,56 +18,66 @@ if (-not $PSScriptRoot.StartsWith($env:USERPROFILE, [StringComparison]::OrdinalI
     Write-Warning "$PSScriptRoot is outside your profile, where other accounts on this PC can usually change files. Clone Rafiq under $env:USERPROFILE instead."
 }
 
-function Test-Python([string[]]$Command) {
-    # True for a Python 3.11 or later.
+function Get-PythonPath([string]$Exe, [string]$Version) {
+    # The full path of a Python 3.11 or later that `$Exe` (with `-$Version` for py) starts, or $null. The path comes
+    # from sys.executable, so the venv is made with that interpreter itself and nothing else is passed along.
+    if (-not (Get-Command $Exe -ErrorAction SilentlyContinue)) { return $null }
+    $probe = "import sys; print(sys.executable if sys.version_info >= (3, 11) else '')"
     try {
-        $exe, $rest = $Command
-        & $exe @rest -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
-        return $LASTEXITCODE -eq 0
+        if ($Version) { $found = & $Exe "-$Version" -c $probe 2>$null } else { $found = & $Exe -c $probe 2>$null }
     } catch {
-        return $false
+        return $null
     }
+    if ($LASTEXITCODE -ne 0 -or -not $found) { return $null }
+    $path = "$found".Trim()
+    if ($path -and (Test-Path -LiteralPath $path)) { return $path }
+    return $null
 }
 
 function Find-Python {
-    foreach ($version in "3.13", "3.12", "3.11") {
-        if ((Get-Command py -ErrorAction SilentlyContinue) -and (Test-Python @("py", "-$version"))) {
-            return @("py", "-$version")
-        }
+    # The launcher's 3.13, 3.12 and 3.11, then its newest (3.14 and later too), then python on the PATH.
+    foreach ($version in "3.13", "3.12", "3.11", "3") {
+        $path = Get-PythonPath "py" $version
+        if ($path) { return $path }
     }
-    # The newest Python the launcher knows (3.14 and later too), then python on the PATH.
-    if ((Get-Command py -ErrorAction SilentlyContinue) -and (Test-Python @("py", "-3"))) {
-        return @("py", "-3")
-    }
-    if ((Get-Command python -ErrorAction SilentlyContinue) -and (Test-Python @("python"))) {
-        return @("python")
-    }
-    return $null
+    return Get-PythonPath "python" ""
+}
+
+function Update-SessionPath {
+    # What winget just added, seen in this window too.
+    $env:Path = $env:Path + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+function Stop-Install([string]$Why) {
+    Write-Host "Rafiq didn't install: $Why" -ForegroundColor Red
+    exit 1
 }
 
 $python = Find-Python
 if (-not $python -and (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Host "Installing Python 3.13 with winget..."
     & winget install -e --id Python.Python.3.13 --scope user --accept-package-agreements --accept-source-agreements
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + $env:Path
+    Update-SessionPath
     $python = Find-Python
 }
 if (-not $python) {
-    Write-Error "Rafiq needs Python 3.11 or later: install it from https://www.python.org/downloads/windows/ (tick 'Add python.exe to PATH'), then run this again."
-    exit 1
+    Stop-Install "it needs Python 3.11 or later. Install it from https://www.python.org/downloads/windows/ (tick 'Add python.exe to PATH'), then run this again."
 }
+Write-Host "Python: $python"
 
 $venvPython = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $venvPython)) {
     Write-Host "Creating .venv..."
-    $exe, $rest = $python
-    & $exe @rest -m venv .venv
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $python -m venv (Join-Path $PSScriptRoot ".venv")
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $venvPython)) {
+        Stop-Install "$python couldn't make the environment in .venv (exit code $LASTEXITCODE)."
+    }
 }
 
 & $venvPython -m pip install --quiet --upgrade pip
+if ($LASTEXITCODE -ne 0) { Stop-Install "pip couldn't update itself." }
 & $venvPython -m pip install --quiet -e ".[google,windows]"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { Stop-Install "pip couldn't install Rafiq; its messages above say why." }
 # Piper's voices need piper-phonemize, which may have no wheel for this Python on Windows: Rafiq runs without them.
 & $venvPython -m pip install --quiet -e ".[google,windows,offline-voice]" 2>$null
 if ($LASTEXITCODE -ne 0) {
@@ -78,8 +88,9 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Host "Installing ffmpeg (for playing answers and reading songs) with winget..."
         & winget install -e --id Gyan.FFmpeg --scope user --accept-package-agreements --accept-source-agreements
+        Update-SessionPath
     }
-    if ($LASTEXITCODE -ne 0 -or -not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
         Write-Warning "ffmpeg isn't on the PATH yet: open a new terminal, or install it from https://ffmpeg.org"
     }
 }
@@ -91,6 +102,7 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 $bin = Join-Path $env:USERPROFILE ".local\bin"
 New-Item -ItemType Directory -Force -Path $bin | Out-Null
 $rafiqExe = Join-Path $PSScriptRoot ".venv\Scripts\rafiq.exe"
+if (-not (Test-Path -LiteralPath $rafiqExe)) { Stop-Install "pip made no $rafiqExe." }
 Copy-Item -LiteralPath $rafiqExe -Destination (Join-Path $bin "rafiq.exe") -Force
 # The user PATH as stored, %VARIABLES% unexpanded, and written back as such: expanding them would freeze an entry
 # like %JAVA_HOME%\bin at today's value.
@@ -99,7 +111,7 @@ $userPath = $key.GetValue("Path", "", "DoNotExpandEnvironmentNames")
 if (-not (($userPath -split ";") -contains $bin)) {
     $newPath = (@($bin) + ($userPath -split ";" | Where-Object { $_ })) -join ";"
     Set-ItemProperty -LiteralPath "HKCU:\Environment" -Name Path -Value $newPath -Type ExpandString
-    Write-Host "Added $bin to your PATH: open a new terminal to use `rafiq` there."
+    Write-Host "Added $bin to your PATH: open a new terminal to use 'rafiq' there."
 }
 $env:Path = "$bin;$env:Path"
 
