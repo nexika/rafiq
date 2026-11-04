@@ -606,7 +606,8 @@ work from the street.
 3. Once: `tailscale serve --bg unix:$HOME/.config/rafiq/run/mobile.sock` (`rafiq mobile pair` prints the exact
    path). Set up before this, with `http://127.0.0.1:8768`? Move it with `tailscale serve --https=443 off`, then
    the command above: `rafiq run` refuses to start while Tailscale still sends the phone to that port, which
-   nothing holds any more. A Tailscale that can't serve a socket (an older one, or on Windows) says so: then
+   nothing holds any more. To check, Rafiq asks `tailscale serve status --json` at every start, and it won't
+   start if that fails (`tailscale` missing from the service's PATH, or not running yet). A Tailscale that can't serve a socket (an older one, or on Windows) says so: then
    set `listen = "port"` under `[mobile]` and use `tailscale serve --bg http://127.0.0.1:8768`. That leaves the
    old gap open: while Rafiq is stopped, another account could take the port and collect your phone's token.
    `rafiq doctor` checks whose program holds it. Tailscale publishes the page at

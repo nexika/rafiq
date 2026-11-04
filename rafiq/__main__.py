@@ -107,7 +107,10 @@ EXIT_CONFIG = 78
 
 
 def _mobile_cannot_start(exc: Exception):
+    from . import service
+
     print(f"The phone page can't start: {exc}. Fix it, or set [mobile] enabled = false.", file=sys.stderr)
+    service.refresh()           # a unit from before #238 would restart this every 5 s; systemd reloads it first
     sys.exit(EXIT_CONFIG)
 
 

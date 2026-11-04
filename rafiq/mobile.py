@@ -547,7 +547,7 @@ def serve_targets(run=subprocess.run) -> list[str] | None:
     def walk(value) -> None:
         if isinstance(value, dict):
             for key, inner in value.items():
-                if key == "Proxy" and isinstance(inner, str):
+                if key in ("Proxy", "TCPForward") and isinstance(inner, str):   # HTTP, or a raw TCP forward
                     found.append(inner)
                 walk(inner)
         elif isinstance(value, list):
@@ -564,7 +564,7 @@ def on_port(targets: list[str], port: int) -> list[str]:
     return [t for t in targets if any(t.rstrip("/").endswith(n) or f"{n}/" in t for n in names)]
 
 
-def check_start(cfg: dict, targets=serve_targets) -> None:
+def check_start(cfg: dict, targets=None) -> None:
     """What would keep the phone page from starting safely, found before the speech models load (#238). ValueError
     with what to do; nothing when it can start."""
     settings = cfg["mobile"]
@@ -573,8 +573,13 @@ def check_start(cfg: dict, targets=serve_targets) -> None:
         raise ValueError(f'[mobile] listen is "socket" or "port", not {listen!r}')
     if listen == "socket":
         sock.prepare(socket_path())
-        found = targets()
-        old = on_port(found or [], port)
+        found = (targets or serve_targets)()      # looked up now, so a test's stand-in is the one asked
+        if found is None:
+            # Not knowing isn't "nothing on the old port": an old setup would stay open to whoever takes it.
+            raise ValueError("Rafiq couldn't ask Tailscale where it sends the phone, so it can't tell whether an old "
+                             "setup still points at a port another account could take. Check that "
+                             "`tailscale serve status --json` works for you (tailscale installed, on PATH and running)")
+        old = on_port(found, port)
         if old:
             # An install from before #238 forwards the phone to the port, which nothing here holds any more:
             # whichever program takes it next, another account's included, would get the phones' tokens.
@@ -583,6 +588,9 @@ def check_start(cfg: dict, targets=serve_targets) -> None:
                              f"tailscale serve --bg unix:{socket_path()}")
         return
     probe = socket.socket()
+    # As the real server does: a connection the last Rafiq closed lingers in TIME_WAIT for about 60 s, and without
+    # this a restart would read the port as taken. A program listening on it still fails the bind.
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         probe.bind(("127.0.0.1", port))
     except OSError as exc:

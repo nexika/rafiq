@@ -275,7 +275,11 @@ def _phone_page(cfg: dict) -> Check:
         return Check("Phone page", False, "its socket is there, but nothing answers", "start it with: rafiq run")
     finally:
         probe.close()
-    if targets is not None and f"unix:{where}" not in targets:
+    if targets is None:
+        return Check("Phone page", False, f"answers on its socket, {where}, but Tailscale couldn't be asked where it "
+                     "sends the phone, so `rafiq run` won't start", "check that `tailscale serve status --json` works "
+                     "for you (tailscale installed, on PATH and running)")
+    if f"unix:{where}" not in targets:
         return Check("Phone page", False, f"answers on its socket, {where}, but `tailscale serve` doesn't send the "
                      "phone there", f"tailscale serve --bg unix:{where}")
     return Check("Phone page", True, f"answers on its socket, {where}")

@@ -24,8 +24,9 @@ REAL_TARGETS = mobile.serve_targets     # the fixture below replaces it in every
 
 @pytest.fixture(autouse=True)
 def no_real_tailscale(monkeypatch):
-    """No test asks the real Tailscale; one that wants an answer sets its own."""
-    monkeypatch.setattr(mobile, "serve_targets", lambda run=None: None)
+    """No test asks the real Tailscale: by default it sends the phone to the socket, and a test that wants another
+    answer sets its own."""
+    monkeypatch.setattr(mobile, "serve_targets", lambda run=None: [f"unix:{mobile.socket_path()}"])
 
 
 @pytest.fixture
@@ -297,8 +298,42 @@ def test_starting_on_the_socket_refuses_while_tailscale_still_sends_the_phone_to
         mobile.check_start(mobile_cfg("socket"), targets=lambda: ["http://127.0.0.1:8768"])
 
 
-def test_starting_on_the_socket_goes_on_when_tailscale_can_t_be_asked(home):
-    mobile.check_start(mobile_cfg("socket"), targets=lambda: None)
+def test_starting_on_the_socket_refuses_when_tailscale_can_t_be_asked(home):
+    """Not knowing isn't "nothing on the old port": an old setup would stay open to whoever takes the port."""
+    with pytest.raises(ValueError, match="tailscale serve status --json"):
+        mobile.check_start(mobile_cfg("socket"), targets=lambda: None)
+
+
+def test_starting_on_the_socket_goes_on_when_tailscale_sends_nothing_to_the_port(home):
+    mobile.check_start(mobile_cfg("socket"), targets=lambda: [])
+
+
+def test_a_tcp_forward_to_the_port_counts_as_the_old_target():
+    status = '{"TCP": {"443": {"TCPForward": "127.0.0.1:8768"}}}'
+    found = REAL_TARGETS(run=lambda args, **kw: Done(0, status))
+    assert found == ["127.0.0.1:8768"] and mobile.on_port(found, 8768)
+
+
+def test_the_port_starts_again_right_after_a_restart():
+    """A connection the old Rafiq closed lingers in TIME_WAIT for about 60 s; the real server binds past it, and so
+    must the check, or a restart would stop with exit 78 and tell the user to unpair every phone."""
+    listener = socket.socket()
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    client = socket.create_connection(("127.0.0.1", port))
+    conn, _ = listener.accept()
+    conn.close()                    # the server closes first, so its side waits in TIME_WAIT
+    client.close()
+    listener.close()
+    mobile.check_start(mobile_cfg("port", port), targets=lambda: [])
+
+
+def test_doctor_says_when_tailscale_can_t_be_asked(served, monkeypatch):
+    monkeypatch.setattr(mobile, "serve_targets", lambda run=None: None)
+    check = phone_check(mobile_cfg("socket"))
+    assert not check.ok and "tailscale serve status --json" in check.fix
 
 
 def test_a_taken_port_says_to_turn_serve_off_and_pair_again():
@@ -331,6 +366,42 @@ def test_the_service_isn_t_started_again_on_a_setting_to_fix():
     from rafiq import service
 
     assert "RestartPreventExitStatus=78" in service.unit_text("/usr/bin/python3")
+
+
+OLD_UNIT = "[Service]\nExecStart=/home/a/venv/bin/python -P -m rafiq run\nRestart=on-failure\nRestartSec=5\n"
+
+
+def test_a_unit_from_before_learns_not_to_restart_on_a_setting_to_fix(tmp_path, monkeypatch):
+    from rafiq import service
+
+    unit = tmp_path / "rafiq.service"
+    unit.write_text(OLD_UNIT)
+    monkeypatch.setattr(service, "unit_path", lambda: unit)
+    calls = []
+    assert service.refresh(run=lambda args: calls.append(args) or Done(0, "")) is True
+    assert unit.read_text() == OLD_UNIT.replace("RestartSec=5\n", "RestartSec=5\nRestartPreventExitStatus=78\n")
+    assert calls == [["daemon-reload"]]
+
+
+def test_refreshing_leaves_a_current_unit_or_none_alone(tmp_path, monkeypatch):
+    from rafiq import service
+
+    unit = tmp_path / "rafiq.service"
+    monkeypatch.setattr(service, "unit_path", lambda: unit)
+    calls = []
+    assert service.refresh(run=lambda args: calls.append(args) or Done(0, "")) is False
+    unit.write_text(service.unit_text("/usr/bin/python3"))
+    assert service.refresh(run=lambda args: calls.append(args) or Done(0, "")) is False and calls == []
+
+
+def test_a_setting_to_fix_refreshes_the_unit_before_rafiq_stops(monkeypatch, capsys):
+    from rafiq import service
+
+    refreshed = []
+    monkeypatch.setattr(service, "refresh", lambda run=None: refreshed.append(True) or True)
+    with pytest.raises(SystemExit):
+        cli._mobile_cannot_start(ValueError("x"))
+    assert refreshed == [True]
 
 
 def test_a_paired_phone_s_token_from_another_account_is_refused_on_the_socket(served, home, monkeypatch):
