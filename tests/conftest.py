@@ -5,9 +5,11 @@ import pytest
 def on_linux(monkeypatch):
     """Every test sees Linux, whatever runs it (CI runs the suite on macOS too, #192); a test of the macOS commands
     asks for them with test_macos.py's `mac` fixture."""
-    from rafiq import desktop
+    from rafiq import desktop, panel
 
     monkeypatch.setattr(desktop, "system", lambda: "linux")
+    # The panel's port takes the token only on Linux (#234); test_sock.py asks for the macOS port itself.
+    monkeypatch.setattr(panel, "tcp_programs", lambda: True)
 
 
 @pytest.fixture(autouse=True)

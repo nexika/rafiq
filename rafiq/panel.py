@@ -128,6 +128,12 @@ def connection_owner(client: tuple, server: tuple) -> int | None:
     return None
 
 
+def tcp_programs() -> bool:
+    """May Rafiq's own programs come in over TCP? Only where /proc says whose program opened a connection: off
+    Linux they use the socket, and the port serves only the pages' sessions (#234)."""
+    return sys.platform.startswith("linux")
+
+
 def make_handler(assistant, token: str, port: int, screen_token: str = ""):
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     # One-time keys from `rafiq panel`, and the sessions they became, each with when it ends. In memory:
@@ -184,7 +190,7 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
         def _programs_here(self) -> bool:
             """Rafiq's own programs may come in this way. Off Linux a TCP connection can't be told from another
             account's, so there they use the socket and the port serves only the browser's sessions (#234)."""
-            return self._over_socket() or sys.platform.startswith("linux")   # where _mine can ask /proc
+            return self._over_socket() or tcp_programs()
 
         def _token_ok(self, given: str | None) -> bool:
             return self._programs_here() and bool(given) and same(given, token)

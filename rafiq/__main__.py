@@ -539,8 +539,9 @@ def cmd_panel(args) -> int:
         print("The running Rafiq refused to open its panel; restart it (an older one has no rafiq panel).",
               file=sys.stderr)
         return 1
-    # The page's own name for this computer: the panel accepts only 127.0.0.1 and localhost as Host.
-    url = f"http://{'localhost' if host == '::1' else host}:{port}/#key={resp.json()['key']}"
+    # Always the address the panel binds, never the name "localhost": a browser tries ::1 first for that name,
+    # where another account's program could be listening, read the key after "#" and redeem it.
+    url = f"http://127.0.0.1:{port}/#key={resp.json()['key']}"
     if args.print:
         print(url)
         print("It works once, within two minutes.", file=sys.stderr)

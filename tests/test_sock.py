@@ -20,6 +20,7 @@ from test_brain_panel import FakeAssistant
 from rafiq import panel, sock
 
 TOKEN = "t" * 40
+REAL_TCP_PROGRAMS = panel.tcp_programs   # conftest pins it for the TCP tests; this is the real one
 
 
 @pytest.fixture
@@ -188,7 +189,7 @@ def test_the_peer_uid_of_a_real_connection_is_this_user_s():
 
 def test_on_macos_the_tcp_port_takes_no_token(served, monkeypatch):
     assistant, port = served
-    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(panel, "tcp_programs", lambda: False)
     assert over_tcp(port, "/api/text", {"text": "hi"}) == 403
     assert over_tcp(port, "/api/panel-key", {}) == 403
     assert httpx.get(f"http://127.0.0.1:{port}/events?token={TOKEN}", timeout=5).status_code == 403
@@ -199,7 +200,7 @@ def test_on_macos_the_tcp_port_takes_no_gesture_token(served, monkeypatch):
     assistant, port = served
     assistant.gestures = Gestures()
     assert over_tcp(port, "/api/gesture", {"gesture": "palm"}, {"X-Rafiq-Gesture-Token": "g" * 40}) == 200
-    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(panel, "tcp_programs", lambda: False)
     assert over_tcp(port, "/api/gesture", {"gesture": "palm"}, {"X-Rafiq-Gesture-Token": "g" * 40}) == 403
 
 
@@ -208,7 +209,7 @@ def test_on_macos_the_browser_s_session_still_works_over_tcp(served, monkeypatch
     with httpx.Client(transport=httpx.HTTPTransport(uds=str(sock.path())), timeout=5) as client:
         key = client.post(f"http://127.0.0.1:{port}/api/panel-key", json={},
                           headers={"X-Rafiq-Token": TOKEN}).json()["key"]
-    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(panel, "tcp_programs", lambda: False)
     resp = httpx.post(f"http://127.0.0.1:{port}/api/panel-key/redeem", json={"key": key},
                       headers={"X-Rafiq-Panel": "1"}, timeout=5)
     assert resp.status_code == 200
@@ -221,6 +222,12 @@ def test_on_macos_the_browser_s_session_still_works_over_tcp(served, monkeypatch
 def test_on_linux_the_tcp_port_still_takes_the_token(served):
     assistant, port = served
     assert over_tcp(port, "/api/text", {"text": "hi"}) == 200
+
+
+@pytest.mark.parametrize("platform, allowed", [("linux", True), ("darwin", False), ("freebsd14", False)])
+def test_only_linux_lets_rafiq_s_programs_use_the_port(platform, allowed, monkeypatch):
+    monkeypatch.setattr(sys, "platform", platform)
+    assert REAL_TCP_PROGRAMS() is allowed
 
 
 # ---------------------------------------------------------------------- Rafiq's own programs
@@ -408,3 +415,47 @@ def test_preparing_never_takes_the_socket_of_a_rafiq_that_is_running(served):
     with pytest.raises(ValueError, match="another Rafiq"):
         sock.prepare(sock.path())
     assert sock.ours(sock.path())
+
+
+@pytest.mark.parametrize("parse, data", [
+    (sock.uid_from_ucred, struct.pack("iII", 4242, 2**31 + 5, 0)),
+    (sock.uid_from_xucred, struct.pack("=II", 0, 2**31 + 5) + bytes(68)),
+])
+def test_a_uid_past_two_to_the_31_is_read_as_it_is(parse, data):
+    assert parse(data) == 2**31 + 5
+
+
+def test_preparing_closes_a_folder_left_open_to_others(home):
+    (home / "run").mkdir()
+    (home / "run").chmod(0o755)
+    sock.prepare(sock.path())
+    assert stat.S_IMODE((home / "run").stat().st_mode) == 0o700
+
+
+def test_rafiq_run_starts_the_socket_with_the_panel(monkeypatch):
+    import argparse
+    import signal
+
+    from rafiq import __main__ as cli
+
+    class Running:
+        gestures = type("G", (), {"url": ""})()
+
+        def __init__(self, cfg):
+            pass
+
+        def run(self):
+            pass
+
+    tcp = type("Tcp", (), {"server_address": ("127.0.0.1", 9000), "serve_forever": lambda self: None})()
+    started = []
+    monkeypatch.setattr("rafiq.assistant.Assistant", Running)
+    monkeypatch.setattr(panel, "serve", lambda *a, **k: tcp)
+    monkeypatch.setattr(cli, "_start_socket", started.append)
+    monkeypatch.setattr(cli, "_start_hub", lambda cfg, assistant: None)
+    old = signal.getsignal(signal.SIGTERM)
+    try:
+        assert cli.cmd_run(argparse.Namespace(brain=None, mode=None, server=False, no_panel=False)) == 0
+    finally:
+        signal.signal(signal.SIGTERM, old)
+    assert started == [tcp]

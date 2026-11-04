@@ -246,6 +246,17 @@ def test_rafiq_panel_opens_the_browser_with_the_key_after_the_hash(monkeypatch):
     assert opened == ["http://127.0.0.1:8765/#key=k1"]
 
 
+def test_rafiq_panel_opens_the_bound_address_even_when_the_settings_say_localhost(monkeypatch):
+    """A browser tries ::1 first for "localhost", where another account could listen and redeem the key."""
+    config.home().mkdir(parents=True, exist_ok=True)
+    (config.home() / "config.toml").write_text('[panel]\nhost = "localhost"\n')
+    opened = []
+    monkeypatch.setattr(sock, "post", lambda url, **k: Answer(200, {"key": "k1"}))
+    monkeypatch.setattr(cli, "_open_browser", opened.append)
+    assert cli.main(["panel"]) == 0
+    assert opened == ["http://127.0.0.1:8765/#key=k1"]
+
+
 def test_rafiq_panel_print_shows_the_address_without_opening_anything(monkeypatch, capsys):
 
     monkeypatch.setattr(sock, "post", lambda *a, **k: Answer(200, {"key": "k2"}))

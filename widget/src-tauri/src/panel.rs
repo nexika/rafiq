@@ -37,8 +37,8 @@ pub fn find(home: &Path) -> Result<Panel, String> {
     Ok(Panel { port, token, ipv6, socket: home.join("run").join("panel.sock") })
 }
 
-/// screen.token: needed for the screenshot (GET /api/screen) beside the panel token, which any program on this
-/// computer can read from the panel's page. None until Rafiq has made one.
+/// screen.token: needed for the screenshot (GET /api/screen) beside the panel token, so the picture takes more than
+/// the panel token alone. None until Rafiq has made one.
 pub fn screen_token(home: &Path) -> Option<String> {
     let token = std::fs::read_to_string(home.join("screen.token")).ok()?.trim().to_string();
     let rafiqs = token.len() >= 32 && token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');

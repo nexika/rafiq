@@ -5,12 +5,15 @@ happens. This page is the contract: what a client can rely on, and every kind of
 
 ## Reading the stream
 
-`GET /events?token=<token>` on the panel's Unix socket is a
+`GET /events` on the panel's Unix socket, with the token in `X-Rafiq-Token` (or `?token=`), is a
 [server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html) stream:
 
 ```bash
-curl -N --unix-socket ~/.config/rafiq/run/panel.sock "http://127.0.0.1:8765/events?token=$(cat ~/.config/rafiq/panel.token)"
+printf 'X-Rafiq-Token: %s\n' "$(cat ~/.config/rafiq/panel.token)" |
+  curl -N -H @- --unix-socket ~/.config/rafiq/run/panel.sock http://127.0.0.1:8765/events
 ```
+
+The token goes in through stdin: on a command line, `ps` would show it to every account here.
 
 The socket is `<settings>/run/panel.sock` (`~/.config/rafiq` unless `RAFIQ_HOME` says otherwise). The URL
 still names `127.0.0.1` and the panel's port, because the panel checks the Host header. A wrong or missing

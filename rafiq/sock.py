@@ -25,7 +25,7 @@ MAX_PATH = 103 if sys.platform == "darwin" else 107
 # LOCAL_PEERCRED on macOS: level SOL_LOCAL (0), option 1, struct xucred (version, uid, ngroups, 16 groups).
 SOL_LOCAL, LOCAL_PEERCRED, XUCRED_VERSION = 0, 1, 0
 XUCRED_SIZE = 76                                # u_int, uid_t, short, 2 bytes of padding, gid_t[16]
-UCRED = "3i"                                    # Linux struct ucred: pid, uid, gid
+UCRED = "iII"                                   # Linux struct ucred: pid, uid, gid (uid_t is unsigned)
 NAME = "panel.sock"
 
 
@@ -102,7 +102,7 @@ def uid_from_ucred(data: bytes) -> int | None:
 def uid_from_xucred(data: bytes) -> int | None:
     if len(data) < 8:
         return None
-    version, uid = struct.unpack_from("=Ii", data)
+    version, uid = struct.unpack_from("=II", data)
     return uid if version == XUCRED_VERSION else None
 
 
