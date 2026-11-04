@@ -125,6 +125,10 @@ jobs:
       - name: Doctor
         shell: pwsh
         run: .venv\Scripts\rafiq doctor; exit 0     # no microphone or desktop on the runner: for the log only
+      # What the read-only Windows calls answer on a real Windows, for the log: the folder's ACL and the clipboard.
+      - name: Windows calls
+        shell: pwsh
+        run: .venv\Scripts\python -X utf8 -c "from rafiq import config, desktop; print('sid', desktop.user_sid()); d = desktop.run(desktop.powershell(desktop._ACL), input=str(config.home()), timeout=30); print('acl', d.returncode, repr(d.stdout), repr(d.stderr[-800:])); print('private', desktop.is_private(config.home())); r = desktop.run(desktop.clipboard_commands()[0], timeout=30); print('clipboard', r.returncode, repr(r.stderr[-800:]))"
 
   # The widget (widget/): the page's logic with Node's own test runner, and the Tauri side with cargo.
   widget:
