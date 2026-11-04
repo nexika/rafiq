@@ -45,6 +45,9 @@ DEFAULTS: dict = {
         "prices": {},
         # Offer the model only the tools a request needs (none for small talk); off: every tool, always.
         "routing": True,
+        # After Rafiq read an email, the screen or a page, later requests in the conversation are checked too:
+        # what they send out or act on must come from the user (#235). False: only the request that read it.
+        "carry_marks": True,
         # A request that keeps calling tools is stopped, and Rafiq says so: at most this many
         # model rounds, tool calls in all, and seconds from the request to the answer.
         "limits": {"max_rounds": 6, "max_tool_calls": 12, "max_seconds": 120},

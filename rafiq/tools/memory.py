@@ -15,7 +15,10 @@ def _facts(ctx):
 @tool("remember", "Remember a fact about the user for later conversations, when they ask you to remember it.",
       {"text": {"type": "string", "description": "the fact as a short sentence in the user's language, "
                                                  "such as 'The user's sister is called Sara'"}},
-      required=("text",), level="act")
+      required=("text",), level="act",
+      # A fact goes with every later request, past the conversation and its mark (#235): after an email, a page or
+      # the screen, only the user's own words are remembered.
+      follows=("text",))
 def remember(text: str, ctx=None) -> str:
     facts = _facts(ctx)
     if facts is None:

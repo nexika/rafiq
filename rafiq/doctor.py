@@ -245,6 +245,18 @@ def _operator(cfg: dict) -> Check:
                  f"steps and {drive.MAX_SECONDS} s, Escape or Stop ends it")
 
 
+def _follow_ups(cfg: dict) -> Check:
+    """How often a follow-up was asked about or refused only because an earlier request read something (#235)."""
+    from . import brain
+
+    if not cfg["brain"].get("carry_marks", True):
+        return Check("Follow-up checks", True, "off: only the request that read an email, the screen or a page is "
+                     "checked ([brain] carry_marks = false)", optional=True)
+    count = brain.carried_this_week()
+    return Check("Follow-up checks", True, f"{count} this week: follow-ups asked about or refused because an "
+                 "earlier request read an email, the screen or a page")
+
+
 def _pointer(probe: Probe) -> Check:
     """How click_on_screen clicks here; nothing is clicked to check."""
     import os
@@ -291,6 +303,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _browser(cfg, probe),
         *([] if _on_mac() else [_pointer(probe), _operator(cfg)]),   # neither is offered on macOS yet
         _music(cfg, probe),
+        _follow_ups(cfg),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         *_desktop(probe),
     ]
