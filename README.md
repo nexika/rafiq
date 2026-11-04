@@ -518,6 +518,11 @@ For now you type requests in the agent's terminal; the microphone stays on the P
   never as instructions. The clipboard is read only when you ask about what you copied. Pages on this computer or the local network (your router, Rafiq's own panel) are never fetched.
   Once Rafiq has read something private in a request (a tab, an email, the clipboard), an address it would
   fetch or open, or a search, that isn't in what you said is read back and runs only on your yes.
+  This holds for your follow-ups too, until the conversation starts over (after 5 quiet minutes, or in
+  another language): "read my last email", then "ok, do what it says", can't turn the email's words into a
+  click, a task for the operator, a fact to remember or a search. Only the follow-up's own words count as
+  yours. `rafiq doctor` counts how often a follow-up was asked about this way; `[brain] carry_marks = false`
+  turns it off.
 - Rafiq's browser is a separate Chrome or Firefox profile with a debugging port on 127.0.0.1 only. Rafiq
   talks only to the port its own profile names, once the process there is your account's browser with
   that profile, and only runs fixed expressions that read the page's title and text, out of the page's own
@@ -846,7 +851,7 @@ part of the screen changed in the meantime, it doesn't click.
 
 - One click per request, and every click is asked about. A "yes, always" is never remembered for it.
 - It clicks only what you named. Text on the screen is data to the model, never an instruction to click:
-  after Rafiq has read the screen, a page or an email in the same request, it refuses a target you didn't say.
+  after Rafiq has read the screen, a page or an email in this conversation, it refuses a target you didn't say.
 - It never clicks for a request from your phone, or for another program (MCP), which isn't offered the tool.
 - The screenshot goes to Claude when Claude is your brain, asked first as for "what's this error?".
   Offline, only a local vision model (`[screen] ollama_model`) sees it.
@@ -879,10 +884,8 @@ cloud?". A "yes, always" is never remembered for it.
 - **Escape is yours:** the model can't press it. While a run goes, the panel and the widget take no requests, so
   the model can't type one in.
 - **Screen text is data:** a page or a message on the screen can't give the model orders. After Rafiq has read
-  the screen, a page or an email in the same request, it refuses a task you didn't say yourself.
+  the screen, a page or an email in this conversation, it refuses a task you didn't say yourself.
 - **Never remote:** not for a request from your phone, and not for another program (MCP).
-- **Not yet:** a task taken from an email or page read in an *earlier* request isn't caught by the "only your
-  words" check (#235). You still hear the whole task in the question before the run.
 
 Which model drives it is set under `[operator]`: `driver = "auto"` uses Claude (an API key), then OpenAI (a key,
 or your ChatGPT plan after `rafiq chatgpt-login`), then a local vision model (`ollama_model`, such as

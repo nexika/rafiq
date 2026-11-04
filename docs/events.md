@@ -126,6 +126,7 @@ The fields shown are besides `kind`, `time`, `version` and `run_id`.
 | `task` | `id`, `goal`, `state` (`running`, `done`, `failed`, `cancelled`), `cost` (so far, when cancelled), `result` | `{"id": "ab12cd", "run_id": "task-ab12cd", "goal": "find a flight", "state": "running", "cost": null, "result": ""}` |
 | `brain` | `backend`; `mode` and `model` when changed in the panel | `{"backend": "claude"}` |
 | `spending` | `today`, `month`, `daily_cap`, `monthly_cap`, `currency`, `status` | `{"today": 0.012, "month": 0.41, "daily_cap": 1, "monthly_cap": 10, "currency": "USD", "status": "ok"}` |
+| `carried_mark` | `name` (the tool), `kind` (`send`: asked about what it would send; `act`: refused what it would act on). A follow-up was checked only because an earlier request in the conversation read an email, the screen or a page (#235); the value is never in it | `{"name": "web_search", "kind": "send"}` |
 | `error` | `error`, or `brain` (each backend's error), or `satellite` | `{"error": "TimeoutError: timed out"}` |
 
 ### Listening and speaking

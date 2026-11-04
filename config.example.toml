@@ -17,6 +17,8 @@ ollama_model = "qwen2.5:7b"     # qwen2.5:3b is faster and less careful
 ollama_url = "http://127.0.0.1:11434"
 ollama_tools = "local"          # the tools Ollama gets: "local" (a smaller set), "all", or a list of names
 persona = "neutral"             # neutral, concise or butler (a dry, witty butler); "be more concise" switches it by voice
+carry_marks = true              # after reading an email, the screen or a page, follow-ups in the conversation are
+                                # checked too: what they send or act on must be your words (rafiq doctor counts them)
 
 [brain.limits]                  # a request that keeps calling tools is stopped, and Rafiq says so
 max_rounds = 6                  # model requests per answer
