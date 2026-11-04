@@ -493,6 +493,9 @@ class _Slots:
     otherwise hold a thread per slow connection until `rafiq run` itself runs out. The ones over are closed."""
 
     daemon_threads = True
+    # socketserver's queue is 5. Linux holds a Unix connect when it is full; macOS refuses it, so a phone opening a
+    # few requests at once would be turned away before the slots below are even asked.
+    request_queue_size = MAX_CONNECTIONS
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
