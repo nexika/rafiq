@@ -128,6 +128,31 @@ def connection_owner(client: tuple, server: tuple) -> int | None:
     return None
 
 
+def listening_uid(table: str, port: int) -> int | None:
+    """Whose program listens on `port` on loopback or every address, from /proc/net/tcp text; None if nobody."""
+    for line in table.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) < 8 or fields[3] != "0A" or not fields[7].isdigit():      # 0A: listening
+            continue
+        local = _endpoint(fields[1])
+        if local and local[1] == port and (local[0].is_loopback or local[0].is_unspecified):
+            return int(fields[7])
+    return None
+
+
+def listener_owner(port: int) -> int | None:
+    """Whose program listens on this port here (Linux); None when nobody does or it can't be told."""
+    for name in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(name, encoding="ascii") as f:
+                owner = listening_uid(f.read(), port)
+        except (OSError, ValueError):
+            continue
+        if owner is not None:
+            return owner
+    return None
+
+
 def tcp_programs() -> bool:
     """May Rafiq's own programs come in over TCP? Only where /proc says whose program opened a connection: off
     Linux they use the socket, and the port serves only the pages' sessions (#234)."""

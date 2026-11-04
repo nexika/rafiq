@@ -68,6 +68,8 @@ def unit_text(python: str | None = None) -> str:
         f"ExecStart={_quote(python)} -P -m rafiq run",
         "Restart=on-failure",
         "RestartSec=5",
+        # 78 (EX_CONFIG): a setting to fix, such as the phone page's; starting again would only fail again.
+        "RestartPreventExitStatus=78",
         # Rafiq runs in about 150 MB. A runaway one once reached 10.5 GB of a 14 GB laptop and the kernel
         # killed it; with these caps systemd squeezes, then restarts, Rafiq alone.
         "MemoryHigh=1500M",
@@ -86,6 +88,29 @@ def _call(run: Systemctl, *args: str) -> None:
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
         raise ServiceError(f"systemctl --user {' '.join(args)} failed: {detail}")
+
+
+def refresh(run: Systemctl | None = None) -> bool:
+    """Give a unit installed before #238 its `RestartPreventExitStatus=78`, so a setting to fix stops Rafiq instead
+    of restarting it every 5 s. Only that line is added; the rest, its python included, stays as installed. True when
+    the unit changed and systemd reloaded it."""
+    path = unit_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if "RestartPreventExitStatus=" in text or "\n[Service]" not in "\n" + text:
+        return False
+    lines = text.splitlines(keepends=True)
+    after = next((i for i, line in enumerate(lines) if line.startswith("RestartSec=")),
+                 next(i for i, line in enumerate(lines) if line.strip() == "[Service]"))
+    lines.insert(after + 1, "RestartPreventExitStatus=78\n")
+    try:
+        path.write_text("".join(lines), encoding="utf-8")
+        _call(run or systemctl, "daemon-reload")
+    except (OSError, subprocess.SubprocessError, ServiceError):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------- macOS: launchd

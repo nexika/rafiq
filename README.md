@@ -599,9 +599,18 @@ still runs at home; the phone is its remote. "Turn off the lights at home" and "
 work from the street.
 
 1. Tailscale on this computer and the phone, as above.
-2. Under `[mobile]` in the config, set `enabled = true`, then restart `rafiq run`. The page listens on
-   `127.0.0.1:8768` only.
-3. Once: `tailscale serve --bg http://127.0.0.1:8768`. Tailscale publishes the page at
+2. Under `[mobile]` in the config, set `enabled = true`, then restart `rafiq run`. The page listens on a
+   socket, `~/.config/rafiq/run/mobile.sock`, in a folder only you can open, so no other account on this
+   computer can take the page's place while Rafiq is stopped and collect your phone's token. Only your
+   programs and Tailscale (root) may connect to it. If the page can't start, `rafiq run` stops and says why.
+3. Once: `tailscale serve --bg unix:$HOME/.config/rafiq/run/mobile.sock` (`rafiq mobile pair` prints the exact
+   path). Set up before this, with `http://127.0.0.1:8768`? Move it with `tailscale serve --https=443 off`, then
+   the command above: `rafiq run` refuses to start while Tailscale still sends the phone to that port, which
+   nothing holds any more. To check, Rafiq asks `tailscale serve status --json` at every start, and it won't
+   start if that fails (`tailscale` missing from the service's PATH, or not running yet). A Tailscale that can't serve a socket (an older one, or on Windows) says so: then
+   set `listen = "port"` under `[mobile]` and use `tailscale serve --bg http://127.0.0.1:8768`. That leaves the
+   old gap open: while Rafiq is stopped, another account could take the port and collect your phone's token.
+   `rafiq doctor` checks whose program holds it. Tailscale publishes the page at
    `https://<computer>.<tailnet>.ts.net`, on your tailnet only, with a certificate it renews itself (it asks
    you to turn HTTPS on for your tailnet the first time). HTTPS is what lets the phone's browser use the
    microphone and install the page. Never use `tailscale funnel`: that would put Rafiq on the internet.
@@ -612,6 +621,10 @@ work from the street.
    **Install app** on Android (Chrome).
 
 `rafiq mobile devices` lists the paired phones and `rafiq mobile unpair "Sam's iPhone"` ends one, at once.
+
+A phone's token is what lets it in. Anyone with the token can use it from your tailnet, and that includes
+another account on this computer, through its own `ts.net` address. So if a phone is lost, or the token may
+have been seen (a port that another account took, a shared backup), unpair that phone and pair it again.
 
 A request from the phone is answered silently at home, and Rafiq's questions about it are asked on screens
 only (the phone, the panel, the widget), with a minute to answer, so nobody at home can say yes to it out

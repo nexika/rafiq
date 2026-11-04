@@ -3,8 +3,13 @@
 The phone sees the steps live, asks by voice or text, answers Yes or No to Rafiq's questions and hears the answer.
 Rafiq itself stays on the computer; the phone is a remote for it.
 
-How it is reached: a listener of its own on 127.0.0.1 (never the panel's port, never another address), which
-`tailscale serve` publishes at https://<computer>.<tailnet>.ts.net on the user's tailnet only. HTTPS is what lets
+How it is reached: a listener of its own, which `tailscale serve` publishes at https://<computer>.<tailnet>.ts.net
+on the user's tailnet only. By default it is a socket, <settings>/run/mobile.sock, in a folder only this user can
+open, so no other account can listen in its place while Rafiq is down and collect a phone's token (#238); with
+`[mobile] listen = "port"`, 127.0.0.1:port (never the panel's port, never another address). Only this user's
+programs and root (tailscaled) may connect: the kernel says who, on the socket, and /proc on Linux. tailscaled also
+brings what another account here sends to this computer's ts.net name, so past that a phone's token is the barrier,
+as it is for every node on the tailnet. HTTPS is what lets
 a phone's browser use the microphone and install the page; Tailscale makes and renews the certificate, and its
 Funnel (the public internet) is never used. Every request but the page and pairing carries a paired phone's token.
 
@@ -27,7 +32,10 @@ import json
 import os
 import queue
 import secrets
+import socket
+import socketserver
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -40,6 +48,7 @@ from urllib.parse import urlparse
 
 import numpy as np
 
+from . import config, sock
 from .http_body import BodyError, body_length
 
 PORT = 8768
@@ -323,7 +332,20 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
                 return None
             return self.rfile.read(length)
 
+        def _peer_ok(self) -> bool:
+            """This user's program, or tailscaled (root) bringing the phone: never another account's (#238)."""
+            allowed = (os.getuid(), 0)
+            if self.connection.family == getattr(socket, "AF_UNIX", None):
+                return sock.peer_uid(self.connection) in allowed
+            if owner_known():
+                from . import panel
+
+                return panel.connection_owner(self.client_address, self.connection.getsockname()) in allowed
+            return True                      # a port elsewhere: nothing can say whose (listen = "socket" can)
+
         def do_GET(self):  # noqa: N802 (http.server's name)
+            if not self._peer_ok():
+                return self._json(403, {"error": "not this user's program"})
             if not host_ok(self.headers.get("Host", ""), port, tailnet):
                 return self._json(403, {"error": "wrong host"})
             path = urlparse(self.path).path
@@ -377,6 +399,8 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
                 assistant.events.unsubscribe(q)
 
         def do_POST(self):  # noqa: N802
+            if not self._peer_ok():
+                return self._json(403, {"error": "not this user's program"})
             if not host_ok(self.headers.get("Host", ""), port, tailnet):
                 return self._json(403, {"error": "wrong host"})
             path = urlparse(self.path).path
@@ -464,11 +488,14 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
     return Handler
 
 
-class PhoneServer(ThreadingHTTPServer):
+class _Slots:
     """At most MAX_CONNECTIONS at once: anyone who reaches the listener (a tailnet node, another user here) could
     otherwise hold a thread per slow connection until `rafiq run` itself runs out. The ones over are closed."""
 
     daemon_threads = True
+    # socketserver's queue is 5. Linux holds a Unix connect when it is full; macOS refuses it, so a phone opening a
+    # few requests at once would be turned away before the slots below are even asked.
+    request_queue_size = MAX_CONNECTIONS
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -489,6 +516,103 @@ class PhoneServer(ThreadingHTTPServer):
             super().process_request_thread(request, client_address)
         finally:
             self.slots.release()
+
+
+class PhoneServer(_Slots, ThreadingHTTPServer):
+    pass
+
+
+class PhoneSocketServer(_Slots, socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    pass
+
+
+def socket_path() -> Path:
+    return config.home() / "run" / "mobile.sock"
+
+
+def owner_known() -> bool:
+    """Can a TCP connection's owner be found here? Only on Linux, in /proc."""
+    return sys.platform.startswith("linux")
+
+
+def serve_targets(run=subprocess.run) -> list[str] | None:
+    """Every address `tailscale serve` forwards to, from `tailscale serve status --json`; None when Tailscale can't
+    be asked (not installed, not running, or not this user's to ask)."""
+    try:
+        done = run(["tailscale", "serve", "status", "--json"], capture_output=True, text=True, timeout=5)
+        data = json.loads(done.stdout or "{}") if done.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if data is None:
+        return None
+    found: list[str] = []
+
+    def walk(value) -> None:
+        if isinstance(value, dict):
+            for key, inner in value.items():
+                if key in ("Proxy", "TCPForward") and isinstance(inner, str):   # HTTP, or a raw TCP forward
+                    found.append(inner)
+                walk(inner)
+        elif isinstance(value, list):
+            for inner in value:
+                walk(inner)
+
+    walk(data)
+    return found
+
+
+def on_port(targets: list[str], port: int) -> list[str]:
+    """The targets that forward to the phone page's port on this computer."""
+    names = (f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}")
+    return [t for t in targets if any(t.rstrip("/").endswith(n) or f"{n}/" in t for n in names)]
+
+
+def check_start(cfg: dict, targets=None) -> None:
+    """What would keep the phone page from starting safely, found before the speech models load (#238). ValueError
+    with what to do; nothing when it can start."""
+    settings = cfg["mobile"]
+    port, listen = int(settings["port"]), settings.get("listen", "socket")
+    if listen not in ("socket", "port"):
+        raise ValueError(f'[mobile] listen is "socket" or "port", not {listen!r}')
+    if listen == "socket":
+        sock.prepare(socket_path())
+        found = (targets or serve_targets)()      # looked up now, so a test's stand-in is the one asked
+        if found is None:
+            # Not knowing isn't "nothing on the old port": an old setup would stay open to whoever takes it.
+            raise ValueError("Rafiq couldn't ask Tailscale where it sends the phone, so it can't tell whether an old "
+                             "setup still points at a port another account could take. Check that "
+                             "`tailscale serve status --json` works for you (tailscale installed, on PATH and running)")
+        old = on_port(found, port)
+        if old:
+            # An install from before #238 forwards the phone to the port, which nothing here holds any more:
+            # whichever program takes it next, another account's included, would get the phones' tokens.
+            raise ValueError(f"`tailscale serve` still sends the phone to {old[0]}, which Rafiq no longer listens on "
+                             f"and another account could take. Move it: tailscale serve --https=443 off, then "
+                             f"tailscale serve --bg unix:{socket_path()}")
+        return
+    probe = socket.socket()
+    # As the real server does: a connection the last Rafiq closed lingers in TIME_WAIT for about 60 s, and without
+    # this a restart would read the port as taken. A program listening on it still fails the bind.
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind(("127.0.0.1", port))
+    except OSError as exc:
+        raise ValueError(f"127.0.0.1:{port} is taken ({exc.strerror}). If that isn't your program, your phone may be "
+                         "talking to it: run `tailscale serve --https=443 off` now, then unpair and pair each phone "
+                         "again (rafiq mobile unpair NAME, rafiq mobile pair NAME)") from exc
+    finally:
+        probe.close()
+
+
+def serve_socket(assistant, port: int, devices: Devices, tailnet: str = "") -> PhoneSocketServer:
+    """The phone's listener on its socket (#238), for `tailscale serve --bg unix:<path>`: in a folder only this user
+    can open, so no other account can listen in its place. `port` is the one the page checks in the Host header
+    when this computer opens it itself. ValueError when the socket can't be made safely."""
+    where = socket_path()
+    sock.prepare(where)
+    server = PhoneSocketServer(str(where), make_handler(assistant, devices, port, tailnet))
+    os.chmod(where, 0o600)
+    return server
 
 
 def serve(assistant, host: str, port: int, devices: Devices, tailnet: str = "") -> ThreadingHTTPServer:

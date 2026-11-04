@@ -34,6 +34,19 @@ def never_the_real_screen(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def never_the_real_service(tmp_path, monkeypatch):
+    """No test may rewrite the user's real systemd unit or run systemctl: a phone page that can't start refreshes
+    the unit and reloads systemd (#238). A test of the service gives its own folder and systemctl."""
+    from rafiq import service
+
+    def no_systemctl(args):
+        raise service.ServiceError("no real systemctl in tests")
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setattr(service, "systemctl", no_systemctl)
+
+
+@pytest.fixture(autouse=True)
 def rafiq_home(tmp_path, monkeypatch):
     """Every test gets its own settings folder, its own (empty) prof data, no prof installed unless it gives
     one, and no real keys."""
