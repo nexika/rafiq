@@ -378,6 +378,8 @@ def set_win_volume(level: int | None = None, mute: bool | None = None) -> None:
 
 
 SYSTEM_SID = "S-1-5-18"            # Windows itself, as root is on Linux: a 0700 folder doesn't keep root out either
+ADMINS_SID = "S-1-5-32-544"         # Administrators: they can take any file's ownership, so an entry for them (as an
+#                                     elevated admin account gets) doesn't open the folder to anyone else
 
 
 def user_sid(run: Callable | None = None) -> str | None:
@@ -440,7 +442,8 @@ def is_private(folder: Path, run: Callable | None = None) -> bool | None:
     lines = [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
     if done.returncode != 0 or not sid or len(lines) < 2 or not lines[0].startswith("protected="):
         return None
-    return lines[0] == "protected=True" and lines[1] == f"owner={sid}" and set(lines[2:]) <= {sid, SYSTEM_SID}
+    return (lines[0] == "protected=True" and lines[1] == f"owner={sid}"
+            and set(lines[2:]) <= {sid, SYSTEM_SID, ADMINS_SID})
 
 
 def lock_exclusive(file) -> None:

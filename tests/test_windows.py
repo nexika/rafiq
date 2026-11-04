@@ -210,6 +210,9 @@ def test_linux_never_sets_an_acl(monkeypatch):
 
 @pytest.mark.parametrize("out, private", [
     (f"protected=True\r\nowner={SID}\r\n{SID}\r\nS-1-5-18\r\n", True),
+    # What the Windows runner's admin account gets: Administrators can take any file's ownership anyway, as root
+    # can read a 0700 folder.
+    (f"protected=True\r\nowner={SID}\r\nS-1-5-18\r\nS-1-5-32-544\r\n{SID}\r\n", True),
     (f"protected=True\r\nowner={SID}\r\n{SID}\r\nS-1-5-11\r\n", False),       # Authenticated Users
     (f"protected=False\r\nowner={SID}\r\n{SID}\r\n", False),                  # still inherits from above
     (f"protected=True\r\nowner=S-1-5-21-9-9-9-1002\r\n{SID}\r\n", False),     # another account owns it
