@@ -232,6 +232,19 @@ def _on_mac() -> bool:
     return desktop.system() == "mac"
 
 
+def _operator(cfg: dict) -> Check:
+    """Which model would drive "take control and ..." (#18); nothing is sent to check."""
+    from . import drive, drivers
+
+    which = drivers.pick(cfg)
+    if which is None:
+        return Check("Operator (take control)", False, "no model can drive it",
+                     "a Claude key, rafiq chatgpt-login (or an OpenAI key), or [operator] ollama_model", optional=True)
+    where = drivers.where(cfg, which)
+    return Check("Operator (take control)", True, f"{where[0].upper()}{where[1:]}; at most {drive.MAX_ACTIONS} "
+                 f"steps and {drive.MAX_SECONDS} s, Escape or Stop ends it")
+
+
 def _pointer(probe: Probe) -> Check:
     """How click_on_screen clicks here; nothing is clicked to check."""
     import os
@@ -276,7 +289,7 @@ def integrations(cfg: dict, probe: Probe | None = None) -> list[Check]:
         _songs(cfg, probe),
         _dmx(cfg),
         _browser(cfg, probe),
-        *([] if _on_mac() else [_pointer(probe)]),        # clicking isn't offered on macOS yet
+        *([] if _on_mac() else [_pointer(probe), _operator(cfg)]),   # neither is offered on macOS yet
         _music(cfg, probe),
         _modules("Web search", ["ddgs", "trafilatura"], probe),
         *_desktop(probe),
