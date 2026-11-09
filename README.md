@@ -174,8 +174,8 @@ and `rafiq doctor` says whether it's private. Windows support is new, and some p
 | Clipboard | PowerShell, in UTF-8 so Arabic survives. There is no selection Rafiq can read: copy the text and say "read what I copied" |
 | Start at login | `rafiq install-service` makes a Task Scheduler task that starts Rafiq at your logon without a window, logging to `%APPDATA%\rafiq\task.log` |
 | The panel | `rafiq panel` opens it, as on Linux. If Rafiq's pipe can't start, `rafiq run` started in a terminal opens it in your browser |
-| Rafiq's own programs | `rafiq ask`, `listen`, `dictate`, `panel`, `gestures` and `mcp` reach the running Rafiq through a named pipe only you can open |
-| Not there yet | dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, what the computer plays, presence, the phone page, and the widget |
+| Rafiq's own programs | `rafiq ask`, `listen`, `dictate`, `panel`, `gestures`, `mcp` and the widget reach the running Rafiq through a named pipe only you can open |
+| Not there yet | dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, what the computer plays, presence, and the phone page |
 
 Rafiq's own programs reach it over a socket only you can open on Linux and macOS. Python has no such socket on
 Windows, so there they use a named pipe, `\\.\pipe\rafiq-panel-<your SID>`, which only your account may open.

@@ -26,6 +26,10 @@ shows as "(hidden)".
   and that the socket is yours: then no other account can have made it (#234). The token is kept between
   Rafiq's starts, so while Rafiq is stopped another account's program could otherwise wait where Rafiq listens
   to collect it. While Rafiq is away it tries again after 2 seconds, then less often, up to every 30.
+- On Windows (#242) the settings are in `%APPDATA%\rafiq`, and it reaches Rafiq through its named pipe,
+  `\\.\pipe\rafiq-panel-<your SID>`, never the panel's port. Before it sends the token, it reads the pipe's own
+  security descriptor: it must be owned by your account, open to it alone, and labelled Medium or higher, as Rafiq
+  makes it. Another account can't make a pipe owned by yours, and a sandboxed program's is labelled Low.
 - When Rafiq looks at the screen, the Rust side fetches the screenshot once with the panel's token and the
   screen token (`screen.token`, readable only by you), and hands the page a `data:` URL. The page draws
   numbered circles, highlights and arrows over it.

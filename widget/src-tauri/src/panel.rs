@@ -15,10 +15,13 @@ pub struct Panel {
     pub socket: PathBuf,
 }
 
-/// `RAFIQ_HOME`, or `~/.config/rafiq`, as in rafiq/config.py.
+/// `RAFIQ_HOME`, or `~/.config/rafiq` (`%APPDATA%\rafiq` on Windows, #193), as in rafiq/config.py.
 pub fn home() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("RAFIQ_HOME").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(dir));
+    }
+    if cfg!(windows) {
+        return std::env::var_os("APPDATA").filter(|d| !d.is_empty()).map(|d| PathBuf::from(d).join("rafiq"));
     }
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("rafiq"))
 }

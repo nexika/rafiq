@@ -456,6 +456,7 @@ def test_doctor_no_longer_lists_rafiq_s_own_programs_as_not_on_windows():
     from rafiq import doctor
 
     assert "rafiq listen" not in doctor.NOT_ON_WINDOWS and "`mcp`" not in doctor.NOT_ON_WINDOWS
+    assert "widget" not in doctor.NOT_ON_WINDOWS                    # it reaches Rafiq through the pipe too
     assert "the phone page" in doctor.NOT_ON_WINDOWS
 
 
