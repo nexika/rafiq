@@ -653,9 +653,16 @@ work from the street.
 
 `rafiq mobile devices` lists the paired phones and `rafiq mobile unpair "Sam's iPhone"` ends one, at once.
 
-A phone's token is what lets it in. Anyone with the token can use it from your tailnet, and that includes
-another account on this computer, through its own `ts.net` address. So if a phone is lost, or the token may
-have been seen (a port that another account took, a shared backup), unpair that phone and pair it again.
+A phone's token is what lets it in. Anyone with the token can use it from another device on your tailnet. From
+this computer itself it is refused: Tailscale says where each request comes from, and the page lets in only
+other devices' tailnet addresses. So whatever another account here sends to this computer's own `ts.net`
+address is turned away, and so is anything that comes in through `tailscale funnel`. Until Tailscale says this
+computer's own addresses (it isn't running yet, say), the page refuses every request it brings. This holds for
+`tailscale serve` as `rafiq mobile pair` prints it, which passes requests on as HTTP; `tailscale serve --tcp`
+passes them on as they are, and must not be used. With `listen = "port"` outside Linux, nothing can tell whose
+program connects to the port, so there another account here with a token still gets in. So if a phone is lost,
+or the token may have been seen (a port that another account took, a shared backup), unpair that phone and pair
+it again.
 
 A request from the phone is answered silently at home, and Rafiq's questions about it are asked on screens
 only (the phone, the panel, the widget), with a minute to answer, so nobody at home can say yes to it out
