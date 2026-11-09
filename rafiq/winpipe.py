@@ -2,14 +2,20 @@
 (#234), since CPython has no AF_UNIX there.
 
 The rule is the socket's: a program never sends the token to something it can't prove is this user's.
-- The pipe is \\\\.\\pipe\\rafiq-panel-<SID>, made with a security descriptor that grants this user's SID alone
-  (nothing inherited, not even SYSTEM), as the first instance of its name, so a pipe another account made first
-  under that name is never shared: Rafiq says so and runs without it. It refuses clients on other computers.
-- One instance always waits: the next is made before a connection is handed on, so while Rafiq runs the name is
-  never free for another account to take.
+- The pipe is \\\\.\\pipe\\rafiq-panel-<SID>, made with a security descriptor that this user's SID owns and alone
+  may open (nothing inherited, not even SYSTEM), labelled Medium, as the first instance of its name, so a pipe
+  another account made first under that name is never shared: Rafiq says so and runs without it. It refuses
+  clients on other computers.
+- One instance always waits: the next is made before a connection is handed on, and an instance whose client left
+  early waits again, so while Rafiq runs the name is never free for another account to take.
 - The server asks Windows whose program connected (GetNamedPipeClientProcessId, then that process's token) and
-  serves only this user's. The client asks whose program is listening (GetNamedPipeServerProcessId) and sends
-  nothing to another account's, and it opens the pipe at the identification level, so the server can't act as it.
+  serves only this user's; the pipe's DACL already keeps other accounts out.
+- The client reads the pipe's own security descriptor and sends nothing unless it is the one Rafiq makes: owned by
+  this user's SID, open to it alone, Medium or higher. Never the server's process ID, which Windows reuses once
+  the program that made the pipe exits. It opens the pipe at the identification level, so the server can't act as
+  it.
+- The whole request goes in one write, and no larger than the panel reads: a pipe's write waits while its buffer
+  is full, and a server that already answered would never empty it.
 
 Every Win32 call is in `Win32`, made only on Windows; the tests give a stand-in (`_api`).
 """
@@ -17,6 +23,7 @@ Every Win32 call is in `Win32`, made only on Windows; the tests give a stand-in 
 from __future__ import annotations
 
 import io
+import re
 import sys
 import threading
 import time
@@ -24,6 +31,7 @@ import time
 FAMILY = "windows-pipe"                 # a PipeConnection's `family`, beside socket.AF_UNIX and AF_INET
 POLL_SECONDS = 0.01                     # between looks for data on a pipe, while a read waits
 WAKE_SECONDS = 2                        # for shutdown() to reach the waiting instance
+REQUEST_SECONDS = 30                    # for a connection's request to come, on the server
 BUFFER = 65536
 
 
@@ -32,8 +40,50 @@ def pipe_name(sid: str, what: str = "panel") -> str:
 
 
 def sddl(sid: str) -> str:
-    """This user's SID alone, with full access; P: nothing inherited."""
-    return f"D:P(A;;GA;;;{sid})"
+    """Owned by this user's SID (even elevated, whose default owner is Administrators); this SID alone with full
+    access, P: nothing inherited; labelled Medium, so a Low-integrity program of this user can't write to it."""
+    return f"O:{sid}D:P(A;;GA;;;{sid})S:(ML;;NW;;;ME)"
+
+
+_SECTION = re.compile(r"([OGDS]):((?:(?![OGDS]:).)*)")
+_ACES = re.compile(r"([A-Z]*)((?:\([^()]*\))*)")
+_LEVELS = {"ME": 0x2000, "MP": 0x2100, "HI": 0x3000, "SI": 0x4000}
+MEDIUM = 0x2000
+
+
+def _level(trustee: str) -> int:
+    if trustee in _LEVELS:
+        return _LEVELS[trustee]
+    if trustee.startswith("S-1-16-") and trustee[7:].isdigit():
+        return int(trustee[7:])
+    return 0
+
+
+def descriptor_ok(text: str, me: str) -> bool:
+    """Is this pipe's security descriptor, as Windows gives it back in SDDL, the one Rafiq makes: owned by this
+    user's SID, with one allow for that SID and nothing inherited, labelled Medium or higher? What decides who made
+    the pipe is the pipe object itself, never the process ID it reports, which Windows reuses (#242 review):
+    another account can't make an object owned by this user's SID, and a Low-integrity program's gets a Low label."""
+    sections = dict(_SECTION.findall(text or ""))
+    if sections.get("O") != me or "D" not in sections:
+        return False
+    dacl = _ACES.fullmatch(sections["D"])
+    if dacl is None or "P" not in dacl.group(1):
+        return False
+    aces = re.findall(r"\(([^()]*)\)", dacl.group(2))
+    if len(aces) != 1:
+        return False
+    fields = aces[0].split(";")
+    if len(fields) != 6 or fields[0] != "A" or fields[1] or not fields[2] or fields[5] != me:
+        return False
+    label = _ACES.fullmatch(sections.get("S", ""))
+    if label is None:
+        return False
+    for ace in re.findall(r"\(([^()]*)\)", label.group(2)):
+        parts = ace.split(";")
+        if len(parts) == 6 and parts[0] == "ML" and _level(parts[5]) < MEDIUM:
+            return False
+    return True
 
 
 _api = None
@@ -123,20 +173,21 @@ class PipeConnection:
 
 
 def connect(name: str, me: str | None, timeout: float | None) -> PipeConnection:
-    """This user's Rafiq on its pipe, once Windows says the listening program is this user's. FileNotFoundError
-    when no Rafiq runs, TimeoutError when it doesn't take the connection in time, PermissionError when the program
-    on the pipe isn't this user's, or this user's SID isn't known: nothing is sent then."""
+    """This user's Rafiq on its pipe, once the pipe itself says it is one Rafiq made: owned by this user, open to
+    this user alone, Medium or higher (descriptor_ok). FileNotFoundError when no Rafiq runs, TimeoutError when it
+    doesn't take the connection in time, PermissionError when the pipe isn't this user's Rafiq's, or this user's SID
+    isn't known: nothing is sent then."""
     if not me:
         raise PermissionError("Windows didn't say which user this is, so nothing is sent")
     handle = api().open(name, timeout)
     try:
-        owner = api().server_sid(handle)
+        text = api().pipe_security(handle)
     except OSError:
-        owner = None
-    if owner != me:
+        text = ""
+    if not descriptor_ok(text, me):
         api().close(handle)
-        raise PermissionError("the program on Rafiq's pipe isn't this user's")
-    return PipeConnection(handle, owner, peer_is_me=True)
+        raise PermissionError("the pipe isn't one this user's Rafiq made")
+    return PipeConnection(handle, me, peer_is_me=True)
 
 
 # ---------------------------------------------------------------------- the server
@@ -162,35 +213,42 @@ class PipeServer:
         self._stopped.clear()
         try:
             while not self._stop.is_set():
-                handle, self._waiting = self._waiting, None
+                handle = self._waiting          # still self._waiting while it waits, so server_close closes it
+                if handle is None:
+                    break
                 try:
                     api().connect(handle)
-                except OSError:
-                    api().close(handle)
-                    if self._stop.is_set() or not self._next():
+                except OSError as exc:
+                    if self._stop.is_set():
+                        break
+                    # A client that came and went before the call. The same instance waits again: closing it and
+                    # making another would leave the name free in between, for another account's program to take.
+                    try:
+                        api().disconnect(handle)
+                    except OSError:
+                        self._end(f"{exc.strerror or exc}")
                         break
                     continue
                 if self._stop.is_set():
-                    api().close(handle)
                     break
                 # The next instance first: with one always there, the name is never free for another program. One
                 # that can't be made ends the pipe, and this connection goes unanswered, rather than serve on with
                 # the name free once it closes.
-                if not self._next():
+                try:
+                    self._waiting = api().create(self.name, self.me, False)
+                except OSError as exc:
+                    self._waiting = None
                     api().close(handle)
+                    self._end(f"{exc.strerror or exc}")
                     break
                 threading.Thread(target=self._serve, args=(handle,), name="rafiq-pipe", daemon=True).start()
         finally:
             self._stopped.set()
 
-    def _next(self) -> bool:
-        try:
-            self._waiting = api().create(self.name, self.me, False)
-        except OSError as exc:
-            print(f"Rafiq's pipe stopped, so its own programs (rafiq ask, rafiq panel, rafiq mcp) can't reach it until "
-                  f"it restarts: {exc.strerror or exc}", file=sys.stderr, flush=True)
-            return False
-        return True
+    def _end(self, why: str) -> None:
+        self._stop.set()
+        print(f"Rafiq's pipe stopped, so its own programs (rafiq ask, rafiq panel, rafiq mcp) can't reach it until it "
+              f"restarts: {why}", file=sys.stderr, flush=True)
 
     def _serve(self, handle) -> None:
         try:
@@ -198,6 +256,7 @@ class PipeServer:
         except OSError:
             sid = None
         conn = PipeConnection(handle, sid, peer_is_me=sid is not None and sid == self.me)
+        conn.settimeout(REQUEST_SECONDS)    # a program of this user's that connects and says nothing ends, too
         try:
             if conn.peer_is_me:
                 self.RequestHandlerClass(conn, ("pipe", sid), self)
@@ -209,6 +268,8 @@ class PipeServer:
     def shutdown(self) -> None:
         """Stop serve_forever: connect once, so the instance waiting for a client returns."""
         self._stop.set()
+        if self._stopped.is_set():
+            return
         try:
             api().close(api().open(self.name, WAKE_SECONDS))
         except OSError:
@@ -242,6 +303,8 @@ class Win32:
     PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     TOKEN_QUERY = 0x8
     TOKEN_USER = 1
+    SE_KERNEL_OBJECT = 6
+    OWNER_SECURITY_INFORMATION, DACL_SECURITY_INFORMATION, LABEL_SECURITY_INFORMATION = 0x1, 0x4, 0x10
     ERROR_FILE_NOT_FOUND, ERROR_BROKEN_PIPE, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED = 2, 109, 231, 535
     ERROR_NO_DATA, ERROR_PIPE_NOT_CONNECTED = 232, 233
 
@@ -271,7 +334,6 @@ class Win32:
                                    w.DWORD, w.DWORD, ctypes.POINTER(SecurityAttributes))
         self.ConnectNamedPipe = fn(k32, "ConnectNamedPipe", w.BOOL, w.HANDLE, w.LPVOID)
         self.DisconnectNamedPipe = fn(k32, "DisconnectNamedPipe", w.BOOL, w.HANDLE)
-        self.FlushFileBuffers = fn(k32, "FlushFileBuffers", w.BOOL, w.HANDLE)
         self.CloseHandle = fn(k32, "CloseHandle", w.BOOL, w.HANDLE)
         self.CreateFileW = fn(k32, "CreateFileW", w.HANDLE, w.LPCWSTR, w.DWORD, w.DWORD, w.LPVOID, w.DWORD, w.DWORD,
                               w.HANDLE)
@@ -283,8 +345,6 @@ class Win32:
                                 ctypes.POINTER(w.DWORD), ctypes.POINTER(w.DWORD))
         self.GetNamedPipeClientProcessId = fn(k32, "GetNamedPipeClientProcessId", w.BOOL, w.HANDLE,
                                               ctypes.POINTER(w.ULONG))
-        self.GetNamedPipeServerProcessId = fn(k32, "GetNamedPipeServerProcessId", w.BOOL, w.HANDLE,
-                                              ctypes.POINTER(w.ULONG))
         self.OpenProcess = fn(k32, "OpenProcess", w.HANDLE, w.DWORD, w.BOOL, w.DWORD)
         self.GetCurrentProcess = fn(k32, "GetCurrentProcess", w.HANDLE)
         self.LocalFree = fn(k32, "LocalFree", w.HLOCAL, w.HLOCAL)
@@ -295,6 +355,11 @@ class Win32:
                                          ctypes.POINTER(w.LPWSTR))
         self.ConvertSD = fn(adv, "ConvertStringSecurityDescriptorToSecurityDescriptorW", w.BOOL, w.LPCWSTR, w.DWORD,
                             ctypes.POINTER(w.LPVOID), ctypes.POINTER(w.ULONG))
+        self.ConvertSDToString = fn(adv, "ConvertSecurityDescriptorToStringSecurityDescriptorW", w.BOOL, w.LPVOID,
+                                    w.DWORD, w.DWORD, ctypes.POINTER(w.LPWSTR), ctypes.POINTER(w.ULONG))
+        self.GetSecurityInfo = fn(adv, "GetSecurityInfo", w.DWORD, w.HANDLE, ctypes.c_int, w.DWORD,
+                                  ctypes.POINTER(w.LPVOID), ctypes.POINTER(w.LPVOID), ctypes.POINTER(w.LPVOID),
+                                  ctypes.POINTER(w.LPVOID), ctypes.POINTER(w.LPVOID))
 
     def _fail(self, what: str):
         code = self.ctypes.get_last_error()
@@ -346,11 +411,25 @@ class Win32:
             return None
         return self._process_sid(pid.value)
 
-    def server_sid(self, handle) -> str | None:
-        pid = self.w.ULONG()
-        if not self.GetNamedPipeServerProcessId(handle, self.ctypes.byref(pid)):
-            return None
-        return self._process_sid(pid.value)
+    def pipe_security(self, handle) -> str:
+        """The pipe's owner, DACL and integrity label, in SDDL, from the pipe object behind this handle."""
+        ctypes, w = self.ctypes, self.w
+        descriptor = w.LPVOID()
+        info = self.OWNER_SECURITY_INFORMATION | self.DACL_SECURITY_INFORMATION | self.LABEL_SECURITY_INFORMATION
+        code = self.GetSecurityInfo(handle, self.SE_KERNEL_OBJECT, info, None, None, None, None,
+                                    ctypes.byref(descriptor))
+        if code:
+            raise ctypes.WinError(code)
+        try:
+            text = w.LPWSTR()
+            if not self.ConvertSDToString(descriptor, 1, info, ctypes.byref(text), None):
+                raise self._fail("ConvertSecurityDescriptorToStringSecurityDescriptorW")
+            try:
+                return text.value or ""
+            finally:
+                self.LocalFree(ctypes.cast(text, w.HLOCAL))
+        finally:
+            self.LocalFree(ctypes.cast(descriptor, w.HLOCAL))
 
     # -- the pipe
 
@@ -421,7 +500,12 @@ class Win32:
                     self.ERROR_BROKEN_PIPE, self.ERROR_NO_DATA) else self._fail("WriteFile")
             view = view[done.value:]
 
+    def disconnect(self, handle) -> None:
+        """Ready this instance for the next client (after one that left before ConnectNamedPipe)."""
+        if not self.DisconnectNamedPipe(handle):
+            raise self._fail("DisconnectNamedPipe")
+
     def close(self, handle) -> None:
-        self.FlushFileBuffers(handle)       # what was written reaches the other end before it is cut off
-        self.DisconnectNamedPipe(handle)    # fails harmlessly on a client's end
+        # CloseHandle alone: what was written stays for the other end to read. DisconnectNamedPipe would throw it
+        # away, and FlushFileBuffers would wait for a client that may never read (#242 review).
         self.CloseHandle(handle)

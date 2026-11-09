@@ -190,11 +190,23 @@ class _PipeConnection(http.client.HTTPConnection):
     def __init__(self, name: str, me: str | None, host: str, read: float | None, connect: float | None):
         super().__init__(host, timeout=read)
         self.name, self.me, self.connect_timeout = name, me, connect
+        self._pending = b""
 
     def connect(self) -> None:
         conn = winpipe.connect(self.name, self.me, self.connect_timeout)
         conn.settimeout(self.timeout)
         self.sock = conn
+
+    def send(self, data) -> None:
+        """Kept until the request is whole: http.client writes the headers and the body apart, and Rafiq may answer
+        and close once it has the headers, before a body sent after them."""
+        self._pending += bytes(data)
+
+    def getresponse(self):
+        pending, self._pending = self._pending, b""
+        if pending:
+            self.sock.sendall(pending)
+        return super().getresponse()
 
 
 def _timeouts(timeout) -> tuple[float | None, float | None]:
@@ -225,6 +237,13 @@ def post(url: str, *, json=None, headers: dict | None = None, timeout=5.0, me: s
         conn = _Connection(where, parts.netloc, read, connect)
     target = parts.path + (f"?{parts.query}" if parts.query else "")
     body = jsonlib.dumps(json).encode() if json is not None else b""
+    if _windows():
+        from .panel import MAX_BODY
+
+        if len(body) > MAX_BODY:
+            # The panel reads no more, and over a pipe the rest would fill its buffer, with the write waiting forever.
+            raise httpx.LocalProtocolError(f"the request is too large for Rafiq ({len(body)} bytes, at most "
+                                           f"{MAX_BODY})", request=request)
     sent = {"Host": parts.netloc, "Content-Type": "application/json", **(headers or {})}
     try:
         try:

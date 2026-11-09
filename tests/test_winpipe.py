@@ -40,6 +40,9 @@ class FakeKernel:
         self.pipes: dict[str, dict] = {}            # name -> {"dacl": sid, "waiting": [server handles], "open": n}
         self.made: list[tuple[str, str, bool]] = []
         self.fail_next_instance = False
+        self.fail_connects = 0
+        self.disconnected = 0
+        self.writes: list[bytes] = []
 
     def my_sid(self):
         return self.caller
@@ -52,7 +55,10 @@ class FakeKernel:
         if self.fail_next_instance and pipe is not None:
             raise OSError(1450, "Insufficient system resources exist to complete the requested service")
         if pipe is None:
-            pipe = self.pipes[name] = {"dacl": sid, "owner": self.caller, "waiting": [], "open": 0}
+            trustee = "WD" if sid == "everyone" else sid
+            # As GetSecurityInfo gives it back: the owner is the maker's, GA reads as FA (all of a pipe's rights).
+            pipe = self.pipes[name] = {"dacl": sid, "owner": self.caller, "waiting": [], "open": 0,
+                                       "sddl": f"O:{self.caller}D:P(A;;FA;;;{trustee})S:(ML;;NW;;;ME)"}
         handle = Handle(name, pipe["owner"])          # every instance is its maker's, as the first one is
         pipe["waiting"].append(handle)
         pipe["open"] += 1
@@ -62,6 +68,21 @@ class FakeKernel:
         handle.attached.wait()
         if handle.closed:
             raise OSError(6, "The handle is invalid")
+        if self.fail_connects:
+            self.fail_connects -= 1
+            raise OSError(232, "The pipe is being closed")      # a client that came and went before the call
+
+    def disconnect(self, handle):
+        """Ready the same instance for the next client."""
+        if handle.end is not None:
+            handle.end.close()
+        handle.end, handle.peer = None, None
+        handle.attached.clear()
+        self.pipes[handle.name]["waiting"].append(handle)
+        self.disconnected += 1
+
+    def pipe_security(self, handle):
+        return self.pipes[handle.name]["sddl"]
 
     def open(self, name, timeout):
         pipe = self.pipes.get(name)
@@ -84,8 +105,6 @@ class FakeKernel:
     def client_sid(self, handle):
         return handle.peer
 
-    def server_sid(self, handle):
-        return handle.peer
 
     def available(self, handle):
         try:
@@ -100,6 +119,7 @@ class FakeKernel:
         return handle.end.recv(size)
 
     def write(self, handle, data):
+        self.writes.append(data)
         handle.end.sendall(data)
 
     def close(self, handle):
@@ -164,8 +184,37 @@ def test_the_pipe_is_named_for_this_user_s_sid():
 
 
 def test_the_pipe_s_security_descriptor_grants_only_this_user():
-    sddl = winpipe.sddl(ME)
-    assert sddl == f"D:P(A;;GA;;;{ME})"                 # protected: nothing inherited, no Everyone, no SYSTEM
+    # Owned by this user's SID even when Rafiq runs elevated (whose default owner is Administrators), protected
+    # (nothing inherited, no Everyone, no SYSTEM), and labelled Medium, so a Low-integrity program can't write to it.
+    assert winpipe.sddl(ME) == f"O:{ME}D:P(A;;GA;;;{ME})S:(ML;;NW;;;ME)"
+
+
+@pytest.mark.parametrize("text", [
+    f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)",                     # as Windows gives Rafiq's own back
+    f"O:{ME}D:P(A;;0x1f01ff;;;{ME})S:(ML;;NW;;;ME)",               # the rights as a number
+    f"O:{ME}D:P(A;;FA;;;{ME})",                                    # no label: Medium, implicitly
+    f"O:{ME}D:PAI(A;;FA;;;{ME})S:(ML;;NW;;;HI)",                   # a Rafiq started elevated
+])
+def test_rafiq_s_own_pipe_reads_as_this_user_s(text):
+    assert winpipe.descriptor_ok(text, ME)
+
+
+@pytest.mark.parametrize("text", [
+    f"O:{OTHER}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)",                  # another account made it
+    f"O:BAD:P(A;;FA;;;{ME})",                                      # Administrators own it
+    f"O:{ME}D:(A;;FA;;;{ME})",                                     # not protected: it inherits
+    f"O:{ME}D:P(A;;FA;;;{ME})(A;;FA;;;WD)",                        # Everyone too
+    f"O:{ME}D:P(A;;FA;;;WD)",                                      # Everyone only
+    f"O:{ME}D:P(D;;FA;;;{OTHER})(A;;FA;;;{ME})",                   # anything but the one allow
+    f"O:{ME}D:P(A;ID;FA;;;{ME})",                                  # an inherited allow
+    f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;LW)",                     # a Low-integrity program of this user made it
+    f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;S-1-16-4096)",
+    f"O:{ME}D:NO_ACCESS_CONTROL",                                  # no DACL: open to all
+    f"O:{ME}",
+    "",
+])
+def test_a_pipe_not_made_as_rafiq_makes_it_is_refused(text):
+    assert not winpipe.descriptor_ok(text, ME)
 
 
 def test_rafiq_s_own_programs_reach_it_on_windows(windows):
@@ -250,12 +299,52 @@ def test_the_token_is_never_sent_to_a_pipe_of_another_account(on_windows):
     assert squatter.end is not None and squatter.end.recv(100) == b""   # connected, then closed with nothing sent
 
 
-def test_a_server_whose_owner_can_t_be_told_is_refused(on_windows, monkeypatch):
+def test_a_pipe_whose_security_can_t_be_read_is_refused(on_windows, monkeypatch):
     server = on_windows.create(NAME, ME, True)
-    monkeypatch.setattr(on_windows, "server_sid", lambda handle: None)
+
+    def unreadable(handle):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(on_windows, "pipe_security", unreadable)
     with pytest.raises(httpx.ConnectError):
         sock.post("http://127.0.0.1:8765/api/panel-key", json={}, headers={"X-Rafiq-Token": "secret"}, timeout=2)
     assert server.end.recv(100) == b""
+
+
+def test_a_pipe_a_low_integrity_program_of_this_user_made_gets_nothing(on_windows):
+    # A sandboxed program of this user (Low integrity) took the name while Rafiq was down: same SID, Low label.
+    squatter = on_windows.create(NAME, ME, True)
+    on_windows.pipes[NAME]["sddl"] = f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;LW)"
+    with pytest.raises(httpx.ConnectError):
+        sock.post("http://127.0.0.1:8765/api/panel-key", json={}, headers={"X-Rafiq-Token": "secret"}, timeout=2)
+    assert squatter.end.recv(100) == b""
+
+
+def test_the_whole_request_goes_in_one_write(served, kernel):
+    # Rafiq may answer once it has the headers and close; a body sent after would find the pipe closed.
+    tcp, _pipe = served
+    assert post_key(tcp).status_code == 200
+    request = next(w for w in kernel.writes if w.startswith(b"POST "))
+    assert request.endswith(b"\r\n\r\n{}")
+
+
+def test_a_body_larger_than_rafiq_takes_is_refused_before_connecting(on_windows):
+    # Over a pipe a body Rafiq won't read fills its buffer, and the write would wait forever.
+    with pytest.raises(httpx.HTTPError, match="too large"):
+        sock.post("http://127.0.0.1:8765/api/tool", json={"text": "x" * (panel.MAX_BODY + 1)},
+                  headers={"X-Rafiq-Token": "secret"})
+    assert on_windows.writes == []
+
+
+def test_a_client_that_came_and_went_before_the_server_waited_reuses_the_same_instance(served, kernel):
+    # Closing it and making another would leave the name free in between, for another account to take.
+    tcp, _pipe = served
+    made = len(kernel.made)
+    kernel.fail_connects = 1
+    with pytest.raises(httpx.HTTPError):
+        post_key(tcp)
+    assert post_key(tcp).status_code == 200
+    assert kernel.disconnected == 1 and len(kernel.made) == made + 1       # one new instance, for the request
 
 
 def test_no_rafiq_running_reads_as_not_running(on_windows, capsys):
@@ -295,6 +384,26 @@ def test_rafiq_run_starts_the_pipe_on_windows(on_windows, capsys):
         pipe.shutdown()
         pipe.server_close()
         tcp.server_close()
+
+
+def test_rafiq_ask_refuses_to_answer_here_while_a_rafiq_it_can_t_reach_runs(on_windows, monkeypatch, capsys):
+    # Another account holds the pipe's name, so the running Rafiq has none: answering here, next to it, would save
+    # timers and facts that it then overwrites from its own copy.
+    from rafiq import hosting
+
+    on_windows.caller = OTHER
+    on_windows.create(NAME, "everyone", True)
+    on_windows.caller = ME
+    monkeypatch.setattr(hosting, "panel_up", lambda host, port: True)
+    assert cli._ask_through_running(config.load(), "remind me in 10 minutes", None, False) == 1
+    assert "can't reach it" in capsys.readouterr().err
+
+
+def test_rafiq_ask_answers_here_when_no_rafiq_runs_on_windows(on_windows, monkeypatch):
+    from rafiq import hosting
+
+    monkeypatch.setattr(hosting, "panel_up", lambda host, port: False)
+    assert cli._ask_through_running(config.load(), "hi", None, False) is None
 
 
 def test_rafiq_run_opens_the_panel_itself_when_the_pipe_can_t_start(on_windows, monkeypatch, capsys):
@@ -358,6 +467,25 @@ def test_on_windows_a_real_pipe_carries_the_panel_s_requests(real_windows):
         assert post_key(tcp, token="wrong").status_code == 403
     finally:
         pipe.shutdown()
+        pipe.server_close()
+        tcp.server_close()
+
+
+@real
+def test_on_windows_the_pipe_s_own_descriptor_reads_as_rafiq_s(real_windows, capsys):
+    # What decides on the client is the descriptor Windows gives back for the pipe, so check its real form.
+    me = winpipe.my_sid()
+    tcp = tcp_panel()
+    pipe = panel.serve_socket(tcp)
+    handle = winpipe.api().open(winpipe.pipe_name(me), 5)
+    try:
+        text = winpipe.api().pipe_security(handle)
+        with capsys.disabled():
+            print(f"\nthe pipe's descriptor: {text}")
+        assert winpipe.descriptor_ok(text, me), text
+        assert not winpipe.descriptor_ok(text, OTHER)
+    finally:
+        winpipe.api().close(handle)
         pipe.server_close()
         tcp.server_close()
 

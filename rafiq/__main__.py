@@ -410,6 +410,14 @@ def _ask_through_running(cfg: dict, text: str, tag: str | None, speak: bool) -> 
                           headers={"X-Rafiq-Token": config.panel_token()},
                           timeout=httpx.Timeout(ASK_SECONDS + 10, connect=2))
     except (httpx.ConnectError, httpx.ConnectTimeout):
+        from . import desktop, hosting
+
+        # On Windows a Rafiq can run without its pipe (another program had the name): answering here, next to it,
+        # would save timers and facts it overwrites. On Linux and macOS its socket is there whenever it runs.
+        if desktop.system() == "windows" and hosting.panel_up(host, port):
+            print("Rafiq is running, but `rafiq ask` can't reach it through its pipe (`rafiq run` said why when it "
+                  "started): say it to Rafiq, or type it in the panel.", file=sys.stderr)
+            return 1
         return None
     except httpx.HTTPError:
         print("The running Rafiq took the request but didn't answer in time.", file=sys.stderr)
