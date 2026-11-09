@@ -59,6 +59,31 @@ def _level(trustee: str) -> int:
     return 0
 
 
+_OWNER_ALIAS = re.compile(r"(?<=O:)([A-Z]{2})(?=[GDS]:|$)")
+_TRUSTEE_ALIAS = re.compile(r"(?<=;)([A-Z]{2})(?=\))")
+
+
+def expand_sids(text: str, full_sid) -> str:
+    """SDDL with the owner's and each entry's account abbreviation (LA, BA, WD...) written as the full SID, so it
+    can be compared with this user's. A label's level (ME, HI) is left: descriptor_ok reads those. An abbreviation
+    Windows can't expand is left as it is, and then matches no user's SID."""
+    def full(match: re.Match) -> str:
+        try:
+            return full_sid(match.group(1))
+        except OSError:
+            return match.group(1)
+
+    sections = _SECTION.findall(text or "")
+    out = []
+    for key, value in sections:
+        if key == "O":
+            value = _OWNER_ALIAS.sub(full, f"O:{value}")[2:]
+        elif key == "D":
+            value = _TRUSTEE_ALIAS.sub(full, value)
+        out.append(f"{key}:{value}")
+    return "".join(out)
+
+
 def descriptor_ok(text: str, me: str) -> bool:
     """Is this pipe's security descriptor, as Windows gives it back in SDDL, the one Rafiq makes: owned by this
     user's SID, with one allow for that SID and nothing inherited, labelled Medium or higher? What decides who made
@@ -355,6 +380,7 @@ class Win32:
                                          ctypes.POINTER(w.LPWSTR))
         self.ConvertSD = fn(adv, "ConvertStringSecurityDescriptorToSecurityDescriptorW", w.BOOL, w.LPCWSTR, w.DWORD,
                             ctypes.POINTER(w.LPVOID), ctypes.POINTER(w.ULONG))
+        self.ConvertStringSidToSidW = fn(adv, "ConvertStringSidToSidW", w.BOOL, w.LPCWSTR, ctypes.POINTER(w.LPVOID))
         self.ConvertSDToString = fn(adv, "ConvertSecurityDescriptorToStringSecurityDescriptorW", w.BOOL, w.LPVOID,
                                     w.DWORD, w.DWORD, ctypes.POINTER(w.LPWSTR), ctypes.POINTER(w.ULONG))
         self.GetSecurityInfo = fn(adv, "GetSecurityInfo", w.DWORD, w.HANDLE, ctypes.c_int, w.DWORD,
@@ -425,11 +451,28 @@ class Win32:
             if not self.ConvertSDToString(descriptor, 1, info, ctypes.byref(text), None):
                 raise self._fail("ConvertSecurityDescriptorToStringSecurityDescriptorW")
             try:
-                return text.value or ""
+                return expand_sids(text.value or "", self.full_sid)
             finally:
                 self.LocalFree(ctypes.cast(text, w.HLOCAL))
         finally:
             self.LocalFree(ctypes.cast(descriptor, w.HLOCAL))
+
+    def full_sid(self, alias: str) -> str:
+        """An SDDL account abbreviation (LA: this computer's Administrator) as the full SID Windows means by it."""
+        ctypes, w = self.ctypes, self.w
+        sid = w.LPVOID()
+        if not self.ConvertStringSidToSidW(alias, ctypes.byref(sid)):
+            raise self._fail(f"the SID {alias}")
+        try:
+            text = w.LPWSTR()
+            if not self.ConvertSidToStringSidW(sid, ctypes.byref(text)):
+                raise self._fail("ConvertSidToStringSidW")
+            try:
+                return text.value
+            finally:
+                self.LocalFree(ctypes.cast(text, w.HLOCAL))
+        finally:
+            self.LocalFree(ctypes.cast(sid, w.HLOCAL))
 
     # -- the pipe
 

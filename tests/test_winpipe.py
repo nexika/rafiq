@@ -199,6 +199,26 @@ def test_rafiq_s_own_pipe_reads_as_this_user_s(text):
     assert winpipe.descriptor_ok(text, ME)
 
 
+def test_account_abbreviations_in_a_real_descriptor_are_read_as_full_sids():
+    # From the windows-latest runner, where the user is this computer's Administrator (RID 500, written LA).
+    admin = "S-1-5-21-3289802278-1561746829-1498425070-500"
+    real = "O:LAD:P(A;;FA;;;LA)S:AI(ML;;NW;;;ME)"
+    aliases = {"LA": admin, "BA": "S-1-5-32-544", "WD": "S-1-1-0"}
+    text = winpipe.expand_sids(real, lambda alias: aliases[alias])
+    assert text == f"O:{admin}D:P(A;;FA;;;{admin})S:AI(ML;;NW;;;ME)"
+    assert winpipe.descriptor_ok(text, admin)
+    assert not winpipe.descriptor_ok(winpipe.expand_sids("O:BAD:P(A;;FA;;;LA)", aliases.get), admin)
+    assert not winpipe.descriptor_ok(winpipe.expand_sids("O:LAD:P(A;;FA;;;WD)", aliases.get), admin)
+
+
+def test_an_abbreviation_windows_can_t_expand_matches_no_one():
+    def unknown(alias):
+        raise OSError(1337, "The security ID structure is invalid")
+
+    assert winpipe.expand_sids("O:XXD:P(A;;FA;;;XX)", unknown) == "O:XXD:P(A;;FA;;;XX)"
+    assert not winpipe.descriptor_ok("O:XXD:P(A;;FA;;;XX)", ME)
+
+
 @pytest.mark.parametrize("text", [
     f"O:{OTHER}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)",                  # another account made it
     f"O:BAD:P(A;;FA;;;{ME})",                                      # Administrators own it
