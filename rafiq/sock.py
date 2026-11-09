@@ -5,8 +5,9 @@ other end: the server refuses another account's program, and a client sends noth
 listening program is this user's, so the token never reaches a program of another account that took the
 panel's place while Rafiq was down.
 
-Windows has no AF_UNIX in CPython (#193): there these programs say they can't reach Rafiq yet, and nothing falls
-back to TCP, where the token could reach another account's program.
+Windows has no AF_UNIX in CPython: there they use a named pipe only this user can open, with the same checks at
+both ends (rafiq/winpipe.py, #242). Nothing falls back to TCP, where the token could reach another account's
+program.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from . import config
+from . import config, winpipe
 
 # sun_path holds 104 bytes on macOS and 108 on Linux, the final NUL included.
 MAX_PATH = 103 if sys.platform == "darwin" else 107
@@ -35,20 +36,31 @@ XUCRED_SIZE = 76                                # u_int, uid_t, short, 2 bytes o
 UCRED = "iII"                                   # Linux struct ucred: pid, uid, gid (uid_t is unsigned)
 NAME = "panel.sock"
 # The base of the socket servers. Windows has no UnixStreamServer: the class is still defined there, so the modules
-# import, but it is never made (available() is False).
+# import, but it is never made there (unix_available() is False; the panel uses the pipe).
 UnixServer = getattr(socketserver, "UnixStreamServer", socketserver.BaseServer)
-NOT_YET = ("This command is not on Windows yet: it reaches the running Rafiq through a socket only you can open, "
-           "and Windows has none for Python yet. Say it to Rafiq, or use the panel `rafiq run` opens in a terminal.")
+NOT_YET = ("This command can't reach the running Rafiq here: it needs a socket only you can open, and this Python "
+           "has none. Say it to Rafiq, or use the panel `rafiq run` opens in a terminal.")
 
 
 class Unavailable(httpx.ConnectError):
-    """No socket on this platform: what `rafiq listen` and the others print, instead of "Rafiq is not running"."""
+    """No socket or pipe on this platform: what `rafiq listen` and the others print, instead of "Rafiq is not
+    running"."""
+
+
+def _windows() -> bool:
+    from . import desktop
+
+    return desktop.system() == "windows"
 
 
 def available() -> bool:
-    from . import desktop
+    """Can Rafiq's own programs reach the running Rafiq here: a Unix socket, or on Windows its pipe (#242)?"""
+    return _windows() or hasattr(socket, "AF_UNIX")
 
-    return desktop.system() != "windows" and hasattr(socket, "AF_UNIX")
+
+def unix_available() -> bool:
+    """A Unix socket, which the phone page needs for `tailscale serve` (not on Windows yet)."""
+    return not _windows() and hasattr(socket, "AF_UNIX")
 
 
 def path() -> Path:
@@ -138,6 +150,19 @@ def peer_uid(conn: socket.socket) -> int | None:
         return None
 
 
+def local(conn) -> bool:
+    """A connection on Rafiq's own socket or pipe, where whose program it is can be told."""
+    return getattr(conn, "family", None) in (getattr(socket, "AF_UNIX", None), winpipe.FAMILY)
+
+
+def peer_is_me(conn) -> bool:
+    """Is the program at the other end of this local connection this user's: on the pipe as Windows said when it
+    connected, on a Unix socket as the kernel says."""
+    if getattr(conn, "family", None) == winpipe.FAMILY:
+        return conn.peer_is_me is True
+    return peer_uid(conn) == os.getuid()
+
+
 class _Connection(http.client.HTTPConnection):
     """HTTP over the panel's socket, sent only once the kernel says the listening program is this user's."""
 
@@ -159,29 +184,67 @@ class _Connection(http.client.HTTPConnection):
         self.sock = conn
 
 
+class _PipeConnection(http.client.HTTPConnection):
+    """HTTP over Rafiq's pipe on Windows (#242), sent only once Windows says the listening program is this user's."""
+
+    def __init__(self, name: str, me: str | None, host: str, read: float | None, connect: float | None):
+        super().__init__(host, timeout=read)
+        self.name, self.me, self.connect_timeout = name, me, connect
+        self._pending = b""
+
+    def connect(self) -> None:
+        conn = winpipe.connect(self.name, self.me, self.connect_timeout)
+        conn.settimeout(self.timeout)
+        self.sock = conn
+
+    def send(self, data) -> None:
+        """Kept until the request is whole: http.client writes the headers and the body apart, and Rafiq may answer
+        and close once it has the headers, before a body sent after them."""
+        self._pending += bytes(data)
+
+    def getresponse(self):
+        pending, self._pending = self._pending, b""
+        if pending:
+            self.sock.sendall(pending)
+        return super().getresponse()
+
+
 def _timeouts(timeout) -> tuple[float | None, float | None]:
     if timeout is None or isinstance(timeout, (int, float)):
         return timeout, timeout
     return timeout.read, timeout.connect        # an httpx.Timeout
 
 
-def post(url: str, *, json=None, headers: dict | None = None, timeout=5.0):
-    """A POST to the running Rafiq over its socket, answered as an httpx.Response; `url` still names 127.0.0.1
-    and the port, for the panel's Host check. Raises httpx.ConnectError, as for a Rafiq that isn't running,
-    when the socket isn't there or isn't this user's: the token is never sent to it, and nothing falls back to
-    TCP. A reply that doesn't come in time raises httpx.ReadTimeout."""
+def post(url: str, *, json=None, headers: dict | None = None, timeout=5.0, me: str | None = None,
+         name: str | None = None):
+    """A POST to the running Rafiq over its socket (its pipe on Windows), answered as an httpx.Response; `url` still
+    names 127.0.0.1 and the port, for the panel's Host check. Raises httpx.ConnectError, as for a Rafiq that isn't
+    running, when the socket or pipe isn't there or isn't this user's: the token is never sent to it, and nothing
+    falls back to TCP. A reply that doesn't come in time raises httpx.ReadTimeout. `me` (this user's SID) and
+    `name` (the pipe's) are for tests; by default Windows says them."""
     request = httpx.Request("POST", url)
     if not available():
         raise Unavailable(NOT_YET, request=request)
-    where = path()
-    if not ours(where):
-        raise httpx.ConnectError("Rafiq's socket isn't there, or isn't this user's", request=request)
     parts = urlsplit(url)
+    read, connect = _timeouts(timeout)
+    if _windows():
+        me = me or winpipe.my_sid()
+        conn = _PipeConnection(name or winpipe.pipe_name(me or ""), me, parts.netloc, read, connect)
+    else:
+        where = path()
+        if not ours(where):
+            raise httpx.ConnectError("Rafiq's socket isn't there, or isn't this user's", request=request)
+        conn = _Connection(where, parts.netloc, read, connect)
     target = parts.path + (f"?{parts.query}" if parts.query else "")
     body = jsonlib.dumps(json).encode() if json is not None else b""
+    if _windows():
+        from .panel import MAX_BODY
+
+        if len(body) > MAX_BODY:
+            # The panel reads no more, and over a pipe the rest would fill its buffer, with the write waiting forever.
+            raise httpx.LocalProtocolError(f"the request is too large for Rafiq ({len(body)} bytes, at most "
+                                           f"{MAX_BODY})", request=request)
     sent = {"Host": parts.netloc, "Content-Type": "application/json", **(headers or {})}
-    read, connect = _timeouts(timeout)
-    conn = _Connection(where, parts.netloc, read, connect)
     try:
         try:
             conn.connect()

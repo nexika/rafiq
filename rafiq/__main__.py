@@ -41,12 +41,8 @@ def cmd_run(args) -> int:
         host, port = cfg["panel"]["host"], int(cfg["panel"]["port"])
         server = serve(assistant, host, port, config.panel_token())
         threading.Thread(target=server.serve_forever, name="rafiq-panel", daemon=True).start()
-        _start_socket(server)
+        _panel_for_programs(server)
         assistant.gestures.url = f"http://{host}:{server.server_address[1]}/api/gesture"
-        if sock.available():
-            print("Panel: open it with `rafiq panel`", flush=True)
-        else:
-            _open_panel_here(server)
     _start_hub(cfg, assistant)
     if cfg["phone"].get("enabled"):
         _start_phone(cfg, assistant)
@@ -60,12 +56,21 @@ def cmd_run(args) -> int:
     return 0
 
 
+def _panel_for_programs(server) -> None:
+    """Rafiq's own programs' way in: its socket, or on Windows its pipe (#242). Without one, `rafiq panel` can't ask
+    for a key, so Rafiq started in a terminal opens its panel itself."""
+    if _start_socket(server) is not None:
+        print("Panel: open it with `rafiq panel`", flush=True)
+    else:
+        _open_panel_here(server)
+
+
 def _start_socket(tcp):
-    """The panel's socket for Rafiq's own programs (#234); without it Rafiq still runs, and they say it isn't
-    reachable."""
+    """The panel's socket for Rafiq's own programs (#234), or on Windows its pipe (#242); without it Rafiq still
+    runs, and they say it isn't reachable."""
     from . import panel
 
-    if not sock.available():               # Windows (#193): its programs say they can't reach Rafiq yet
+    if not sock.available():               # a Python with neither
         return None
     try:
         server = panel.serve_socket(tcp)
@@ -99,7 +104,7 @@ def _start_mobile(cfg: dict, assistant):
     whatever another account put there, with the paired phones' tokens (#238)."""
     from . import mobile
 
-    if not sock.available():               # it needs a socket only this user can open, or /proc (#193)
+    if not sock.unix_available():            # it needs a socket only this user can open, or /proc (#193)
         print(MOBILE_NOT_YET, file=sys.stderr, flush=True)
         return None
     port, listen = int(cfg["mobile"]["port"]), cfg["mobile"].get("listen", "socket")
@@ -141,7 +146,7 @@ MOBILE_NOT_YET = "The phone page is not on Windows yet; Rafiq runs without it ([
 def _check_mobile(cfg: dict) -> None:
     from . import mobile
 
-    if not sock.available():
+    if not sock.unix_available():
         return
     try:
         mobile.check_start(cfg)
@@ -392,11 +397,11 @@ def _ask_through_running(cfg: dict, text: str, tag: str | None, speak: bool) -> 
     if not sock.available():
         from . import hosting
 
-        # Windows (#193): this can't reach the running Rafiq yet, and answering here next to it would save timers
-        # and facts that it overwrites from its own copy. Only an answer here when none runs; the probe sends no
-        # token.
+        # A Python with no socket: this can't reach the running Rafiq, and answering here next to it would save
+        # timers and facts that it overwrites from its own copy. Only an answer here when none runs; the probe sends
+        # no token.
         if hosting.panel_up(host, port):
-            print("Rafiq is running, and `rafiq ask` can't reach it on Windows yet: say it to Rafiq, or type it in "
+            print("Rafiq is running, and `rafiq ask` can't reach it from this Python: say it to Rafiq, or type it in "
                   "the panel.", file=sys.stderr)
             return 1
         return None
@@ -405,6 +410,14 @@ def _ask_through_running(cfg: dict, text: str, tag: str | None, speak: bool) -> 
                           headers={"X-Rafiq-Token": config.panel_token()},
                           timeout=httpx.Timeout(ASK_SECONDS + 10, connect=2))
     except (httpx.ConnectError, httpx.ConnectTimeout):
+        from . import desktop, hosting
+
+        # On Windows a Rafiq can run without its pipe (another program had the name): answering here, next to it,
+        # would save timers and facts it overwrites. On Linux and macOS its socket is there whenever it runs.
+        if desktop.system() == "windows" and hosting.panel_up(host, port):
+            print("Rafiq is running, but `rafiq ask` can't reach it through its pipe (`rafiq run` said why when it "
+                  "started): say it to Rafiq, or type it in the panel.", file=sys.stderr)
+            return 1
         return None
     except httpx.HTTPError:
         print("The running Rafiq took the request but didn't answer in time.", file=sys.stderr)
@@ -932,7 +945,7 @@ def cmd_mobile(args) -> int:
     """Pair a phone with Rafiq's companion page, list the paired phones, or unpair one (#207)."""
     from . import mobile
 
-    if not sock.available():
+    if not sock.unix_available():
         print(MOBILE_NOT_YET, file=sys.stderr)
         return 1
 

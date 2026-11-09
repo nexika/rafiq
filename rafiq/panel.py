@@ -210,7 +210,7 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             return self.headers.get("Host", "") in allowed_hosts
 
         def _over_socket(self) -> bool:
-            return self.connection.family == getattr(socket, "AF_UNIX", None)
+            return sock.local(self.connection)             # the Unix socket, or on Windows the pipe (#242)
 
         def _programs_here(self) -> bool:
             """Rafiq's own programs may come in this way. Off Linux a TCP connection can't be told from another
@@ -233,7 +233,7 @@ def make_handler(assistant, token: str, port: int, screen_token: str = ""):
             Linux, /proc does. A connection whose owner can't be found is refused. On TCP elsewhere there is no
             /proc to ask, and only a session gets in there."""
             if self._over_socket():
-                return sock.peer_uid(self.connection) == os.getuid()
+                return sock.peer_is_me(self.connection)
             if not sys.platform.startswith("linux"):
                 return True
             return connection_owner(self.client_address, self.connection.getsockname()) == os.getuid()
@@ -519,10 +519,18 @@ class _SocketServer(socketserver.ThreadingMixIn, sock.UnixServer):
     daemon_threads = True
 
 
-def serve_socket(tcp: ThreadingHTTPServer) -> socketserver.UnixStreamServer:
-    """The same panel on its Unix socket, for Rafiq's own programs (#234). It shares the TCP server's handler,
-    so a one-time key asked for here opens the page in the browser. ValueError when the socket can't be made
-    safely (a path too long, a folder that isn't this user's)."""
+def serve_socket(tcp: ThreadingHTTPServer):
+    """The same panel on its Unix socket, for Rafiq's own programs (#234), or on Windows its named pipe (#242). It
+    shares the TCP server's handler, so a one-time key asked for here opens the page in the browser. ValueError
+    when the socket can't be made safely (a path too long, a folder that isn't this user's), or the pipe (another
+    program has its name, Windows doesn't say who this user is)."""
+    from . import desktop, winpipe
+
+    if desktop.system() == "windows":
+        me = winpipe.my_sid()
+        if not me:
+            raise ValueError("Windows didn't say which user this is, so Rafiq's pipe can't be closed to others")
+        return winpipe.PipeServer(winpipe.pipe_name(me), tcp.RequestHandlerClass, me)
     where = sock.path()
     sock.prepare(where)
     server = _SocketServer(str(where), tcp.RequestHandlerClass)

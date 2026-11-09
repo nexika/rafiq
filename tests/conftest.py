@@ -65,6 +65,33 @@ def never_the_real_windows(monkeypatch):
     monkeypatch.setattr(desktop, "user_sid", lambda run=None: None if run is None else real_sid(run))
     # A test that sees Windows must not start a second Rafiq in UTF-8 mode (test_windows.py checks that itself).
     monkeypatch.setattr(cli, "_rerun_in_utf8", lambda argv, popen=None: None)
+    # Nor reach a real Rafiq's pipe, or make one (#242): no pipe is there, as with no Rafiq running. test_winpipe.py
+    # gives its own pipes.
+    from rafiq import winpipe
+
+    monkeypatch.setattr(winpipe, "_api", NoPipes())
+
+
+class NoPipes:
+    """winpipe's Win32 calls, with no pipe anywhere."""
+
+    def my_sid(self):
+        return "S-1-5-21-0-0-0-1001"
+
+    def open(self, name, timeout):
+        raise FileNotFoundError(2, "no pipe in tests")
+
+    def create(self, name, sid, first):
+        raise OSError("no real pipe in tests")
+
+    def server_sid(self, handle):
+        return None
+
+    def client_sid(self, handle):
+        return None
+
+    def close(self, handle):
+        pass
 
 
 @pytest.fixture(autouse=True)

@@ -121,7 +121,7 @@ jobs:
         shell: pwsh
         run: |
           .venv\Scripts\python -m pip install --quiet -e ".[dev]"
-          .venv\Scripts\python -m pytest -q -n auto tests/test_windows.py tests/test_docs.py tests/test_lang_wake.py tests/test_interpret.py tests/test_router.py tests/test_budget.py tests/test_http_body.py tests/test_hallucinations.py
+          .venv\Scripts\python -m pytest -q -n auto tests/test_windows.py tests/test_winpipe.py tests/test_docs.py tests/test_lang_wake.py tests/test_interpret.py tests/test_router.py tests/test_budget.py tests/test_http_body.py tests/test_hallucinations.py
       - name: Doctor
         shell: pwsh
         run: .venv\Scripts\rafiq doctor; exit 0     # no microphone or desktop on the runner: for the log only

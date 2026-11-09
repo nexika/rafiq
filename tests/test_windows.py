@@ -551,30 +551,23 @@ def test_the_tools_with_no_windows_version_do_not_load(windows):
             "hand_gestures", "presence"} <= not_here()
 
 
-# ---------------------------------------------------------------------- not on Windows yet
+# ---------------------------------------------------------------------- Rafiq's own programs, through its pipe (#242)
 
 @pytest.mark.parametrize("argv", [["listen"], ["dictate"], ["gestures", "on"], ["panel"]])
-def test_commands_that_reach_the_running_rafiq_say_they_are_not_on_windows_yet(windows, monkeypatch, capsys, argv):
+def test_commands_that_reach_the_running_rafiq_use_its_pipe_on_windows(windows, monkeypatch, capsys, argv):
     from rafiq import __main__ as cli
 
-    monkeypatch.setattr(sock, "path", lambda: pytest.fail("looked for the socket"))
+    monkeypatch.setattr(sock, "path", lambda: pytest.fail("looked for the Unix socket"))
     monkeypatch.setattr(desktop, "make_private", lambda folder, run=None: True)
-    assert cli.main(argv) == 1
-    assert "not on Windows yet" in capsys.readouterr().err
+    assert cli.main(argv) == 1                          # conftest: no pipe there, as with no Rafiq running
+    assert "Rafiq is not running" in capsys.readouterr().err
 
 
-def test_rafiq_ask_on_windows_answers_here_without_the_socket(windows, monkeypatch):
+def test_rafiq_ask_on_windows_answers_here_when_no_rafiq_has_its_pipe(windows, monkeypatch):
     from rafiq import __main__ as cli
 
-    monkeypatch.setattr(sock, "path", lambda: pytest.fail("looked for the socket"))
+    monkeypatch.setattr(sock, "path", lambda: pytest.fail("looked for the Unix socket"))
     assert cli._ask_through_running(config.load(), "hi", None, False) is None
-
-
-def test_rafiq_run_on_windows_starts_no_socket(windows, monkeypatch):
-    from rafiq import __main__ as cli
-
-    monkeypatch.setattr(panel, "serve_socket", lambda tcp: pytest.fail("made a socket"))
-    assert cli._start_socket(object()) is None
 
 
 def test_rafiq_run_in_a_terminal_on_windows_opens_the_panel_once(windows, monkeypatch):
@@ -786,18 +779,21 @@ def test_rafiq_on_linux_never_runs_again():
     assert RERUN(["ask"], popen=lambda *a, **k: pytest.fail("ran twice")) is None
 
 
-def test_rafiq_ask_on_windows_refuses_while_rafiq_runs(windows, monkeypatch, capsys):
-    """Answering here next to the running Rafiq would save timers and facts that it then overwrites."""
+def test_rafiq_ask_with_no_socket_refuses_while_rafiq_runs(monkeypatch, capsys):
+    """A Python with no AF_UNIX off Windows: answering here next to the running Rafiq would save timers and facts
+    that it then overwrites."""
     from rafiq import hosting
 
+    monkeypatch.delattr(socket, "AF_UNIX", raising=False)
     monkeypatch.setattr(hosting, "panel_up", lambda host, port: True)
     assert cli._ask_through_running(config.load(), "remind me in 10 minutes", None, False) == 1
-    assert "can't reach it on Windows yet" in capsys.readouterr().err
+    assert "can't reach it from this Python" in capsys.readouterr().err
 
 
-def test_rafiq_ask_on_windows_answers_here_when_nothing_runs(windows, monkeypatch):
+def test_rafiq_ask_with_no_socket_answers_here_when_nothing_runs(monkeypatch):
     from rafiq import hosting
 
+    monkeypatch.delattr(socket, "AF_UNIX", raising=False)
     monkeypatch.setattr(hosting, "panel_up", lambda host, port: False)
     assert cli._ask_through_running(config.load(), "hi", None, False) is None
 
