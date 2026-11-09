@@ -69,13 +69,18 @@ pub fn ok(text: &str, me: &str) -> bool {
     if fields.len() != 6 || fields[0] != "A" || !fields[1].is_empty() || fields[2].is_empty() || fields[5] != me {
         return false;
     }
+    // The label Rafiq always sets, and none lower: a pipe with none isn't one Rafiq made, and a sandboxed program
+    // that removed its own Low label mustn't pass as Medium (#242 review).
     let Some((_, labels)) = entries(section(&parts, b'S').unwrap_or("")) else {
         return false;
     };
-    labels.iter().all(|ace| {
-        let fields: Vec<&str> = ace.split(';').collect();
-        !(fields.len() == 6 && fields[0] == "ML" && level(fields[5]) < MEDIUM)
-    })
+    let levels: Vec<u32> = labels
+        .iter()
+        .map(|ace| ace.split(';').collect::<Vec<&str>>())
+        .filter(|fields| fields.len() == 6 && fields[0] == "ML")
+        .map(|fields| level(fields[5]))
+        .collect();
+    !levels.is_empty() && levels.iter().all(|&l| l >= MEDIUM)
 }
 
 fn alias(value: &str) -> bool {
@@ -126,7 +131,6 @@ mod tests {
         for text in [
             format!("O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)"),
             format!("O:{ME}D:P(A;;0x1f01ff;;;{ME})S:(ML;;NW;;;ME)"),
-            format!("O:{ME}D:P(A;;FA;;;{ME})"),
             format!("O:{ME}D:PAI(A;;FA;;;{ME})S:AI(ML;;NW;;;HI)"),
         ] {
             assert!(ok(&text, ME), "{text}");
@@ -145,6 +149,9 @@ mod tests {
             format!("O:{ME}D:P(A;ID;FA;;;{ME})"),
             format!("O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;LW)"),
             format!("O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;S-1-16-4096)"),
+            format!("O:{ME}D:P(A;;FA;;;{ME})"),
+            format!("O:{ME}D:P(A;;FA;;;{ME})S:"),
+            format!("O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)(ML;;NW;;;LW)"),
             format!("O:{ME}D:NO_ACCESS_CONTROL"),
             format!("O:{ME}"),
             String::new(),

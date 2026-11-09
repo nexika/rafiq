@@ -77,8 +77,8 @@ jobs:
           else
             echo "windows=false" >> "$GITHUB_OUTPUT"
           fi
-          # The widget's Tauri side on Windows (#242): its Rust, its lock file, and this workflow.
-          if git diff --name-only "$BASE" HEAD | grep -Eq '^(widget/src-tauri/|\.github/workflows/ci\.yml$)'; then
+          # The widget's Tauri side on Windows (#242): its Rust, its lock file, the pipe it checks, and this workflow.
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(widget/src-tauri/|rafiq/winpipe\.py$|\.github/workflows/ci\.yml$)'; then
             echo "widget_windows=true" >> "$GITHUB_OUTPUT"
           else
             echo "widget_windows=false" >> "$GITHUB_OUTPUT"
