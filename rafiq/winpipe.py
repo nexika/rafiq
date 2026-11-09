@@ -101,14 +101,14 @@ def descriptor_ok(text: str, me: str) -> bool:
     fields = aces[0].split(";")
     if len(fields) != 6 or fields[0] != "A" or fields[1] or not fields[2] or fields[5] != me:
         return False
+    # The label Rafiq always sets, and none lower: a pipe with none isn't one Rafiq made, and a sandboxed program
+    # that removed its own Low label mustn't pass as Medium (#242 review).
     label = _ACES.fullmatch(sections.get("S", ""))
     if label is None:
         return False
-    for ace in re.findall(r"\(([^()]*)\)", label.group(2)):
-        parts = ace.split(";")
-        if len(parts) == 6 and parts[0] == "ML" and _level(parts[5]) < MEDIUM:
-            return False
-    return True
+    levels = [_level(parts[5]) for parts in (ace.split(";") for ace in re.findall(r"\(([^()]*)\)", label.group(2)))
+              if len(parts) == 6 and parts[0] == "ML"]
+    return bool(levels) and min(levels) >= MEDIUM
 
 
 _api = None

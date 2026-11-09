@@ -34,11 +34,12 @@ fn read_line(reader: &mut impl BufRead, line: &mut String) -> Result<usize, Stri
     Ok(n)
 }
 
-/// The panel's socket (#234), where the token goes only once owner::check has found it this user's.
+/// The panel's socket (#234), where the token goes only once owner::check has found it this user's; on Windows,
+/// its named pipe (#242), once the pipe's own descriptor says Rafiq made it.
 #[cfg(unix)]
 pub type Conn = std::os::unix::net::UnixStream;
-#[cfg(not(unix))]
-pub type Conn = std::net::TcpStream;
+#[cfg(windows)]
+pub type Conn = crate::pipe::Conn;
 
 /// A connection to the panel's socket, within 2 seconds (a Rafiq that is stuck must not hang the widget), and
 /// only to a program the kernel says is this user's. Nothing is sent yet.
@@ -57,17 +58,11 @@ pub fn connect(panel: &Panel) -> Result<Conn, String> {
     Ok(conn)
 }
 
-/// On Windows (#193): the port, on IPv6 when that is where it listens. Nothing is sent yet.
-#[cfg(not(unix))]
+/// On Windows: Rafiq's named pipe, only when it is one this user's Rafiq made. Never the panel's TCP port, where
+/// another account's program could be listening. Nothing is sent yet.
+#[cfg(windows)]
 pub fn connect(panel: &Panel) -> Result<Conn, String> {
-    use std::net::SocketAddr;
-
-    let address: SocketAddr = if panel.ipv6 {
-        (std::net::Ipv6Addr::LOCALHOST, panel.port).into()
-    } else {
-        (std::net::Ipv4Addr::LOCALHOST, panel.port).into()
-    };
-    Conn::connect_timeout(&address, Duration::from_secs(2)).map_err(|_| "not_running".to_string())
+    crate::pipe::connect(panel)
 }
 
 /// Connect to the panel and read the stream until it ends. `check` runs before anything is sent (whose

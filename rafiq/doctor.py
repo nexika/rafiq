@@ -409,7 +409,7 @@ def _desktop(probe: Probe) -> list[Check]:
 
 
 NOT_ON_WINDOWS = ("dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, "
-                  "the computer's own sound, presence, the phone page and the widget")
+                  "the computer's own sound, presence and the phone page")
 
 
 def _windows_desktop(probe: Probe) -> list[Check]:

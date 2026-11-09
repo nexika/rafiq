@@ -189,10 +189,19 @@ def test_the_pipe_s_security_descriptor_grants_only_this_user():
     assert winpipe.sddl(ME) == f"O:{ME}D:P(A;;GA;;;{ME})S:(ML;;NW;;;ME)"
 
 
+def test_the_widget_s_windows_tests_make_the_pipe_as_rafiq_does():
+    # The widget checks the pipe's descriptor too (widget/src-tauri/src/descriptor.rs); its tests make the pipe with
+    # a copy of sddl(), which must change with it, or every widget would refuse Rafiq's pipe.
+    from pathlib import Path
+
+    rust = (Path(__file__).parent.parent / "widget/src-tauri/src/pipe.rs").read_text(encoding="utf-8")
+    copy = rust.split('fn rafiqs(me: &str) -> String {\n        format!("', 1)[1].split('")', 1)[0]
+    assert copy.replace("{me}", ME) == winpipe.sddl(ME)
+
+
 @pytest.mark.parametrize("text", [
     f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)",                     # as Windows gives Rafiq's own back
     f"O:{ME}D:P(A;;0x1f01ff;;;{ME})S:(ML;;NW;;;ME)",               # the rights as a number
-    f"O:{ME}D:P(A;;FA;;;{ME})",                                    # no label: Medium, implicitly
     f"O:{ME}D:PAI(A;;FA;;;{ME})S:(ML;;NW;;;HI)",                   # a Rafiq started elevated
 ])
 def test_rafiq_s_own_pipe_reads_as_this_user_s(text):
@@ -229,6 +238,9 @@ def test_an_abbreviation_windows_can_t_expand_matches_no_one():
     f"O:{ME}D:P(A;ID;FA;;;{ME})",                                  # an inherited allow
     f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;LW)",                     # a Low-integrity program of this user made it
     f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;S-1-16-4096)",
+    f"O:{ME}D:P(A;;FA;;;{ME})",                                    # no label: Rafiq always sets one
+    f"O:{ME}D:P(A;;FA;;;{ME})S:",
+    f"O:{ME}D:P(A;;FA;;;{ME})S:(ML;;NW;;;ME)(ML;;NW;;;LW)",        # a Medium one beside a Low one
     f"O:{ME}D:NO_ACCESS_CONTROL",                                  # no DACL: open to all
     f"O:{ME}",
     "",
@@ -456,6 +468,7 @@ def test_doctor_no_longer_lists_rafiq_s_own_programs_as_not_on_windows():
     from rafiq import doctor
 
     assert "rafiq listen" not in doctor.NOT_ON_WINDOWS and "`mcp`" not in doctor.NOT_ON_WINDOWS
+    assert "widget" not in doctor.NOT_ON_WINDOWS                    # it reaches Rafiq through the pipe too
     assert "the phone page" in doctor.NOT_ON_WINDOWS
 
 

@@ -66,7 +66,7 @@ pub fn peer_ok(conn: &std::os::unix::net::UnixStream) -> Result<(), String> {
     }
 }
 
-/// On Windows (#193) the widget still talks over TCP, and nothing here can tell whose program listens.
+/// On Windows the pipe was checked as it was opened (pipe.rs, #242): its own descriptor says whose it is.
 #[cfg(not(unix))]
 pub fn check(_panel: &crate::panel::Panel) -> Result<(), String> {
     Ok(())

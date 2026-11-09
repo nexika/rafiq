@@ -3,9 +3,13 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg_attr(not(windows), allow(dead_code))] // used on Windows; its tests run everywhere
+mod descriptor;
 mod image;
 mod owner;
 mod panel;
+#[cfg(windows)]
+mod pipe;
 mod post;
 mod sse;
 #[cfg(all(test, unix))]
