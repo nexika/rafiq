@@ -261,7 +261,7 @@ def _phone_page(cfg: dict) -> Check:
     port, listen = int(settings["port"]), settings.get("listen", "socket")
     if not settings.get("enabled"):
         return Check("Phone page", True, "off ([mobile] enabled = false)", optional=True)
-    if not sock.available():
+    if not sock.unix_available():
         return Check("Phone page", True, "not on Windows yet ([mobile] enabled is ignored)", optional=True)
     if listen not in ("socket", "port"):
         return Check("Phone page", False, f'[mobile] listen = {listen!r}', 'set it to "socket" (or "port")')
@@ -409,8 +409,7 @@ def _desktop(probe: Probe) -> list[Check]:
 
 
 NOT_ON_WINDOWS = ("dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, "
-                  "the computer's own sound, presence, the phone page, and `rafiq listen`, `dictate`, `panel` and "
-                  "`mcp` from a terminal")
+                  "the computer's own sound, presence, the phone page and the widget")
 
 
 def _windows_desktop(probe: Probe) -> list[Check]:

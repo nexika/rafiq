@@ -173,12 +173,16 @@ and `rafiq doctor` says whether it's private. Windows support is new, and some p
 | Locking and power | `LockWorkStation`, `shutdown`; shutting down still asks first |
 | Clipboard | PowerShell, in UTF-8 so Arabic survives. There is no selection Rafiq can read: copy the text and say "read what I copied" |
 | Start at login | `rafiq install-service` makes a Task Scheduler task that starts Rafiq at your logon without a window, logging to `%APPDATA%\rafiq\task.log` |
-| The panel | `rafiq run` started in a terminal opens it in your browser. `rafiq panel` can't open it yet |
-| Not there yet | dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, what the computer plays, presence, the phone page, and `rafiq listen`, `dictate`, `panel`, `mcp` and the widget |
+| The panel | `rafiq panel` opens it, as on Linux. If Rafiq's pipe can't start, `rafiq run` started in a terminal opens it in your browser |
+| Rafiq's own programs | `rafiq ask`, `listen`, `dictate`, `panel`, `gestures` and `mcp` reach the running Rafiq through a named pipe only you can open |
+| Not there yet | dictation, hand gestures, clicking on and looking at the screen, media keys, switching outputs, what the computer plays, presence, the phone page, and the widget |
 
-Rafiq's own programs reach it over a socket only you can open on Linux and macOS. Python has no such socket
-on Windows yet, so those commands say "not on Windows yet" instead of sending Rafiq's token over a port another
-account could take, and `rafiq ask` answers by itself only while no Rafiq is running. The logon task can't hold keys: set them with `setx ANTHROPIC_API_KEY ...`, or put them
+Rafiq's own programs reach it over a socket only you can open on Linux and macOS. Python has no such socket on
+Windows, so there they use a named pipe, `\\.\pipe\rafiq-panel-<your SID>`, which only your account may open.
+Rafiq makes it as the first pipe of that name, so if another account's program made one first, Rafiq says so and
+runs without it. Each end asks Windows whose program is at the other end: Rafiq answers only your programs, and
+they send its token only to a Rafiq of yours. Nothing falls back to a port another account could take. The logon
+task can't hold keys: set them with `setx ANTHROPIC_API_KEY ...`, or put them
 in `%APPDATA%\rafiq\rafiq.env`. There is no echo cancellation from the system, so use headphones if Rafiq hears
 itself. This hasn't been tried on a Windows PC yet: please report what works.
 
