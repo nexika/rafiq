@@ -3,7 +3,8 @@
 
 Typing goes through a command-line tool: wtype or ydotool on Wayland, xdotool on X11. ydotool sends
 key codes and cannot type Arabic or accented letters, so such text (or text a tool failed to type) is
-put on the clipboard and pasted. Commands run as argument lists, never through a shell.
+put on the clipboard and pasted. Commands run as argument lists, never through a shell. On Windows,
+SendInput types each character as Unicode, whatever the keyboard layout.
 """
 
 from __future__ import annotations
@@ -177,13 +178,18 @@ class Keyboard:
                            "Security > Accessibility")
 
     def type(self, text: str) -> str:
-        """Type the text; the way it went in ("wtype", "ydotool", "xdotool", "keystroke" or "paste")."""
+        """Type the text; the way it went in ("wtype", "ydotool", "xdotool", "keystroke", "sendinput" or "paste")."""
         from . import desktop
 
         if desktop.system() == "mac":
             return self._mac_type(text)
         if desktop.system() == "windows":
-            raise TypingFailed("typing what you say into other apps is not on Windows yet")
+            try:
+                desktop.win_type(text)
+            except OSError as exc:
+                raise TypingFailed("could not type: Windows refused the key presses (the screen is locked or a "
+                                   "Windows prompt is open)") from exc
+            return "sendinput"
         if self.wayland:
             tries = [("wtype", ["wtype", "--", text])]
             if text.isascii():

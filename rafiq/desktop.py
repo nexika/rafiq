@@ -303,6 +303,112 @@ def paste_command() -> list[str]:
     return _script(['tell application "System Events" to key code 9 using {command down}'])
 
 
+# ---------------------------------------------------------------------- keys and typing (Windows)
+
+# SendInput's key events, each (virtual key, scan code, flags). A Unicode event carries a UTF-16 unit as its scan
+# code and types that character whatever the keyboard layout, so Arabic needs no clipboard here. Windows doesn't
+# let SendInput reach a window running as administrator, and doesn't say when it was kept out (UIPI).
+KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE = 0x0001, 0x0002, 0x0004
+VK = {"ctrl": 0x11, "shift": 0x10, "tab": 0x09, "enter": 0x0D,
+      "plus": 0xBB, "minus": 0xBD,                       # the =+ and -_ keys, on every layout
+      "play_pause": 0xB3, "next": 0xB0, "previous": 0xB1, "stop": 0xB2}
+_EXTENDED = {"play_pause", "next", "previous", "stop"}
+# The gestures' key presses. Zoom is Ctrl and the =+ key, as on Linux.
+WIN_KEYS = {"next_tab": ("ctrl", "tab"), "previous_tab": ("ctrl", "shift", "tab"),
+            "zoom_in": ("ctrl", "plus"), "zoom_out": ("ctrl", "minus")}
+# Windows has one key for play and pause, which toggles: it can't tell which one the player is in.
+WIN_MEDIA = {"play": "play_pause", "pause": "play_pause", "toggle": "play_pause", "next": "next",
+             "previous": "previous", "stop": "stop"}
+WIN_MEDIA_DONE = {"play_pause": "pressed play/pause (Windows can only toggle it)", "next": "skipped to the next track",
+                  "previous": "went back a track", "stop": "stopped"}
+
+
+def combo_events(names: tuple[str, ...] | list[str]) -> list[tuple[int, int, int]]:
+    """The keys pressed in order and released in reverse, as a hand would."""
+    def flags(name: str) -> int:
+        return KEYEVENTF_EXTENDEDKEY if name in _EXTENDED else 0
+
+    return ([(VK[n], 0, flags(n)) for n in names] +
+            [(VK[n], 0, flags(n) | KEYEVENTF_KEYUP) for n in reversed(names)])
+
+
+def text_events(text: str) -> list[tuple[int, int, int]]:
+    """Each character as Unicode key presses: one UTF-16 unit each, so a character past U+FFFF (an emoji) is its two
+    surrogates. A new line is the Enter key, which every app reads; a Unicode "\\n" many ignore."""
+    events: list[tuple[int, int, int]] = []
+    for char in text.replace("\r\n", "\n"):
+        if char == "\n":
+            events += combo_events(["enter"])
+            continue
+        data = char.encode("utf-16-le", "surrogatepass")     # a lone surrogate goes as itself, not an error
+        for i in range(0, len(data), 2):
+            unit = int.from_bytes(data[i:i + 2], "little")
+            events += [(0, unit, KEYEVENTF_UNICODE), (0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP)]
+    return events
+
+
+def send_input(events: list[tuple[int, int, int]]) -> int:
+    """user32's SendInput, the one Win32 call behind typing and keys; OSError when Windows takes fewer than all."""
+    import ctypes
+
+    if not hasattr(ctypes, "WinDLL"):
+        raise OSError("SendInput is only on Windows")
+    from ctypes import wintypes as w
+
+    class KeybdInput(ctypes.Structure):
+        _fields_ = [("wVk", w.WORD), ("wScan", w.WORD), ("dwFlags", w.DWORD), ("time", w.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t)]
+
+    class MouseInput(ctypes.Structure):       # the union's largest member: INPUT must be its full size
+        _fields_ = [("dx", w.LONG), ("dy", w.LONG), ("mouseData", w.DWORD), ("dwFlags", w.DWORD),
+                    ("time", w.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+    class Union(ctypes.Union):
+        _fields_ = [("ki", KeybdInput), ("mi", MouseInput)]
+
+    class Input(ctypes.Structure):
+        _fields_ = [("type", w.DWORD), ("u", Union)]
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.SendInput.argtypes = [w.UINT, ctypes.POINTER(Input), ctypes.c_int]
+    user32.SendInput.restype = w.UINT
+    batch = (Input * len(events))(*[Input(1, Union(ki=KeybdInput(vk, scan, flags, 0, 0)))   # 1: INPUT_KEYBOARD
+                                    for vk, scan, flags in events])
+    sent = user32.SendInput(len(events), batch, ctypes.sizeof(Input))
+    if sent != len(events):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return sent
+
+
+def _sender(given: Callable | None) -> Callable:
+    """The sender a caller gave, else this module's send_input (looked up now, so tests can replace it)."""
+    return given or globals()["send_input"]
+
+
+def win_type(text: str, send: Callable | None = None) -> None:
+    events = text_events(text)
+    if events:
+        _sender(send)(events)
+
+
+def win_keys(name: str, send: Callable | None = None) -> None:
+    _sender(send)(combo_events(WIN_KEYS[name]))
+
+
+def win_media(action: str, send: Callable | None = None) -> str:
+    """A media key, which whatever plays (Spotify, a browser video) hears; there is no asking what plays."""
+    if action == "status":
+        return "error: saying what is playing is not on Windows yet"
+    if action not in WIN_MEDIA:
+        return f"error: action is one of {', '.join([*WIN_MEDIA, 'status'])}"
+    key = WIN_MEDIA[action]
+    try:
+        _sender(send)(combo_events([key]))
+    except OSError:
+        return "error: Windows didn't take the media key"
+    return WIN_MEDIA_DONE[key]
+
+
 # ---------------------------------------------------------------------- apps (macOS)
 
 def mac_apps(dirs: list[str] | None = None) -> list[dict]:

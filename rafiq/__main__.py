@@ -512,7 +512,7 @@ def cmd_doctor(_args) -> int:
     from .dictation import Keyboard
 
     if desktop.system() == "windows":
-        _check("dictation (typing into windows)", True, "not on Windows yet", optional=True)
+        _check("dictation (typing into windows)", True, "SendInput, which comes with Windows")
     elif desktop.system() != "mac":         # on macOS, System Events: "Typing and keys (Accessibility)" below
         typing = ("wtype", "ydotool", "wl-copy") if Keyboard().wayland else ("xdotool", "xclip")
         found = [t for t in typing if shutil.which(t)]
