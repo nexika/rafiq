@@ -970,7 +970,7 @@ def cmd_mobile(args) -> int:
         print("   On a port, another account here could take it while Rafiq is stopped and collect your phone's")
         print('   token: set [mobile] listen = "socket" when your Tailscale can serve a socket.')
     else:
-        print(f"2. Once, so your tailnet reaches it over HTTPS: tailscale serve --bg unix:{mobile.socket_path()}")
+        print(f"2. Once, so your tailnet reaches it over HTTPS: sudo tailscale serve --bg unix:{mobile.socket_path()}")
         print(f"   Set up before with http://127.0.0.1:{port}? First: tailscale serve --https=443 off")
         print('   (A Tailscale that can\'t serve a socket says so: then set [mobile] listen = "port".)')
     print("   (Tailscale asks you to turn on HTTPS for your tailnet the first time. Never use `tailscale funnel`:")

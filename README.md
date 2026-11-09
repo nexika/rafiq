@@ -634,8 +634,8 @@ work from the street.
    socket, `~/.config/rafiq/run/mobile.sock`, in a folder only you can open, so no other account on this
    computer can take the page's place while Rafiq is stopped and collect your phone's token. Only your
    programs and Tailscale (root) may connect to it. If the page can't start, `rafiq run` stops and says why.
-3. Once: `tailscale serve --bg unix:$HOME/.config/rafiq/run/mobile.sock` (`rafiq mobile pair` prints the exact
-   path). Set up before this, with `http://127.0.0.1:8768`? Move it with `tailscale serve --https=443 off`, then
+3. Once: `sudo tailscale serve --bg unix:$HOME/.config/rafiq/run/mobile.sock` (`rafiq mobile pair` prints the
+   exact path). Tailscale lets only root publish a socket, even for an account set as its operator. Set up before this, with `http://127.0.0.1:8768`? Move it with `tailscale serve --https=443 off`, then
    the command above: `rafiq run` refuses to start while Tailscale still sends the phone to that port, which
    nothing holds any more. To check, Rafiq asks `tailscale serve status --json` at every start, and it won't
    start if that fails (`tailscale` missing from the service's PATH, or not running yet). A Tailscale that can't serve a socket (an older one, or on Windows) says so: then

@@ -582,7 +582,7 @@ def test_rafiq_mobile_pair_shows_a_code_and_the_steps(capsys, monkeypatch):
     out = capsys.readouterr().out
     code = out.split("Sam's iPhone: ")[1].split()[0]
     assert len(code) == 9 and code[4] == "-"
-    assert "tailscale serve --bg unix:" in out and str(mobile.socket_path()) in out
+    assert "sudo tailscale serve --bg unix:" in out and str(mobile.socket_path()) in out
     assert "https://desk.tail1234.ts.net/" in out
     assert "enabled = true" in out                       # it's off by default
     from rafiq import config

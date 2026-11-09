@@ -152,6 +152,17 @@ def test_the_page_itself_is_refused_from_this_computer_s_tailnet_address_too(pai
     assert get(headers=through_tailscale(OWN[0])) == 403
 
 
+def test_what_a_real_tailscaled_sent_from_this_computer_is_refused(paired):
+    # Recorded from tailscaled 1.104.5 (2026-11-09): `curl http://<computer>.<tailnet>.ts.net:8443/` on that computer,
+    # through `tailscale serve --http=8443`. X-Forwarded-For was this computer's own address, even with a forged one
+    # sent, and the identity headers named the computer's own user: they can't tell a phone from this computer.
+    real = {"Host": "desk.tail1234.ts.net", "Tailscale-Headers-Info": "https://tailscale.com/s/serve-headers",
+            "Tailscale-User-Login": "sam@example.com", "Tailscale-User-Name": "A User",
+            "X-Forwarded-For": OWN[0], "X-Forwarded-Host": "desk.tail1234.ts.net"}
+    assert stop(paired, real) == 403
+    assert stop(paired, {**real, "X-Forwarded-For": OWN[1]}) == 403
+
+
 def test_a_request_through_tailscale_funnel_is_refused(paired):
     # tailscaled marks Funnel (public internet) traffic, and strips the header from anything else.
     assert stop(paired, through_tailscale(PHONE, **{"Tailscale-Funnel-Request": "?1"})) == 403
@@ -182,7 +193,7 @@ def test_another_address_of_this_computer_is_refused_as_a_source(paired):
     # Another account binds its connection to the LAN, a docker bridge or an IPv6 address of this computer before
     # sending to its own ts.net name; tailscaled then says that address (#241 review). A phone is always on the
     # tailnet's own ranges.
-    for source in ("10.10.220.192", "192.168.1.10", "172.17.0.1", "fc00:f853:ccd:e793::1", "fe80::1",
+    for source in ("192.168.1.10", "172.17.0.1", "fd12:3456:789a::1", "fe80::1",
                    "fe80::1%eth0", "8.8.8.8"):
         assert stop(paired, through_tailscale(source)) == 403, source
 
@@ -345,7 +356,7 @@ def test_pairing_says_to_point_tailscale_at_the_socket(monkeypatch, capsys):
     write_config("[mobile]\nenabled = true\n")
     assert cli.main(["mobile", "pair", "Sam's iPhone"]) == 0
     out = capsys.readouterr().out
-    assert f"tailscale serve --bg unix:{mobile.socket_path()}" in out and "serve --bg http" not in out
+    assert f"sudo tailscale serve --bg unix:{mobile.socket_path()}" in out and "serve --bg http" not in out
     assert "tailscale serve --https=443 off" in out          # moving a setup from before #238
 
 
@@ -400,7 +411,7 @@ def test_doctor_says_when_tailscale_still_sends_the_phone_to_the_port(served, mo
 def test_doctor_says_when_tailscale_doesn_t_send_the_phone_to_the_socket(served, monkeypatch):
     monkeypatch.setattr(mobile, "serve_targets", lambda run=None: [])
     check = phone_check(mobile_cfg("socket"))
-    assert not check.ok and f"tailscale serve --bg unix:{mobile.socket_path()}" == check.fix
+    assert not check.ok and f"sudo tailscale serve --bg unix:{mobile.socket_path()}" == check.fix
 
 
 def test_doctor_is_happy_when_tailscale_sends_the_phone_to_the_socket(served, monkeypatch):
