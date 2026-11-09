@@ -664,7 +664,7 @@ def check_start(cfg: dict, targets=None) -> None:
             # whichever program takes it next, another account's included, would get the phones' tokens.
             raise ValueError(f"`tailscale serve` still sends the phone to {old[0]}, which Rafiq no longer listens on "
                              f"and another account could take. Move it: tailscale serve --https=443 off, then "
-                             f"tailscale serve --bg unix:{socket_path()}")
+                             f"sudo tailscale serve --bg unix:{socket_path()}")
         return
     probe = socket.socket()
     # As the real server does: a connection the last Rafiq closed lingers in TIME_WAIT for about 60 s, and without

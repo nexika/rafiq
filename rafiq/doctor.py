@@ -265,7 +265,7 @@ def _phone_page(cfg: dict) -> Check:
         return Check("Phone page", True, "not on Windows yet ([mobile] enabled is ignored)", optional=True)
     if listen not in ("socket", "port"):
         return Check("Phone page", False, f'[mobile] listen = {listen!r}', 'set it to "socket" (or "port")')
-    move = f"tailscale serve --https=443 off, then tailscale serve --bg unix:{mobile.socket_path()}"
+    move = f"tailscale serve --https=443 off, then sudo tailscale serve --bg unix:{mobile.socket_path()}"
     if listen == "port":
         return _phone_port(port, move)
     targets = mobile.serve_targets()
@@ -289,7 +289,7 @@ def _phone_page(cfg: dict) -> Check:
                      "for you (tailscale installed, on PATH and running)")
     if f"unix:{where}" not in targets:
         return Check("Phone page", False, f"answers on its socket, {where}, but `tailscale serve` doesn't send the "
-                     "phone there", f"tailscale serve --bg unix:{where}")
+                     "phone there", f"sudo tailscale serve --bg unix:{where}")
     return Check("Phone page", True, f"answers on its socket, {where}")
 
 
