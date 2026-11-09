@@ -23,8 +23,8 @@ Your rules:
 First ask me:
 1. Which system I use. On Linux, `cat /etc/os-release` tells us: Rafiq needs PipeWire, so Fedora, or
    Ubuntu 22.10 or newer. On a Mac, `sw_vers` tells us: Apple silicon and Intel both work. On Windows,
-   `winver` tells us: Windows 10 or 11. Windows support is new, and some parts (dictation, gestures, the
-   phone page) aren't there yet: tell me so if I need them.
+   `winver` tells us: Windows 10 or 11. Windows support is new, and some parts (clicking on the screen, the computer's
+   own sound, the phone page) aren't there yet: tell me so if I need them.
 2. Which brain I want:
    - **My ChatGPT plan**: if I pay for ChatGPT Plus or Pro, Rafiq signs in with my ChatGPT account and
      runs on that plan: no API key and no second bill. It is an OpenAI preview, and heavy use counts

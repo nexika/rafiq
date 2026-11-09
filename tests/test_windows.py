@@ -547,8 +547,14 @@ def test_a_flatpak_on_windows_is_refused(windows):
 def test_the_tools_with_no_windows_version_do_not_load(windows):
     from rafiq.tools import not_here
 
-    assert {"gpu_status", "click_on_screen", "operate_computer", "look_at_screen", "audio_output", "media",
-            "hand_gestures", "presence"} <= not_here()
+    assert {"gpu_status", "click_on_screen", "operate_computer", "look_at_screen", "audio_output",
+            "presence"} <= not_here()
+
+
+def test_media_and_hand_gestures_load_on_windows(windows):
+    from rafiq.tools import not_here
+
+    assert not {"media", "hand_gestures"} & not_here()
 
 
 # ---------------------------------------------------------------------- Rafiq's own programs, through its pipe (#242)
@@ -640,11 +646,137 @@ def test_rafiq_mobile_on_windows_says_not_yet(windows, monkeypatch, capsys):
     assert "not on Windows yet" in capsys.readouterr().err
 
 
-def test_dictation_on_windows_says_it_is_not_there_yet(windows):
+# ---------------------------------------------------------------------- keys and typing, through SendInput (#242)
+
+DOWN, UP = 0, desktop.KEYEVENTF_KEYUP
+UNICODE = desktop.KEYEVENTF_UNICODE
+
+
+class Sent:
+    """SendInput as the test wants it: records each batch of key events, takes them all unless told otherwise."""
+
+    def __init__(self, fail=False):
+        self.batches, self.fail = [], fail
+
+    def __call__(self, events):
+        self.batches.append(list(events))
+        if self.fail:
+            raise OSError(5, "Access is denied")
+        return len(events)
+
+    @property
+    def events(self):
+        return [e for batch in self.batches for e in batch]
+
+
+@pytest.fixture
+def sent(monkeypatch):
+    fake = Sent()
+    monkeypatch.setattr(desktop, "send_input", fake)
+    return fake
+
+
+def typed(events):
+    """The characters a run of Unicode key events types, read back from their UTF-16 units."""
+    units = [scan for vk, scan, flags in events if flags == UNICODE]
+    return b"".join(u.to_bytes(2, "little") for u in units).decode("utf-16-le")
+
+
+def test_each_character_is_a_unicode_key_press_and_release():
+    assert desktop.text_events("hi") == [(0, ord("h"), UNICODE), (0, ord("h"), UNICODE | UP),
+                                         (0, ord("i"), UNICODE), (0, ord("i"), UNICODE | UP)]
+
+
+@pytest.mark.parametrize("text", ["مرحبا يا رفيق", "café, ça va?", "صباح الخير 👋"])
+def test_arabic_accents_and_emoji_are_typed_whatever_the_keyboard_layout(text):
+    assert typed(desktop.text_events(text)) == text
+
+
+def test_a_character_outside_the_bmp_goes_as_its_two_utf16_units():
+    events = desktop.text_events("👋")
+    assert [scan for _, scan, _ in events] == [0xD83D, 0xD83D, 0xDC4B, 0xDC4B]
+
+
+def test_a_new_line_is_the_enter_key_not_a_character():
+    events = desktop.text_events("a\nb")
+    enter = desktop.VK["enter"]
+    assert events[2:4] == [(enter, 0, DOWN), (enter, 0, UP)]
+    assert typed(events) == "ab"
+
+
+def test_a_windows_new_line_is_one_enter():
+    assert sum(1 for vk, _, flags in desktop.text_events("a\r\nb") if vk == desktop.VK["enter"] and not flags) == 1
+
+
+def test_dictation_on_windows_types_through_sendinput(windows, sent):
+    from rafiq.dictation import Keyboard
+
+    how = Keyboard(which=lambda name: pytest.fail(f"looked for {name}"),
+                   run=lambda *a, **k: pytest.fail("ran a program")).type("مرحبا")
+    assert how == "sendinput" and typed(sent.events) == "مرحبا"
+
+
+def test_dictation_on_windows_says_when_windows_refuses_the_keys(windows, monkeypatch):
     from rafiq.dictation import Keyboard, TypingFailed
 
-    with pytest.raises(TypingFailed, match="not on Windows yet"):
+    monkeypatch.setattr(desktop, "send_input", Sent(fail=True))
+    with pytest.raises(TypingFailed, match="locked"):
         Keyboard().type("hello")
+
+
+@pytest.mark.parametrize("name, keys", [("next_tab", ["ctrl", "tab"]), ("previous_tab", ["ctrl", "shift", "tab"]),
+                                        ("zoom_in", ["ctrl", "plus"]), ("zoom_out", ["ctrl", "minus"])])
+def test_gesture_keys_on_windows_press_in_order_and_release_in_reverse(windows, sent, name, keys):
+    from rafiq.gestures import SystemDesktop
+
+    SystemDesktop(run=lambda args: pytest.fail("ran a program")).keys(name)
+    codes = [desktop.VK[k] for k in keys]
+    assert sent.events == [(c, 0, DOWN) for c in codes] + [(c, 0, UP) for c in reversed(codes)]
+
+
+@pytest.mark.parametrize("command", ["pause", "play"])
+def test_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command):
+    from rafiq.gestures import SystemDesktop
+
+    SystemDesktop(run=lambda args: pytest.fail("ran playerctl")).media(command)
+    key = desktop.VK["play_pause"]
+    assert sent.events == [(key, 0, desktop.KEYEVENTF_EXTENDEDKEY), (key, 0, desktop.KEYEVENTF_EXTENDEDKEY | UP)]
+
+
+@pytest.mark.parametrize("action, key", [("toggle", "play_pause"), ("play", "play_pause"), ("pause", "play_pause"),
+                                         ("next", "next"), ("previous", "previous"), ("stop", "stop")])
+def test_the_media_tool_on_windows_presses_the_media_key(windows, sent, action, key):
+    from rafiq.tools import pc
+
+    reply = pc.media(action, run=lambda args: pytest.fail("ran playerctl"))
+    assert not reply.startswith("error") and [vk for vk, _, _ in sent.events] == [desktop.VK[key]] * 2
+
+
+def test_play_or_pause_on_windows_says_it_only_toggles(windows, sent):
+    from rafiq.tools import pc
+
+    assert "toggle" in pc.media("pause")
+
+
+def test_what_is_playing_on_windows_is_not_there_yet(windows, sent):
+    from rafiq.tools import pc
+
+    assert pc.media("status").startswith("error") and not sent.batches
+
+
+def test_a_media_key_windows_refuses_is_an_error(windows, monkeypatch):
+    from rafiq.tools import pc
+
+    monkeypatch.setattr(desktop, "send_input", Sent(fail=True))
+    assert pc.media("next").startswith("error")
+
+
+def test_sendinput_where_there_is_no_user32_is_an_oserror(monkeypatch):
+    import ctypes
+
+    monkeypatch.delattr(ctypes, "WinDLL", raising=False)
+    with pytest.raises(OSError):
+        desktop.send_input([(desktop.VK["tab"], 0, 0)])
 
 
 def test_the_computer_s_sound_on_windows_says_it_is_not_there_yet(windows):
@@ -695,7 +827,8 @@ def test_doctor_on_windows_says_when_the_settings_are_open_to_others(windows, mo
 def test_doctor_on_windows_lists_what_is_not_there_yet(windows, monkeypatch):
     monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
     check = doctor_checks(win_probe())["Not on Windows yet"]
-    assert check.optional and "dictation" in check.detail and "phone page" in check.detail
+    assert check.optional and "phone page" in check.detail
+    assert not any(word in check.detail for word in ("dictation", "hand gestures", "media keys"))
 
 
 def test_doctor_on_windows_never_opens_the_phone_socket(windows, monkeypatch):

@@ -312,6 +312,8 @@ def media(action: str, run=_run) -> str:
         return f"error: action is one of {', '.join([*MEDIA, 'status'])}"
     if desktop.system() == "mac":                    # no MPRIS there: Spotify and Music through AppleScript
         return desktop.mac_media(action)
+    if desktop.system() == "windows":                # no MPRIS either: the media keys, which only toggle
+        return desktop.win_media(action)
     try:
         found = active_player(run)
         if not found:

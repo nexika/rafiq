@@ -70,7 +70,8 @@ def _run(args: list[str]) -> None:
 
 class SystemDesktop:
     """The real computer: media players through MPRIS (playerctl, which works on Wayland too), key
-    presses through ydotool on Wayland or xdotool on X11, the volume through PipeWire."""
+    presses through ydotool on Wayland or xdotool on X11, the volume through PipeWire. On Windows, keys
+    and the play/pause key through SendInput."""
 
     def __init__(self, run: Callable[[list[str]], object] = _run):
         self.run = run
@@ -81,6 +82,9 @@ class SystemDesktop:
         if desktop.system() == "mac":
             desktop.mac_media({"play-pause": "toggle"}.get(command, command))
             return
+        if desktop.system() == "windows":
+            desktop.win_media({"play-pause": "toggle"}.get(command, command))
+            return
         self.run(["playerctl", command])
 
     def keys(self, name: str) -> None:
@@ -88,6 +92,12 @@ class SystemDesktop:
 
         if desktop.system() == "mac":           # System Events, with the Accessibility permission
             self.run(desktop.key_command(name))
+            return
+        if desktop.system() == "windows":
+            try:
+                desktop.win_keys(name)
+            except OSError:                     # a locked screen or a Windows prompt takes no keys
+                pass
             return
         combo = KEYS[name]
         if os.environ.get("WAYLAND_DISPLAY") and shutil.which("ydotool"):
