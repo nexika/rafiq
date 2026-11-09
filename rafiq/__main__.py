@@ -104,12 +104,14 @@ def _start_mobile(cfg: dict, assistant):
         return None
     port, listen = int(cfg["mobile"]["port"]), cfg["mobile"].get("listen", "socket")
     devices = mobile.Devices(config.home() / "mobile")
+    name, ips = tailnet_self()
+    own = mobile.OwnAddresses(lambda: tailnet_self()[1], known=ips)
     try:
         if listen == "socket":
-            server = mobile.serve_socket(assistant, port, devices, tailnet=tailnet_name())
+            server = mobile.serve_socket(assistant, port, devices, tailnet=name, own_ips=own)
             where = f"{mobile.socket_path()}, for `tailscale serve --bg unix:{mobile.socket_path()}`"
         elif listen == "port":
-            server = mobile.serve(assistant, "127.0.0.1", port, devices, tailnet=tailnet_name())
+            server = mobile.serve(assistant, "127.0.0.1", port, devices, tailnet=name, own_ips=own)
             where = f"http://127.0.0.1:{port}, for `tailscale serve` (another account here could take this port)"
         else:
             raise ValueError(f'[mobile] listen is "socket" or "port", not {listen!r}')
@@ -908,14 +910,22 @@ def cmd_phone(_args) -> int:
     return 0
 
 
-def tailnet_name(run=subprocess.run) -> str:
-    """This computer's name on the tailnet (desk.tail1234.ts.net), where `tailscale serve` answers; "" if unknown."""
+def tailnet_self(run=subprocess.run) -> tuple[str, tuple[str, ...]]:
+    """This computer's name on the tailnet (desk.tail1234.ts.net), where `tailscale serve` answers, and its own
+    Tailscale addresses, from which the phone page refuses what tailscaled brings (#241); ("", ()) if unknown."""
     try:
         done = run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=5)
-        name = json.loads(done.stdout).get("Self", {}).get("DNSName", "") if done.returncode == 0 else ""
+        me = json.loads(done.stdout).get("Self", {}) if done.returncode == 0 else {}
+        name, ips = me.get("DNSName", ""), me.get("TailscaleIPs") or []
     except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
-        return ""
-    return name.rstrip(".") if isinstance(name, str) else ""
+        return "", ()
+    name = name.rstrip(".") if isinstance(name, str) else ""
+    return name, tuple(ip for ip in ips if isinstance(ip, str)) if isinstance(ips, list) else ()
+
+
+def tailnet_name(run=subprocess.run) -> str:
+    """This computer's name on the tailnet; "" if unknown."""
+    return tailnet_self(run)[0]
 
 
 def cmd_mobile(args) -> int:

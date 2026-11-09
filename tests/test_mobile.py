@@ -620,6 +620,22 @@ def test_the_tailnet_name_comes_from_tailscale_status():
     assert tailnet_name(missing) == ""
 
 
+def test_this_computer_s_tailnet_addresses_come_from_the_same_status():
+    from rafiq.__main__ import tailnet_self
+
+    class Done:
+        returncode = 0
+        stdout = json.dumps({"Self": {"DNSName": "desk.tail1234.ts.net.",
+                                      "TailscaleIPs": ["100.64.0.5", "fd7a:115c:a1e0::5", 7]}})
+
+    assert tailnet_self(lambda *a, **k: Done()) == ("desk.tail1234.ts.net", ("100.64.0.5", "fd7a:115c:a1e0::5"))
+
+    class Stopped:
+        returncode, stdout = 1, ""
+
+    assert tailnet_self(lambda *a, **k: Stopped()) == ("", ())
+
+
 def test_the_phone_page_is_off_by_default():
     from rafiq import config
 

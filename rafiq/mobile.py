@@ -8,10 +8,11 @@ on the user's tailnet only. By default it is a socket, <settings>/run/mobile.soc
 open, so no other account can listen in its place while Rafiq is down and collect a phone's token (#238); with
 `[mobile] listen = "port"`, 127.0.0.1:port (never the panel's port, never another address). Only this user's
 programs and root (tailscaled) may connect: the kernel says who, on the socket, and /proc on Linux. tailscaled also
-brings what another account here sends to this computer's ts.net name, so past that a phone's token is the barrier,
-as it is for every node on the tailnet. HTTPS is what lets
-a phone's browser use the microphone and install the page; Tailscale makes and renews the certificate, and its
-Funnel (the public internet) is never used. Every request but the page and pairing carries a paired phone's token.
+brings what another account here sends to this computer's own ts.net name; its X-Forwarded-For then says this
+computer's Tailscale address, and that is refused, as Funnel is (#241). Past that a phone's token is the barrier, as
+it is for every node on the tailnet. HTTPS is what lets a phone's browser use the microphone and install the page;
+Tailscale makes and renews the certificate, and its Funnel (the public internet) is never used. Every
+request but the page and pairing carries a paired phone's token.
 
 How a phone is paired: `rafiq mobile pair NAME` shows an eight-letter code, good for five minutes and five tries;
 the phone types it once and gets a token of its own, kept on the phone. Only its SHA-256 is kept here, so
@@ -28,6 +29,7 @@ import base64
 import hashlib
 import hmac
 import io
+import ipaddress
 import json
 import os
 import queue
@@ -68,6 +70,8 @@ STREAM_CHECK_SECONDS = 5        # how soon an open event stream notices its phon
 MAX_CONNECTIONS = 32            # at once, on the listener
 MAX_STREAMS = 2                 # open event streams per phone (two tabs)
 MAX_DECODING = 2                # recordings being decoded at once
+ADDRESSES_RETRY_SECONDS = 30    # between asks for this computer's Tailscale addresses, until it says them
+ADDRESSES_SECONDS = 60          # between asks once they are known, in case they change
 
 
 class PairingError(Exception):
@@ -251,6 +255,62 @@ ICONS = {"/icon-192.png": 192, "/icon-512.png": 512, "/apple-touch-icon.png": 18
 
 # ---------------------------------------------------------------------- the listener
 
+class OwnAddresses:
+    """This computer's own Tailscale addresses, from `lookup` (`tailscale status --json`). Asked again every
+    ADDRESSES_RETRY_SECONDS until Tailscale says them (Rafiq may start before tailscaled does, and until then every
+    request through tailscaled is refused), then every ADDRESSES_SECONDS, so an address that changes while Rafiq
+    runs (`tailscale switch`, a new login) is refused too (#241). An empty answer once they are known is tailscaled
+    restarting, with nothing to bring meanwhile: the last ones stand."""
+
+    def __init__(self, lookup, clock=time.monotonic, known: tuple[str, ...] = (), asked: float | None = None):
+        self._lookup, self._clock = lookup, clock
+        self._known: tuple[str, ...] = tuple(known)
+        self._asked = asked if asked is not None else (clock() if known else None)
+        self._lock = threading.Lock()
+
+    def __call__(self) -> tuple[str, ...]:
+        with self._lock:
+            now = self._clock()
+            wait = ADDRESSES_SECONDS if self._known else ADDRESSES_RETRY_SECONDS
+            if self._asked is None or now - self._asked >= wait:
+                self._asked = now
+                self._known = tuple(self._lookup()) or self._known
+            return self._known
+
+
+TAILNET_RANGES = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+
+
+def from_another_device(forwarded: list[str], own: tuple[str, ...]) -> bool:
+    """Whether tailscaled's X-Forwarded-For says the request came from another device on the tailnet (#241).
+
+    tailscaled sets the header to the connection's source address, never appending to what the client sent
+    (ipn/ipnlocal/serve.go), so there is exactly one header with one address. A phone's is one of the tailnet's
+    addresses (TAILNET_RANGES). What another account here sends to this computer's own ts.net name comes from an
+    address of this computer: its Tailscale one, loopback, or any other it binds to first (the LAN, a docker bridge).
+    The only tailnet addresses it can send from are this computer's own, and those are refused. Anything else (no
+    header, two, a port, a name, not knowing this computer's addresses) is refused too."""
+    if len(forwarded) != 1 or not own:
+        return False
+    try:
+        source = ipaddress.ip_address(forwarded[0].strip())
+    except ValueError:
+        return False
+    if isinstance(source, ipaddress.IPv6Address):
+        if source.scope_id:
+            return False
+        source = source.ipv4_mapped or source
+    if not any(source in network for network in TAILNET_RANGES):
+        return False
+    mine = set()
+    for address in own:
+        try:
+            mine.add(ipaddress.ip_address(address))
+        except ValueError:
+            continue
+    return source not in mine
+
+
 def host_ok(host: str, port: int, tailnet: str = "") -> bool:
     """The phone through `tailscale serve` (this computer's tailnet name, when Tailscale says it), or this computer
     itself. Another name is a web page that pointed its name at 127.0.0.1."""
@@ -287,7 +347,9 @@ def for_phone(event: dict, device: str, runs: dict, shown: set) -> dict | None:
     return None
 
 
-def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
+def make_handler(assistant, devices: Devices, port: int, tailnet: str = "", own_ips=lambda: ()):
+    """`own_ips` gives this computer's Tailscale addresses, so what tailscaled brings from this computer itself is
+    refused (#241); with none known, everything through tailscaled is."""
     streams: dict[str, int] = {}             # open event streams, per phone
     streams_lock = threading.Lock()
     decoding = threading.BoundedSemaphore(MAX_DECODING)
@@ -332,20 +394,33 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
                 return None
             return self.rfile.read(length)
 
-        def _peer_ok(self) -> bool:
-            """This user's program, or tailscaled (root) bringing the phone: never another account's (#238)."""
-            allowed = (os.getuid(), 0)
+        def _peer_refused(self) -> str:
+            """Why this connection may not use the page, or "" when it may. This user's program, or tailscaled
+            (root) bringing the phone: never another account's (#238), and never what tailscaled brings from this
+            computer itself, to its own ts.net name (#241), or from the internet through Funnel."""
             if self.connection.family == getattr(socket, "AF_UNIX", None):
-                return sock.peer_uid(self.connection) in allowed
-            if owner_known():
+                uid = sock.peer_uid(self.connection)
+            elif owner_known():
                 from . import panel
 
-                return panel.connection_owner(self.client_address, self.connection.getsockname()) in allowed
-            return True                      # a port elsewhere: nothing can say whose (listen = "socket" can)
+                uid = panel.connection_owner(self.client_address, self.connection.getsockname())
+            else:
+                uid = "unknown"              # a port elsewhere: nothing can say whose (listen = "socket" can)
+            if uid not in (os.getuid(), 0, "unknown"):
+                return "not this user's program"
+            # tailscaled sets these and strips any copy a client sent, so they say what it brings. A tailscaled
+            # running as this user (the Mac App Store's Tailscale) is told apart by them alone.
+            if self.headers.get("Tailscale-Funnel-Request") is not None:
+                return "the phone page is never on the internet: turn off tailscale funnel"
+            forwarded = self.headers.get_all("X-Forwarded-For") or []
+            if (uid == 0 or forwarded) and not from_another_device(forwarded, own_ips()):
+                return "a phone reaches Rafiq from another device on your tailnet, not from this computer"
+            return ""
 
         def do_GET(self):  # noqa: N802 (http.server's name)
-            if not self._peer_ok():
-                return self._json(403, {"error": "not this user's program"})
+            refused = self._peer_refused()
+            if refused:
+                return self._json(403, {"error": refused})
             if not host_ok(self.headers.get("Host", ""), port, tailnet):
                 return self._json(403, {"error": "wrong host"})
             path = urlparse(self.path).path
@@ -399,8 +474,9 @@ def make_handler(assistant, devices: Devices, port: int, tailnet: str = ""):
                 assistant.events.unsubscribe(q)
 
         def do_POST(self):  # noqa: N802
-            if not self._peer_ok():
-                return self._json(403, {"error": "not this user's program"})
+            refused = self._peer_refused()
+            if refused:
+                return self._json(403, {"error": refused})
             if not host_ok(self.headers.get("Host", ""), port, tailnet):
                 return self._json(403, {"error": "wrong host"})
             path = urlparse(self.path).path
@@ -604,25 +680,26 @@ def check_start(cfg: dict, targets=None) -> None:
         probe.close()
 
 
-def serve_socket(assistant, port: int, devices: Devices, tailnet: str = "") -> PhoneSocketServer:
+def serve_socket(assistant, port: int, devices: Devices, tailnet: str = "", own_ips=lambda: ()) -> PhoneSocketServer:
     """The phone's listener on its socket (#238), for `tailscale serve --bg unix:<path>`: in a folder only this user
     can open, so no other account can listen in its place. `port` is the one the page checks in the Host header
     when this computer opens it itself. ValueError when the socket can't be made safely."""
     where = socket_path()
     sock.prepare(where)
-    server = PhoneSocketServer(str(where), make_handler(assistant, devices, port, tailnet))
+    server = PhoneSocketServer(str(where), make_handler(assistant, devices, port, tailnet, own_ips))
     os.chmod(where, 0o600)
     return server
 
 
-def serve(assistant, host: str, port: int, devices: Devices, tailnet: str = "") -> ThreadingHTTPServer:
+def serve(assistant, host: str, port: int, devices: Devices, tailnet: str = "",
+          own_ips=lambda: ()) -> ThreadingHTTPServer:
     """The phone's listener: on this computer only, where `tailscale serve` reaches it. With `tailnet` (this
     computer's name there), only that name is a host it answers."""
     if host not in ("127.0.0.1", "localhost"):
         raise ValueError(f"the phone page listens on 127.0.0.1 only, not {host}: `tailscale serve` brings the "
                          "phone to it over HTTPS")
-    server = PhoneServer(("127.0.0.1", port), make_handler(assistant, devices, port, tailnet))
-    server.RequestHandlerClass = make_handler(assistant, devices, server.server_address[1], tailnet)
+    server = PhoneServer(("127.0.0.1", port), make_handler(assistant, devices, port, tailnet, own_ips))
+    server.RequestHandlerClass = make_handler(assistant, devices, server.server_address[1], tailnet, own_ips)
     return server
 
 

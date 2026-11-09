@@ -19,6 +19,8 @@ from rafiq import config, doctor, mobile, panel, sock
 
 PORT = 8768
 HOST = f"127.0.0.1:{PORT}"
+OWN = ("100.64.0.5", "fd7a:115c:a1e0::5")       # this computer's Tailscale addresses, as `tailscale status` says
+PHONE = "100.64.0.9"
 REAL_TARGETS = mobile.serve_targets     # the fixture below replaces it in every test; this is the real one
 
 
@@ -41,16 +43,22 @@ def home(monkeypatch):
 @pytest.fixture
 def served(home):
     assistant = FakeAssistant()
-    server = mobile.serve_socket(assistant, PORT, mobile.Devices(home / "mobile"))
+    server = mobile.serve_socket(assistant, PORT, mobile.Devices(home / "mobile"), own_ips=lambda: OWN)
     threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     yield assistant
     server.shutdown()
     server.server_close()
 
 
-def get(path="/"):
+def get(path="/", headers=None):
     with httpx.Client(transport=httpx.HTTPTransport(uds=str(mobile.socket_path())), timeout=5) as client:
-        return client.get(f"http://{HOST}{path}").status_code
+        return client.get(f"http://{HOST}{path}", headers=headers).status_code
+
+
+def through_tailscale(source, **more):
+    """The headers tailscaled's `tailscale serve` sets (ipn/ipnlocal/serve.go): X-Forwarded-For is set, never
+    appended to, to the connection's source address."""
+    return {"Host": "desk.tail1234.ts.net", "X-Forwarded-For": source, "X-Forwarded-Proto": "https", **more}
 
 
 # ---------------------------------------------------------------------- the socket
@@ -71,7 +79,7 @@ def test_the_page_is_served_over_the_socket(served):
 
 def test_tailscaled_running_as_root_is_let_in(served, monkeypatch):
     monkeypatch.setattr(sock, "peer_uid", lambda conn: 0)
-    assert get() == 200
+    assert get(headers=through_tailscale(PHONE)) == 200
 
 
 def test_another_account_s_program_is_refused_on_the_socket(served, monkeypatch):
@@ -89,20 +97,143 @@ def test_a_live_socket_is_never_taken_over(served, home):
         mobile.serve_socket(FakeAssistant(), PORT, mobile.Devices(home / "mobile"))
 
 
+# ---------------------------------------------------------------------- through tailscaled, from this computer (#241)
+
+
+@pytest.fixture
+def paired(served, home, monkeypatch):
+    """A paired phone's token, and tailscaled (root) bringing each request."""
+    monkeypatch.setattr(sock, "peer_uid", lambda conn: 0)
+    devices = mobile.Devices(home / "mobile")
+    return devices.redeem(devices.start_pairing("Sam's iPhone"))[1]
+
+
+def stop(token, headers):
+    """POST /api/stop with the phone's token and the given headers (a list keeps repeated ones)."""
+    if isinstance(headers, dict):
+        headers = list(headers.items())
+    headers = [*headers, ("Authorization", f"Bearer {token}")]
+    with httpx.Client(transport=httpx.HTTPTransport(uds=str(mobile.socket_path())), timeout=5) as client:
+        return client.post(f"http://{HOST}/api/stop", headers=headers, json={}).status_code
+
+
+def test_a_phone_s_token_sent_from_this_computer_s_own_tailnet_address_is_refused(paired):
+    # Another account here sending to https://desk.tail1234.ts.net/: tailscaled's own listener on this
+    # computer's Tailscale address takes it, so that address is the source.
+    for own in OWN:
+        assert stop(paired, through_tailscale(own)) == 403
+
+
+def test_a_phone_s_token_sent_from_this_computer_s_loopback_is_refused(paired):
+    for here in ("127.0.0.1", "127.8.9.1", "::1", "::ffff:127.0.0.1"):
+        assert stop(paired, through_tailscale(here)) == 403, here
+
+
+def test_the_paired_phone_still_gets_in_through_tailscale(paired):
+    assert stop(paired, through_tailscale(PHONE)) == 200
+    assert stop(paired, through_tailscale("fd7a:115c:a1e0::9")) == 200
+
+
+def test_tailscaled_without_saying_where_from_is_refused(paired):
+    assert stop(paired, {"Host": "desk.tail1234.ts.net"}) == 403
+
+
+def test_a_source_tailscaled_could_not_have_set_is_refused(paired):
+    for source in ("", "phone", f"{PHONE}, {PHONE}", f"{PHONE}:41641", "0.0.0.0", "::"):
+        assert stop(paired, through_tailscale(source)) == 403, source
+
+
+def test_two_forwarded_for_headers_are_refused(paired):
+    headers = [("Host", "desk.tail1234.ts.net"), ("X-Forwarded-For", OWN[0]), ("X-Forwarded-For", PHONE)]
+    assert stop(paired, headers) == 403
+
+
+def test_the_page_itself_is_refused_from_this_computer_s_tailnet_address_too(paired):
+    assert get(headers=through_tailscale(OWN[0])) == 403
+
+
+def test_a_request_through_tailscale_funnel_is_refused(paired):
+    # tailscaled marks Funnel (public internet) traffic, and strips the header from anything else.
+    assert stop(paired, through_tailscale(PHONE, **{"Tailscale-Funnel-Request": "?1"})) == 403
+
+
+def test_with_this_computer_s_tailnet_addresses_unknown_every_proxied_request_is_refused(home, monkeypatch):
+    server = mobile.serve_socket(FakeAssistant(), PORT, mobile.Devices(home / "mobile"), own_ips=lambda: ())
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+    monkeypatch.setattr(sock, "peer_uid", lambda conn: 0)
+    try:
+        assert get(headers=through_tailscale(PHONE)) == 403
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_this_user_s_own_program_still_opens_the_page_without_tailscale(served):
+    assert get() == 200                                 # the peer is this user, with no X-Forwarded-For
+
+
+def test_a_tailscaled_running_as_this_user_is_checked_too(served):
+    # The Mac App Store's Tailscale runs as the user, not root: the header still says where from.
+    assert get(headers=through_tailscale(OWN[0])) == 403
+    assert get(headers=through_tailscale(PHONE)) == 200
+
+
+def test_another_address_of_this_computer_is_refused_as_a_source(paired):
+    # Another account binds its connection to the LAN, a docker bridge or an IPv6 address of this computer before
+    # sending to its own ts.net name; tailscaled then says that address (#241 review). A phone is always on the
+    # tailnet's own ranges.
+    for source in ("10.10.220.192", "192.168.1.10", "172.17.0.1", "fc00:f853:ccd:e793::1", "fe80::1",
+                   "fe80::1%eth0", "8.8.8.8"):
+        assert stop(paired, through_tailscale(source)) == 403, source
+
+
+def test_this_computer_s_addresses_are_asked_again_until_tailscale_says_them():
+    answers = iter([(), ("100.64.0.5",)])
+    times = iter([0.0, 1.0, 40.0, 50.0])
+    own = mobile.OwnAddresses(lambda: next(answers), clock=lambda: next(times))
+    assert own() == ()
+    assert own() == ()                                  # not asked again within 30 s
+    assert own() == ("100.64.0.5",)
+    assert own() == ("100.64.0.5",)                     # known: not asked again within a minute
+
+
+def test_this_computer_s_addresses_are_asked_again_when_known_so_a_new_one_is_refused_too():
+    # `tailscale switch` or a new login gives this computer another address while Rafiq runs.
+    answers = iter([("100.80.1.2",), ()])
+    times = iter([100.0, 200.0])
+    own = mobile.OwnAddresses(lambda: next(answers), clock=lambda: next(times), known=("100.64.0.5",), asked=0.0)
+    assert own() == ("100.80.1.2",)
+    assert own() == ("100.80.1.2",)                     # tailscaled restarting says nothing: the last ones stand
+
+
+def test_rafiq_run_on_the_port_refuses_what_comes_from_this_computer_s_tailnet_address(monkeypatch):
+    monkeypatch.setattr(cli, "tailnet_self", lambda: ("desk.tail1234.ts.net", OWN))
+    monkeypatch.setattr(mobile, "check_start", lambda cfg, targets=None: None)
+    server = cli._start_mobile(mobile_cfg("port", 0), FakeAssistant())
+    monkeypatch.setattr(mobile, "owner_known", lambda: True)
+    monkeypatch.setattr(panel, "connection_owner", lambda client, server: 0)
+    try:
+        assert tcp_get(server.server_address[1], through_tailscale(OWN[0])) == 403
+        assert tcp_get(server.server_address[1], through_tailscale(PHONE)) == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 # ---------------------------------------------------------------------- the port, opted into
 
 
 @pytest.fixture
 def on_port(tmp_path):
-    server = mobile.serve(FakeAssistant(), "127.0.0.1", 0, mobile.Devices(tmp_path / "mobile"))
+    server = mobile.serve(FakeAssistant(), "127.0.0.1", 0, mobile.Devices(tmp_path / "mobile"), own_ips=lambda: OWN)
     threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     yield server.server_address[1]
     server.shutdown()
     server.server_close()
 
 
-def tcp_get(port):
-    return httpx.get(f"http://127.0.0.1:{port}/", timeout=5).status_code
+def tcp_get(port, headers=None):
+    return httpx.get(f"http://127.0.0.1:{port}/", headers=headers, timeout=5).status_code
 
 
 def test_on_linux_another_account_s_program_is_refused_on_the_port(on_port, monkeypatch):
@@ -113,9 +244,23 @@ def test_on_linux_another_account_s_program_is_refused_on_the_port(on_port, monk
 
 def test_on_linux_tailscaled_and_this_user_are_let_in_on_the_port(on_port, monkeypatch):
     monkeypatch.setattr(mobile, "owner_known", lambda: True)
-    for uid in (0, os.getuid()):
-        monkeypatch.setattr(panel, "connection_owner", lambda client, server, uid=uid: uid)
-        assert tcp_get(on_port) == 200
+    monkeypatch.setattr(panel, "connection_owner", lambda client, server: 0)
+    assert tcp_get(on_port, through_tailscale(PHONE)) == 200
+    monkeypatch.setattr(panel, "connection_owner", lambda client, server: os.getuid())
+    assert tcp_get(on_port) == 200
+
+
+def test_on_the_port_too_tailscaled_bringing_this_computer_s_own_request_is_refused(on_port, monkeypatch):
+    monkeypatch.setattr(mobile, "owner_known", lambda: True)
+    monkeypatch.setattr(panel, "connection_owner", lambda client, server: 0)
+    assert tcp_get(on_port, through_tailscale(OWN[0])) == 403
+    assert tcp_get(on_port) == 403                      # root without saying where from
+
+
+def test_where_a_port_s_owner_can_t_be_found_the_header_is_still_checked(on_port, monkeypatch):
+    monkeypatch.setattr(mobile, "owner_known", lambda: False)                  # macOS, on the port
+    assert tcp_get(on_port, through_tailscale(OWN[0])) == 403
+    assert tcp_get(on_port, through_tailscale(PHONE)) == 200
 
 
 def test_on_linux_a_connection_whose_owner_can_t_be_found_is_refused(on_port, monkeypatch):
@@ -138,7 +283,7 @@ def test_socket_is_the_default():
 
 
 def test_rafiq_run_serves_the_phone_page_on_its_socket(home, monkeypatch):
-    monkeypatch.setattr(cli, "tailnet_name", lambda: "")
+    monkeypatch.setattr(cli, "tailnet_self", lambda: ("", ()))
     server = cli._start_mobile(mobile_cfg("socket"), FakeAssistant())
     try:
         assert server.socket.family == socket.AF_UNIX and sock.ours(mobile.socket_path())
@@ -147,8 +292,20 @@ def test_rafiq_run_serves_the_phone_page_on_its_socket(home, monkeypatch):
         server.server_close()
 
 
+def test_rafiq_run_refuses_what_comes_from_this_computer_s_tailnet_address(home, monkeypatch):
+    monkeypatch.setattr(cli, "tailnet_self", lambda: ("desk.tail1234.ts.net", OWN))
+    server = cli._start_mobile(mobile_cfg("socket"), FakeAssistant())
+    monkeypatch.setattr(sock, "peer_uid", lambda conn: 0)
+    try:
+        assert get(headers=through_tailscale(OWN[0])) == 403
+        assert get(headers=through_tailscale(PHONE)) == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_a_taken_port_stops_rafiq_with_a_clear_error(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "tailnet_name", lambda: "")
+    monkeypatch.setattr(cli, "tailnet_self", lambda: ("", ()))
     taken = socket.socket()
     taken.bind(("127.0.0.1", 0))
     taken.listen(1)
@@ -162,14 +319,14 @@ def test_a_taken_port_stops_rafiq_with_a_clear_error(monkeypatch, capsys):
 
 def test_a_socket_that_can_t_be_made_stops_rafiq_with_a_clear_error(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("RAFIQ_HOME", str(tmp_path / ("x" * 120)))
-    monkeypatch.setattr(cli, "tailnet_name", lambda: "")
+    monkeypatch.setattr(cli, "tailnet_self", lambda: ("", ()))
     with pytest.raises(SystemExit):
         cli._start_mobile(mobile_cfg("socket"), FakeAssistant())
     assert "RAFIQ_HOME" in capsys.readouterr().err
 
 
 def test_an_unknown_listen_setting_stops_rafiq(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "tailnet_name", lambda: "")
+    monkeypatch.setattr(cli, "tailnet_self", lambda: ("", ()))
     with pytest.raises(SystemExit):
         cli._start_mobile(mobile_cfg("everywhere"), FakeAssistant())
     assert "listen" in capsys.readouterr().err
