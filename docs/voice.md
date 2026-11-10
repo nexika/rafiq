@@ -8,7 +8,9 @@ laptop's CPU, offline (#250).
 ## 1. The speaker
 
 Use one real person who has agreed in writing that their voice is Rafiq's, to be recorded, trained on and given
-to users as a model. For `ar-EG`, choose an Egyptian speaker. The lists are written as an Egyptian says them.
+to users as a model. Each language needs a native speaker of it. For `ar-EG`, choose an Egyptian speaker: its
+list is written as an Egyptian says it, and `ar` is Modern Standard Arabic. The Spanish list is Spain's Spanish,
+like the Piper voice it starts from.
 
 ## 2. Record
 
@@ -16,7 +18,7 @@ Use a quiet room with soft things around (a wardrobe, curtains, a sofa), a USB o
 same distance from it every time. Then:
 
 ```bash
-rafiq record-voice ar-EG        # or en
+rafiq record-voice ar-EG        # or en, fr, es, de, ar
 ```
 
 Each sentence shows on the screen. Press Enter, read it, and press Enter again. Then keep it (Enter), play it
@@ -31,7 +33,7 @@ sentence per line.
 Read the way Rafiq should sound: calm, friendly, at an even pace, not like a news anchor. Stop when your voice
 gets tired. A take recorded tired sounds different from the others, and the voice learns that too.
 
-The shipped list takes about 15 minutes to read. Piper's fine-tunes have worked from about an hour of audio. Add
+Each shipped list takes about 12 to 19 minutes to read. Piper's fine-tunes have worked from about an hour of audio. Add
 your own sentences with `--sentences` until `rafiq record-voice` says about 60 minutes.
 
 ## 3. Train (once, on a rented GPU)
@@ -47,8 +49,17 @@ pip install -e '.[train]' && ./build_monotonic_align.sh
 ```
 
 Start from Piper's medium voice in the same language, from
-[rhasspy/piper-checkpoints](https://huggingface.co/datasets/rhasspy/piper-checkpoints):
-`ar/ar_JO/kareem/medium` for Arabic, `en/en_US/ryan/medium` for English. Download its `.ckpt` file, then:
+[rhasspy/piper-checkpoints](https://huggingface.co/datasets/rhasspy/piper-checkpoints). Download its `.ckpt` file:
+
+| Language | Checkpoint | `--data.espeak_voice` |
+|---|---|---|
+| `ar`, `ar-EG` | `ar/ar_JO/kareem/medium` | `ar` |
+| `en` | `en/en_US/ryan/medium` | `en-us` |
+| `fr` | `fr/fr_FR/siwis/medium` (Rafiq's `tom` has no checkpoint there) | `fr-fr` |
+| `es` | `es/es_ES/davefx/medium` | `es` |
+| `de` | `de/de_DE/thorsten/medium` | `de` |
+
+Then, for Egyptian Arabic for example:
 
 ```bash
 python3 -m piper.train fit \
@@ -64,7 +75,7 @@ python3 -m piper.train fit \
   --trainer.max_epochs 2000
 ```
 
-`--data.espeak_voice` is `en-us` for English. `--model.warmstart_ckpt` copies the old voice's weights and starts
+`--model.warmstart_ckpt` copies the old voice's weights and starts
 a fresh learning-rate schedule, so `--trainer.max_epochs 2000` is the whole run. That is Piper's recipe for under
 five hours of audio. Piper's guide puts an epoch at about 9 seconds plus 4 seconds per hour of audio on an H100,
 so an hour of recordings takes about 7 hours there. On an RTX 3090 it's about 25 seconds per hour of audio per

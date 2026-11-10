@@ -1,0 +1,239 @@
+# Frases para la voz española de Rafiq (#250). Una por línea; las líneas que empiezan por # se saltan.
+# Los números, las horas y las abreviaturas están escritos como se dicen, para que la voz aprenda a decirlos.
+# Las frases del propio Rafiq (lang.PHRASES) se añaden después de estas con `rafiq record-voice es`.
+
+Buenos días. Son las siete y media, y ya ha salido el sol.
+Ahora mismo hace veintidós grados en Madrid, con un poco de viento del norte.
+Mañana por la mañana estará nublado, y probablemente llueva a última hora de la tarde.
+Llévate un paraguas hoy, hay un ochenta por ciento de probabilidad de chubascos.
+La máxima de hoy es de treinta y un grados, y por la noche bajará a diecinueve.
+Son las nueve y cuarto, y hoy es martes, once de noviembre.
+Tu temporizador de diez minutos ha terminado.
+He puesto un temporizador de veinticinco minutos. Te aviso cuando acabe.
+Te recordaré que llames a tu madre a las seis de la tarde.
+Hoy tienes tres reuniones. La primera empieza a las diez.
+Tu próxima cita es dentro de cuarenta minutos, en la segunda planta.
+No tienes nada en la agenda el viernes.
+He añadido la cena con Lucía el sábado a las ocho.
+Tienes dos correos nuevos, uno de tu banco y otro de Pablo.
+Pablo dice que los archivos están listos y que mañana manda el resto.
+¿Te leo el mensaje entero o solo el resumen?
+En resumen, la reunión se ha movido al jueves por la mañana.
+No he encontrado nada sobre eso. ¿Puedes decirlo de otra forma?
+Perdona, no te he entendido bien. ¿Puedes repetirlo un poco más despacio?
+Un momento, lo estoy buscando.
+Voy a mirar las últimas noticias.
+Estas son las noticias más importantes del día.
+La primera trata de la nueva línea de metro, que abre el mes que viene.
+Eso es todo en titulares. ¿Quieres saber más de alguna?
+Pongo tu lista de la mañana en Spotify.
+Pauso la música.
+Aquí tienes la siguiente canción.
+El volumen está al cuarenta por ciento.
+He bajado un poco el volumen.
+He silenciado los altavoces. Llámame cuando me necesites.
+Esa canción se llama Entre dos aguas, de Paco de Lucía.
+Estoy escuchando la canción, dame unos segundos.
+No he reconocido la canción. ¿Puedes subirla un poco?
+Las luces del salón ya están apagadas.
+He puesto el dormitorio con luz cálida y suave.
+La puerta de entrada está cerrada con llave.
+Tu paquete de la librería está en reparto y debería llegar antes del mediodía.
+Hoy el euro está a un dólar y ocho céntimos.
+El oro ha subido un uno y medio por ciento esta semana.
+Te queda un quince por ciento de batería. Deberías enchufar el cargador.
+El ordenador se está calentando mucho, hay un programa usando casi todo el procesador.
+He abierto el navegador.
+Lo he copiado al portapapeles.
+Esto es lo que he apuntado: leche, huevos y pan del día.
+Tu lista de la compra tiene seis cosas.
+He añadido tomates a la lista de la compra.
+He guardado la nota en ideas de trabajo.
+¿Lo envío ahora? Di sí o no.
+Vale, no lo envío.
+Hecho, el mensaje ya ha salido.
+Lo he cancelado. No se ha cambiado nada.
+¿Seguro que quieres apagar el ordenador?
+No puedo hacer eso sin preguntarte antes.
+Esa página me ha pedido algo, pero yo solo sigo tus instrucciones.
+No abro páginas de la red de este ordenador.
+No estoy seguro, así que prefiero no adivinar.
+Creo que sí, pero compruébalo en la web oficial para estar seguro.
+Buena pregunta. Vamos a verlo paso a paso.
+Primero, en lo alto de una montaña el agua hierve a menos temperatura.
+Eso es porque allí arriba la presión del aire es más baja.
+En resumen, con menos presión el agua necesita menos calor para hervir.
+La fotosíntesis es cómo las plantas convierten la luz, el agua y el aire en azúcar.
+La capital de Australia es Canberra, no Sídney.
+El Ebro mide unos novecientos diez kilómetros.
+La luz del sol tarda algo más de ocho minutos en llegar hasta nosotros.
+Un año en Marte dura seiscientos ochenta y siete días.
+Tres por siete, veintiuno.
+El quince por ciento de doscientos es treinta.
+La raíz cuadrada de ciento cuarenta y cuatro es doce.
+Las quince treinta son las tres y media de la tarde.
+De Madrid a Barcelona hay unos seiscientos kilómetros.
+Tu vuelo sale a las seis y cuarenta de la terminal cuatro.
+En coche se tarda unas dos horas y diez minutos.
+Hay mucho tráfico en la circunvalación. Si sales ahora, llegas a las nueve y cuarto.
+Dentro de doscientos metros, gira a la izquierda y luego mantente a la derecha.
+La farmacia más cercana está abierta hasta medianoche.
+Hoy el restaurante abre de doce a once de la noche.
+He reservado una mesa para cuatro a las nueve.
+¿Quieres que te lea las reseñas?
+Casi todos dicen que la comida está buena, pero que el servicio es lento.
+¡Hola! ¿En qué te puedo ayudar hoy?
+Buenas tardes. ¿Qué tal el día?
+De nada. ¿Algo más?
+Aquí estoy. ¿Qué necesitas?
+Claro, un segundo.
+Ningún problema.
+Encantado.
+Ahora mismo no consigo conectarme a internet.
+Estoy sin conexión, así que solo puedo hacer cosas en este ordenador.
+Ha vuelto internet, ya puedo buscar otra vez.
+Claude no responde, así que de momento uso el modelo local.
+Ha tardado más de lo normal, perdona la espera.
+Sigo con ello, la página es larga.
+Aquí tienes el resumen del artículo en tres puntos.
+El autor dice que las ciudades deben prepararse para el calor, no solo para la lluvia.
+El vídeo explica cómo las vacunas entrenan al sistema inmunitario.
+En esta parte, la profesora resuelve la ecuación pasando todo a un lado.
+¿Quieres que te lo explique de forma más sencilla?
+Vamos a probar con una pregunta. ¿Cuál es el pretérito del verbo ir?
+Exacto. ¡Muy bien!
+No del todo. Con yo se dice fui, y con tú, fuiste.
+Repasemos lo que vimos ayer antes de empezar.
+Llevas cuarenta minutos estudiando. ¿Qué tal un descanso?
+Se acabó la sesión de concentración. Estírate, bebe agua y vuelve en cinco minutos.
+Es la hora de tu medicina.
+No te olvides de la cita con el dentista mañana a las once.
+¡Feliz cumpleaños! Que tengas un año estupendo.
+Está lloviendo mucho en Bilbao, y la carretera de la costa podría cerrarse.
+Hay aviso por calor extremo en Sevilla esta tarde.
+La calidad del aire hoy es mala. Si puedes, deja las ventanas cerradas.
+El sol sale a las ocho y doce y se pone a las seis y tres.
+Esta noche hay luna llena.
+El partido empieza a las nueve, el Madrid contra el Barça.
+El resultado final fue dos a uno.
+Tu móvil está en la mesa, conectado a la misma red.
+No encuentro la impresora. ¿Está encendida?
+El periódico de la mañana está impreso y te está esperando.
+He programado el periódico a las seis y media, de lunes a viernes.
+La copia de seguridad ha terminado sin errores.
+Hay una actualización de Rafiq. ¿La instalo ahora?
+Rafiq está al día.
+Tu micrófono se oye bien.
+Oigo eco. Unos auriculares podrían ayudar.
+Para lo que necesita un sí, solo hago caso a tu voz.
+No he reconocido tu voz, así que no puedo confirmarlo.
+Di sí o no, por favor.
+Lo tomo como un no.
+Empecemos otra vez desde el principio.
+¿Te puedo ayudar en algo más?
+Buenas noches, que descanses.
+Hasta mañana.
+Espera, déjame pensarlo.
+Mmm, qué interesante.
+¿En serio? No lo sabía.
+¡Vaya, cuántos mensajes!
+Ay, no, parece que el archivo está vacío.
+Bueno, depende de lo que quieras decir.
+En realidad hay una forma más rápida de hacerlo.
+Por cierto, tu café lleva diez minutos listo.
+Sinceramente, yo esperaría a que baje el precio.
+Para ser justos, las dos opciones tienen sus ventajas.
+Por un lado es más barato, y por otro, mucho más lento.
+¿Cuál prefieres, el rojo o el azul?
+¿Te refieres a esta semana o a la que viene?
+¿Lo pongo desde el principio?
+¿Quieres la receta en gramos o en tazas?
+Para la salsa necesitas dos dientes de ajo, aceite de oliva y una pizca de sal.
+Hornéalo treinta y cinco minutos, hasta que se dore por encima.
+Remueve con cuidado y deja reposar cinco minutos antes de servir.
+Tres tristes tigres tragaban trigo en un trigal.
+El perro de San Roque no tiene rabo porque Ramón Ramírez se lo ha cortado.
+Pablito clavó un clavito, ¿qué clavito clavó Pablito?
+Erre con erre, cigarro; erre con erre, barril.
+Como poco coco como, poco coco compro.
+Cero, uno, dos, tres, cuatro, cinco, seis, siete, ocho, nueve, diez.
+Once, doce, trece, catorce, quince, dieciséis, diecisiete, dieciocho, diecinueve, veinte.
+Treinta, cuarenta, cincuenta, sesenta, setenta, ochenta, noventa, cien.
+Mil, diez mil, un millón.
+Lunes, martes, miércoles, jueves, viernes, sábado, domingo.
+Enero, febrero, marzo, abril, mayo, junio.
+Julio, agosto, septiembre, octubre, noviembre, diciembre.
+El primero, el segundo, el tercero, el cuarto y el quinto.
+Primavera, verano, otoño e invierno.
+Norte, sur, este y oeste.
+Rojo, naranja, amarillo, verde, azul y violeta.
+La reunión es el veintiuno de marzo, a las dos de la tarde.
+Cuesta ciento veintinueve euros con noventa y nueve.
+Llámame al seis, doce, treinta y cuatro, cincuenta y seis, setenta y ocho.
+El código es siete, cuatro, nueve, dos.
+El año dos mil veintiséis fue un año muy completo.
+En mil novecientos sesenta y nueve, el ser humano pisó la Luna por primera vez.
+Ya ha salido la versión dos punto uno.
+El archivo ocupa unos tres megas y medio.
+Tu contraseña debería tener al menos doce caracteres.
+El wifi está conectado, pero la señal es débil.
+Los auriculares bluetooth están conectados.
+El brillo de la pantalla está al setenta por ciento.
+He hecho una captura de pantalla y la he guardado en tus imágenes.
+Hago clic en el botón azul de arriba a la derecha.
+Voy a escribir tu correo electrónico. ¿Te parece bien?
+He parado. No voy a pulsar nada más.
+Esto es lo que veo en la pantalla: un formulario con tres campos vacíos.
+El error dice que el disco está lleno.
+Cierra algunos programas y vuelve a abrirlo.
+Reiniciar suele arreglarlo. ¿Reinicio ahora?
+He encontrado tres archivos con ese nombre. ¿Cuál quieres?
+El más reciente es de anoche.
+Te leo el primer párrafo.
+Aquí termina el documento.
+Capítulo uno. La casa junto al río.
+Era tarde cuando por fin dejó de llover.
+El anciano abrió la ventana y escuchó la ciudad.
+En algún lugar lejano, un perro le ladraba a la luna.
+Nadie sabía de dónde había llegado la carta.
+Ella sonrió, dobló el mapa y caminó hacia la estación.
+El tren llegó tarde, como siempre, pero a nadie pareció importarle.
+Hablaron durante horas de todo y de nada.
+Por la mañana, la calle estaba tranquila y limpia.
+Poco a poco se va lejos.
+Aprender un idioma requiere paciencia, práctica y un poco de valor.
+Los buenos hábitos son más fáciles de mantener que de empezar.
+Quien no pregunta, no aprende.
+Gracias por tu paciencia.
+Espero que te sirva.
+Eso es todo lo que he encontrado.
+Aquí estaré si me necesitas.
+¡Hola! ¿Qué tal?
+Muy bien, gracias, ¿y tú?
+¿Qué hay de nuevo?
+Vale, quedamos así.
+No pasa nada, ya encontraremos una solución.
+¡Genial, me encanta la idea!
+No, no, no es eso para nada.
+Espera, que te lo explico.
+¡Enhorabuena! Te lo has ganado.
+Cuídate mucho.
+Todo listo, cuando quieras nos vamos.
+Soy Rafiq, tu asistente en el ordenador.
+Pregúntame por el tiempo, tu agenda o cualquier cosa que quieras saber.
+Hoy en el mercado hay fresas, cerezas y unos tomates estupendos.
+La panadería de la esquina hace las mejores magdalenas del barrio.
+Este año nos vamos de vacaciones a Galicia, en julio.
+El museo cierra los lunes, pero los jueves abre hasta tarde.
+Acuérdate de validar el billete antes de subir al tren.
+En la biblioteca municipal también prestan juegos de mesa.
+Mi abuelo siempre contaba la misma historia, y nos reíamos cada vez.
+Hay tanta niebla que no se ve la otra orilla.
+Una hora de paseo al día ya es mucho para la salud.
+Los niños juegan en el patio mientras los padres charlan.
+Escucha bien: la respuesta está escondida en la pregunta.
+¿Por qué no? Probemos, a ver qué pasa.
+Dicen que la nueva película es buenísima.
+¡Qué día tan bonito para pasear junto al mar!
+El cigüeñal del camión hizo un ruido extraño en la subida.
+Añade una cucharada de azúcar y un chorrito de limón.

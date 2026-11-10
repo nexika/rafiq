@@ -114,7 +114,7 @@ def test_a_language_without_a_list_says_where_to_put_one(tmp_path, no_phrases):
     assert "xx.txt" in said[0]
 
 
-@pytest.mark.parametrize("tag", ["ar-EG", "en"])
+@pytest.mark.parametrize("tag", lang.TAGS)
 def test_each_shipped_list_writes_numbers_as_said_and_has_enough_to_train_on(tag):
     path = voicedata.LISTS / f"{tag}.txt"
     lines = voicedata.sentences(tag, path)
