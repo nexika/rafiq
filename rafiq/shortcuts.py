@@ -1,7 +1,8 @@
 """Escape ends an operator run (#18). On Wayland a program never sees keys pressed in other windows, so Escape is
 bound through the XDG GlobalShortcuts portal, only while a run goes: GNOME asks the user once to allow it, and
 the binding is dropped when the run ends, so Escape works as usual the rest of the time. Without the portal (X11,
-an older desktop), the run still ends with the Stop button in the widget and the dashboard.
+an older desktop), the run still ends with the Stop button in the widget and the dashboard. On Windows any program
+may read the keyboard's state, so Escape is polled instead, only while a run goes (#242).
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from . import pointer
 
 SHORTCUT = "stop"
 BIND_SECONDS = 60          # the first time, GNOME asks the user whether Rafiq may have this shortcut
+POLL_SECONDS = 0.05        # Windows: how often Escape is looked at; a press is longer than this
 
 
 class EscapeWatch:
@@ -27,6 +29,12 @@ class EscapeWatch:
 
     def start(self) -> bool:
         """Bind Escape; False when it can't be (the run then relies on the Stop button)."""
+        from . import desktop
+
+        if desktop.system() == "windows":
+            self._thread = threading.Thread(target=self._poll, name="rafiq-escape", daemon=True)
+            self._thread.start()
+            return True
         try:
             self.bus = self.bus or (self.bus_factory or pointer.JeepneyBus)()
             created = self.bus.request("GlobalShortcuts", "CreateSession", "a{sv}",
@@ -50,6 +58,22 @@ class EscapeWatch:
                                         args=("GlobalShortcuts", "Activated", self._activated, self._stop))
         self._thread.start()
         return True
+
+    def _poll(self) -> None:
+        """Windows: a press that starts during the run. An Escape already held when it began doesn't count, since
+        it may be the end of the user's last key press."""
+        from . import desktop
+
+        try:
+            was = desktop.escape_down()
+            while not self._stop.wait(POLL_SECONDS):
+                now = desktop.escape_down()
+                if now and not was:
+                    self.pressed.set()
+                    return
+                was = now
+        except OSError:                                     # the run still ends with the Stop button
+            return
 
     def _activated(self, body) -> None:
         """Activated(session_handle, shortcut_id, timestamp, options): only this run's own shortcut counts."""

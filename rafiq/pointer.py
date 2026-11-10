@@ -1,5 +1,5 @@
 """The pointer and the keyboard: one left click for click_on_screen (#26), and a whole run of clicks, keys, typing
-and scrolling for the operator (#18, PortalRemote and XdoRemote below).
+and scrolling for the operator (#18, PortalRemote, XdoRemote and on Windows WinRemote below).
 
 On Wayland only the compositor may move the pointer, so the click goes through the XDG desktop portal's
 RemoteDesktop interface: GNOME asks the user once ("allow remote interaction?") and, with persist_mode,
@@ -251,7 +251,11 @@ def portal_click(px: float, py: float, shot_width: int, shot_height: int, bus=No
 # ---------------------------------------------------------------------- which way
 
 def method(env: Mapping[str, str] | None = None, which: Callable[[str], str | None] = shutil.which) -> str | None:
-    """How a click is made here: "portal" (Wayland), "xdotool" (X11), or None."""
+    """How a click is made here: "sendinput" (Windows), "portal" (Wayland), "xdotool" (X11), or None."""
+    from . import desktop
+
+    if desktop.system() == "windows":
+        return "sendinput"
     env = os.environ if env is None else env
     if env.get("WAYLAND_DISPLAY"):
         return "portal"
@@ -268,6 +272,12 @@ def click(px: float, py: float, shot_width: int, shot_height: int, env: Mapping[
     how = method(env, which)
     if how == "portal":
         (portal or portal_click)(px, py, shot_width, shot_height, ready=ready)
+        return
+    if how == "sendinput":
+        with WinRemote(shot_width, shot_height) as remote:
+            if not ready():
+                raise NotReady("the screen changed before the click")
+            remote.click(px, py)
         return
     if how is None:
         raise PointerError("no way to click here: on X11 install xdotool; on Wayland, run in a desktop session")
@@ -583,10 +593,177 @@ class XdoRemote:
         self._xdo("type", "--clearmodifiers", "--", text)      # xdotool types any character, layout or not
 
 
+# Windows' virtual keys for the keysyms above; a letter or digit is its own capital. EXTENDED are the keys the
+# numeric keypad doubles: without the flag, Windows reads them as the keypad's (with Num Lock on, as digits).
+WIN_VK = {0xFF0D: 0x0D, 0xFF1B: 0x1B, 0xFF09: 0x09, 0xFF08: 0x08, 0xFFFF: 0x2E, 0xFF63: 0x2D, 0xFF50: 0x24,
+          0xFF57: 0x23, 0xFF55: 0x21, 0xFF56: 0x22, 0xFF51: 0x25, 0xFF52: 0x26, 0xFF53: 0x27, 0xFF54: 0x28,
+          0x20: 0x20, 0x2D: 0xBD, 0x2B: 0xBB, 0x3D: 0xBB, 0x2C: 0xBC, 0x2E: 0xBE, 0x2F: 0xBF, 0xFF67: 0x5D,
+          0xFF61: 0x2C, 0xFFE5: 0x14, 0xFFE3: 0x11, 0xFFE1: 0x10, 0xFFE9: 0x12, 0xFFEB: 0x5B,
+          **{0xFFBE + n - 1: 0x70 + n - 1 for n in range(1, 13)}}
+WIN_EXTENDED = {0x2E, 0x2D, 0x24, 0x23, 0x21, 0x22, 0x25, 0x26, 0x27, 0x28, 0x5D, 0x5B}
+WIN_BUTTONS = {"left": (0x0002, 0x0004), "right": (0x0008, 0x0010), "middle": (0x0020, 0x0040)}
+
+
+def win_vk(sym: int) -> int:
+    if 0x61 <= sym <= 0x7A:
+        return sym - 0x20
+    if 0x30 <= sym <= 0x39:
+        return sym
+    if sym in WIN_VK:
+        return WIN_VK[sym]
+    raise PointerError(f"no Windows key for {chr(sym) if sym < 0x110000 else hex(sym)!r}")
+
+
+class WinRemote:
+    """The same on Windows: SetCursorPos and SendInput, in physical pixels (rafiq.desktop). Points are in pixels of a
+    screenshot of the whole virtual screen, so the virtual screen must be that size, give or take SHAPE_TOLERANCE
+    (the operator rebuilds the size from its shrunk screenshot, which can round a pixel off). When it isn't (a
+    monitor added or a scale changed since), nothing is pressed, as on Wayland."""
+
+    def __init__(self, shot_width: int, shot_height: int):
+        self.width, self.height = shot_width, shot_height
+        self.left = self.top = 0
+        self.sx = self.sy = 1.0
+
+    def __enter__(self) -> WinRemote:
+        from . import desktop
+
+        try:
+            left, top, width, height = desktop.virtual_screen()
+        except OSError as exc:
+            raise PointerError(f"the screen couldn't be measured ({exc})") from exc
+        if abs(width / self.width - 1) > SHAPE_TOLERANCE or abs(height / self.height - 1) > SHAPE_TOLERANCE:
+            raise PointerError(f"the screen's size ({width} by {height}) isn't the screenshot's ({self.width} by "
+                               f"{self.height}); nothing was clicked")
+        self.left, self.top = left, top
+        self.sx, self.sy = width / self.width, height / self.height
+        return self
+
+    def __exit__(self, *exc) -> None:
+        pass
+
+    @staticmethod
+    def _call(name: str, *args):
+        """A desktop function, looked up when called (tests replace them); Windows' refusal as a PointerError."""
+        from . import desktop
+
+        try:
+            return getattr(desktop, name)(*args)
+        except OSError as exc:
+            raise PointerError(f"Windows refused the input ({exc}); a window running as administrator keeps "
+                               "Rafiq's clicks and keys out") from exc
+
+    @staticmethod
+    def _events(syms: list[int], up: bool) -> list[tuple[int, int, int]]:
+        order = reversed(syms) if up else syms
+        return [(vk, 0, (0x0001 if vk in WIN_EXTENDED else 0) | (0x0002 if up else 0)) for vk in order]
+
+    def _vks(self, combo: str) -> list[int]:
+        return [win_vk(sym) for sym in combo_keysyms(combo)]      # every key checked before any is pressed
+
+    def _check(self, x: float, y: float) -> None:
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            raise PointerError("that point is off the screen; nothing was clicked")
+
+    def move(self, x: float, y: float) -> None:
+        """The cursor at the point, checked: the screenshot is the monitors' bounding box, and Windows moves a point
+        on no monitor (beside a smaller one) to the nearest monitor, often onto its taskbar."""
+        self._check(x, y)
+        target = (self.left + round(x * self.sx), self.top + round(y * self.sy))
+        self._call("set_cursor", *target)
+        if tuple(self._call("cursor_position")) != target:
+            raise PointerError("that point is on no monitor; nothing was clicked")
+
+    def click(self, x: float, y: float, button: str = "left", count: int = 1, mods=()) -> None:
+        if button not in WIN_BUTTONS:
+            raise PointerError(f"unknown button {button!r}")
+        held = self._mods(mods)
+        self._check(x, y)
+        down, up = WIN_BUTTONS[button]
+        if held:
+            self._call("send_input", self._events(held, False))
+        try:
+            self.move(x, y)
+            self._call("send_mouse", [(down, 0), (up, 0)] * max(1, int(count)))
+        finally:
+            if held:
+                self._call("send_input", self._events(held, True))
+
+    def mouse(self, down: bool) -> None:
+        self._call("send_mouse", [(WIN_BUTTONS["left"][0 if down else 1], 0)])
+
+    @staticmethod
+    def _mods(mods) -> list[int]:
+        unknown = [m for m in mods if m not in MODIFIERS]
+        if unknown:
+            raise PointerError(f"unknown modifier {unknown[0]!r}")
+        return [win_vk(MODIFIERS[m]) for m in mods]
+
+    def drag(self, path, mods=()) -> None:
+        """Every point checked before the button goes down, so a bad one can't turn the drag into a click; the
+        modifiers held throughout (Ctrl copies in Explorer where a plain drag moves)."""
+        held = self._mods(mods)
+        for x, y in path:
+            self._check(x, y)
+        if held:
+            self._call("send_input", self._events(held, False))
+        try:
+            self.move(*path[0])
+            self.mouse(True)
+            try:
+                for x, y in path[1:]:
+                    self.move(x, y)
+            finally:
+                self.mouse(False)
+        finally:
+            if held:
+                self._call("send_input", self._events(held, True))
+
+    def scroll(self, x: float, y: float, dx: int = 0, dy: int = 0) -> None:
+        from . import desktop
+
+        self.move(x, y)
+        if dy:
+            self._call("send_mouse", [(desktop.MOUSEEVENTF_WHEEL, -int(dy) * desktop.WHEEL_DELTA)])
+        if dx:
+            self._call("send_mouse", [(desktop.MOUSEEVENTF_HWHEEL, int(dx) * desktop.WHEEL_DELTA)])
+
+    def key(self, combo: str, repeat: int = 1) -> None:
+        """A single printable key (plus, slash, a letter) is typed as that character, since its virtual key depends
+        on the layout (VK_OEM_2 is "#" on a German keyboard) and VK_OEM_PLUS without Shift is "=". A combo with a
+        modifier is pressed by virtual keys, as shortcuts are."""
+        from . import desktop
+
+        syms = combo_keysyms(combo)
+        if len(syms) == 1 and 0x21 <= syms[0] <= 0x7E:
+            self._call("send_input", desktop.text_events(chr(syms[0]) * max(1, int(repeat))))
+            return
+        vks = [win_vk(sym) for sym in syms]
+        self._call("send_input", (self._events(vks, False) + self._events(vks, True)) * max(1, int(repeat)))
+
+    def hold(self, combo: str, seconds: float, sleep=time.sleep) -> None:
+        vks = self._vks(combo)
+        self._call("send_input", self._events(vks, False))
+        try:
+            sleep(seconds)
+        finally:
+            self._call("send_input", self._events(vks, True))
+
+    def type(self, text: str) -> None:
+        """Unicode key events: any character, Arabic included, whatever the keyboard layout, with no clipboard."""
+        from . import desktop
+
+        events = desktop.text_events(text)
+        if events:
+            self._call("send_input", events)
+
+
 def open_remote(shot_width: int, shot_height: int, env: Mapping[str, str] | None = None,
                 which: Callable[[str], str | None] = shutil.which):
     """The input for an operator run on this desktop session, to use with `with`."""
     how = method(env, which)
+    if how == "sendinput":
+        return WinRemote(shot_width, shot_height)
     if how == "portal":
         return PortalRemote(shot_width, shot_height)
     if how == "xdotool":
