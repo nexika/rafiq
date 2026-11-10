@@ -407,7 +407,7 @@ def _desktop(probe: Probe) -> list[Check]:
     return checks
 
 
-NOT_ON_WINDOWS = "switching outputs, saying what is playing, presence and the phone page"
+NOT_ON_WINDOWS = "switching outputs, presence and the phone page"
 
 
 def _windows_desktop(probe: Probe) -> list[Check]:
@@ -416,6 +416,7 @@ def _windows_desktop(probe: Probe) -> list[Check]:
     from . import config, desktop
 
     volume, loopback = probe.has_module("pycaw"), probe.has_module("soundcard")
+    sessions = probe.has_module("winrt.windows.media.control")
     private = desktop.is_private(config.home())
     return [
         Check("Volume", volume, "Core Audio (pycaw)" if volume else "pycaw is not installed",
@@ -423,6 +424,9 @@ def _windows_desktop(probe: Probe) -> list[Check]:
         Check("The computer's own sound", loopback, "WASAPI loopback (soundcard)" if loopback else
               "soundcard is not installed", "" if loopback else 'pip install -e ".[windows]"', optional=True),
         Check("Click on screen", True, "SendInput, asked first; a window running as administrator keeps it out"),
+        Check("What is playing", sessions, "Windows' media sessions (winrt)" if sessions else
+              "winrt is not installed: the media keys only toggle", "" if sessions else 'pip install -e ".[windows]"',
+              optional=True),
         _programs("Open apps and pages", ["explorer.exe"], probe, "explorer.exe comes with Windows"),
         _programs("Lock screen", ["rundll32.exe"], probe, "rundll32.exe comes with Windows"),
         _programs("Desktop notifications", ["powershell.exe"], probe, "Windows PowerShell comes with Windows"),

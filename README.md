@@ -176,10 +176,10 @@ and `rafiq doctor` says whether it's private. Windows support is new, and some p
 | The panel | `rafiq panel` opens it, as on Linux. If Rafiq's pipe can't start, `rafiq run` started in a terminal opens it in your browser |
 | Rafiq's own programs | `rafiq ask`, `listen`, `dictate`, `panel`, `gestures`, `mcp` and the widget reach the running Rafiq through a named pipe only you can open |
 | Dictation | `SendInput` types each character as Unicode, so Arabic and accents come out whatever the keyboard layout. Windows keeps it out of windows running as administrator |
-| Media keys and hand gestures | the media keys and Ctrl+Tab through `SendInput`. Windows has one key for play and pause, so both toggle, and Rafiq can't say what is playing |
+| Media and hand gestures | Windows' media sessions (`winrt`, the `windows` extra): Rafiq says what plays and in which app, and play and pause are exact, so an open palm never starts paused music again. Without it, the media keys, which only toggle. Ctrl+Tab and zoom through `SendInput` |
 | What the computer plays (song recognition, "explain this video") | WASAPI's loopback of the default output, through `soundcard` (the `windows` extra) |
 | Looking at and clicking on the screen | a screenshot of every monitor through Pillow's `ImageGrab`, and clicks, keys and scrolling through `SendInput`, in physical pixels so a scaled screen is clicked where it was circled. Each click is asked first, and the operator's run stops with Escape or the Stop button. Windows keeps them out of windows running as administrator |
-| Not there yet | switching outputs, saying what is playing, presence, and the phone page |
+| Not there yet | switching outputs, presence, and the phone page |
 
 Rafiq's own programs reach it over a socket only you can open on Linux and macOS. Python has no such socket on
 Windows, so there they use a named pipe, `\\.\pipe\rafiq-panel-<your SID>`, which only your account may open.
