@@ -177,7 +177,8 @@ and `rafiq doctor` says whether it's private. Windows support is new, and some p
 | Rafiq's own programs | `rafiq ask`, `listen`, `dictate`, `panel`, `gestures`, `mcp` and the widget reach the running Rafiq through a named pipe only you can open |
 | Dictation | `SendInput` types each character as Unicode, so Arabic and accents come out whatever the keyboard layout. Windows keeps it out of windows running as administrator |
 | Media keys and hand gestures | the media keys and Ctrl+Tab through `SendInput`. Windows has one key for play and pause, so both toggle, and Rafiq can't say what is playing |
-| Not there yet | clicking on and looking at the screen, switching outputs, saying what is playing, what the computer plays, presence, and the phone page |
+| What the computer plays (song recognition, "explain this video") | WASAPI's loopback of the default output, through `soundcard` (the `windows` extra) |
+| Not there yet | clicking on and looking at the screen, switching outputs, saying what is playing, presence, and the phone page |
 
 Rafiq's own programs reach it over a socket only you can open on Linux and macOS. Python has no such socket on
 Windows, so there they use a named pipe, `\\.\pipe\rafiq-panel-<your SID>`, which only your account may open.

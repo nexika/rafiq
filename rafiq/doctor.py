@@ -177,8 +177,7 @@ def _songs(cfg: dict, probe: Probe) -> Check:
         if not probe.which("ffmpeg"):
             return Check("Song recognition", False, "room only, missing ffmpeg", "winget install -e --id Gyan.FFmpeg",
                          optional=True)
-        return Check("Song recognition", True, "AudD, from the microphone (the computer's own sound is not on "
-                     "Windows yet)")
+        return Check("Song recognition", True, "AudD")
     missing = [n for n in (("ffmpeg",) if desktop.system() == "mac" else ("parec", "ffmpeg")) if not probe.which(n)]
     if missing:
         return Check("Song recognition", False, f"room only, missing {', '.join(missing)}",
@@ -408,8 +407,8 @@ def _desktop(probe: Probe) -> list[Check]:
     return checks
 
 
-NOT_ON_WINDOWS = ("clicking on and looking at the screen, switching outputs, saying what is playing, the computer's "
-                  "own sound, presence and the phone page")
+NOT_ON_WINDOWS = ("clicking on and looking at the screen, switching outputs, saying what is playing, presence and the "
+                  "phone page")
 
 
 def _windows_desktop(probe: Probe) -> list[Check]:
@@ -417,11 +416,13 @@ def _windows_desktop(probe: Probe) -> list[Check]:
     ACL keeps the keys the user's (#193). Nothing is changed to check."""
     from . import config, desktop
 
-    volume = probe.has_module("pycaw")
+    volume, loopback = probe.has_module("pycaw"), probe.has_module("soundcard")
     private = desktop.is_private(config.home())
     return [
         Check("Volume", volume, "Core Audio (pycaw)" if volume else "pycaw is not installed",
               "" if volume else 'pip install -e ".[windows]"'),
+        Check("The computer's own sound", loopback, "WASAPI loopback (soundcard)" if loopback else
+              "soundcard is not installed", "" if loopback else 'pip install -e ".[windows]"', optional=True),
         _programs("Open apps and pages", ["explorer.exe"], probe, "explorer.exe comes with Windows"),
         _programs("Lock screen", ["rundll32.exe"], probe, "rundll32.exe comes with Windows"),
         _programs("Desktop notifications", ["powershell.exe"], probe, "Windows PowerShell comes with Windows"),

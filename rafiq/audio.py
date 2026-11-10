@@ -252,17 +252,41 @@ def mac_system_audio(seconds: float) -> np.ndarray:
     return resample_poly(mono, RATE // g, rate // g).astype(np.float32)
 
 
+def _soundcard():
+    import soundcard
+
+    return soundcard
+
+
+def windows_system_audio(seconds: float) -> np.ndarray:
+    """Windows plays through WASAPI, whose loopback of the default output carries what the computer plays. sounddevice
+    can't open it (PortAudio has no loopback), so soundcard (the windows extra) records it. soundcard asks WASAPI to
+    convert the rate, and returns zeros while nothing plays instead of waiting, so a silent computer can't hang."""
+    try:
+        sc = _soundcard()
+    except ImportError:
+        raise FileNotFoundError('soundcard is not installed: pip install -e ".[windows]"') from None
+    try:
+        speaker = sc.default_speaker()
+        loopback = sc.get_microphone(str(speaker.id), include_loopback=True)
+        data = loopback.record(numframes=int(seconds * RATE), samplerate=RATE)
+    except (RuntimeError, OSError, IndexError) as e:     # no output device, or one that went away: said as it is
+        raise RuntimeError(f"Windows has no output device to listen to ({e})") from None
+    data = np.asarray(data, dtype=np.float32)
+    return data.reshape(len(data), -1).mean(axis=1) if data.ndim > 1 else data
+
+
 def system_audio(seconds: float, spawn=subprocess.Popen) -> np.ndarray:
     """`seconds` of what this computer is playing, from PipeWire's (or PulseAudio's) monitor of the default
     output, as 16 kHz mono floats. parec comes with pulseaudio-utils, like the pactl used above; a missing
     parec raises FileNotFoundError. A recorder still running CAPTURE_GRACE seconds late is killed. On macOS,
-    from BlackHole (mac_system_audio)."""
+    from BlackHole (mac_system_audio); on Windows, from WASAPI's loopback (windows_system_audio)."""
     from . import desktop
 
     if desktop.system() == "mac":
         return mac_system_audio(seconds)
     if desktop.system() == "windows":
-        raise FileNotFoundError("hearing what this computer plays is not on Windows yet")
+        return windows_system_audio(seconds)
     want = int(seconds * RATE) * 2
     rec = spawn(["parec", "-d", "@DEFAULT_MONITOR@", "--raw", "--format=s16le", f"--rate={RATE}", "--channels=1"],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)

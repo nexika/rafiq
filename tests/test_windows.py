@@ -779,13 +779,63 @@ def test_sendinput_where_there_is_no_user32_is_an_oserror(monkeypatch):
         desktop.send_input([(desktop.VK["tab"], 0, 0)])
 
 
-def test_the_computer_s_sound_on_windows_says_it_is_not_there_yet(windows):
+class FakeSoundcard:
+    """soundcard as WASAPI would answer: the default speaker, and its loopback recorded as frames x channels."""
+
+    def __init__(self, channels=2):
+        self.channels, self.asked, self.recorded = channels, [], []
+
+    def default_speaker(self):
+        return type("Speaker", (), {"id": "{0.0.0.00000000}.{speakers}", "name": "Speakers"})()
+
+    def get_microphone(self, id, include_loopback=False):
+        self.asked.append((id, include_loopback))
+        fake = self
+
+        class Loopback:
+            def record(self, numframes, samplerate, channels=None, blocksize=None):
+                import numpy as np
+
+                fake.recorded.append((numframes, samplerate))
+                left = np.full(numframes, 0.5, dtype=np.float32)
+                return np.stack([left, np.zeros(numframes, dtype=np.float32)][:fake.channels], axis=1)
+
+        return Loopback()
+
+
+def test_the_computer_s_sound_on_windows_is_the_default_speaker_s_loopback(windows, monkeypatch):
+    import numpy as np
+
+    from rafiq import audio
+
+    fake = FakeSoundcard()
+    monkeypatch.setattr(audio, "_soundcard", lambda: fake)
+    out = audio.system_audio(2, spawn=lambda *a, **k: pytest.fail("started parec"))
+    # WASAPI converts the rate itself (soundcard asks for AUTOCONVERTPCM), so 16 kHz comes straight back.
+    assert fake.asked == [("{0.0.0.00000000}.{speakers}", True)] and fake.recorded == [(2 * audio.RATE, audio.RATE)]
+    assert out.shape == (2 * audio.RATE,) and out.dtype == np.float32 and np.allclose(out, 0.25)
+
+
+def test_without_soundcard_the_computer_s_sound_names_the_windows_extra(windows, monkeypatch):
     from rafiq import audio
     from rafiq.tools import songs
 
-    with pytest.raises(FileNotFoundError, match="not on Windows yet"):
-        audio.system_audio(1, spawn=lambda *a, **k: pytest.fail("started a recorder"))
-    assert "not on Windows yet" in songs._no_system_sound()
+    monkeypatch.setitem(sys.modules, "soundcard", None)
+    with pytest.raises(FileNotFoundError, match=r"\.\[windows\]"):
+        audio.system_audio(1, spawn=lambda *a, **k: pytest.fail("started parec"))
+    assert ".[windows]" in songs._no_system_sound() and "not on Windows yet" not in songs._no_system_sound()
+
+
+def test_a_windows_without_an_output_device_says_so_rather_than_to_install_soundcard(windows, monkeypatch):
+    from rafiq import audio
+
+    class NoSpeaker(FakeSoundcard):
+        def default_speaker(self):
+            raise RuntimeError("Error 0x80070490")
+
+    monkeypatch.setattr(audio, "_soundcard", lambda: NoSpeaker())
+    with pytest.raises(RuntimeError, match="no output device"):
+        audio.system_audio(1)
 
 
 # ---------------------------------------------------------------------- rafiq doctor
@@ -828,7 +878,14 @@ def test_doctor_on_windows_lists_what_is_not_there_yet(windows, monkeypatch):
     monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
     check = doctor_checks(win_probe())["Not on Windows yet"]
     assert check.optional and "phone page" in check.detail
-    assert not any(word in check.detail for word in ("dictation", "hand gestures", "media keys"))
+    assert not any(word in check.detail for word in ("dictation", "hand gestures", "media keys", "own sound"))
+
+
+def test_doctor_on_windows_hears_the_computer_through_soundcard(windows, monkeypatch):
+    monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
+    assert doctor_checks(win_probe(modules=("soundcard",)))["The computer's own sound"].ok
+    check = doctor_checks(win_probe())["The computer's own sound"]
+    assert not check.ok and check.optional and ".[windows]" in check.fix
 
 
 def test_doctor_on_windows_never_opens_the_phone_socket(windows, monkeypatch):
@@ -856,6 +913,8 @@ def test_doctor_on_windows_asks_only_for_ffmpeg_for_songs(windows, monkeypatch):
 
     check = by_label(doctor.integrations(cfg, win_probe()))["Song recognition"]
     assert "parec" not in check.detail and "winget install" in check.fix
+    check = by_label(doctor.integrations(cfg, win_probe(programs=("ffmpeg",))))["Song recognition"]
+    assert check.ok and "not on Windows yet" not in check.detail
 
 
 # ---------------------------------------------------------------------- the installer
