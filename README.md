@@ -256,6 +256,9 @@ sets the mode Rafiq starts in; a switch lasts until Rafiq stops.
 tried after it. The Kokoro files are on the
 [kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases) (model-files-v1.0).
 
+To give Rafiq a voice of its own offline, Egyptian included, record a speaker with `rafiq record-voice` and
+fine-tune a Piper voice on it: see [docs/voice.md](docs/voice.md).
+
 `rafiq setup` downloads the Piper voices; by hand:
 
 ```bash

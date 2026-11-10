@@ -791,6 +791,14 @@ def cmd_setup(args) -> int:
     return setup.run(enroll=not args.no_enroll)
 
 
+def cmd_record_voice(args) -> int:
+    """Record one speaker reading sentences, for training Rafiq's own offline Piper voice (#250)."""
+    from . import voicedata
+
+    return voicedata.run(args.tag, Path(args.out) if args.out else None,
+                         Path(args.sentences) if args.sentences else None)
+
+
 def cmd_stt_score(args) -> int:
     """Score speech-to-text on your own recordings (name.wav with name.txt), for each Whisper model, with
     and without the handling of English words inside Arabic."""
@@ -1248,6 +1256,12 @@ def main(argv=None) -> int:
     score.add_argument("--models", nargs="+", default=["small", "medium"], help="default: small medium")
     score.add_argument("-v", "--verbose", action="store_true", help="show what was heard in each recording")
     score.set_defaults(fn=cmd_stt_score)
+    rec = sub.add_parser("record-voice", help="record sentences to train Rafiq's own offline voice (Piper)")
+    rec.add_argument("tag", choices=lang.TAGS,
+                     help="the language: en, fr, es, de, ar or ar-EG")
+    rec.add_argument("--out", metavar="DIR", help="where the recordings go (default: data/voice/<tag>)")
+    rec.add_argument("--sentences", metavar="FILE", help="one sentence per line, instead of the shipped list")
+    rec.set_defaults(fn=cmd_record_voice)
     sub.add_parser("show", help="show the last answer on screen again").set_defaults(fn=cmd_show)
     sat = sub.add_parser("satellite", help="a microphone and speaker in another room")
     sat.add_argument("action", choices=("run", "simulate", "token", "scores", "unit"),
