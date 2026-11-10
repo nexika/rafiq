@@ -404,18 +404,152 @@ def win_keys(name: str, send: Callable | None = None) -> None:
     _sender(send)(combo_events(WIN_KEYS[name]))
 
 
-def win_media(action: str, send: Callable | None = None) -> str:
-    """A media key, which whatever plays (Spotify, a browser video) hears; there is no asking what plays."""
-    if action == "status":
-        return "error: saying what is playing is not on Windows yet"
-    if action not in WIN_MEDIA:
-        return f"error: action is one of {', '.join([*WIN_MEDIA, 'status'])}"
+def _media_key(action: str, send: Callable | None) -> str:
     key = WIN_MEDIA[action]
     try:
         _sender(send)(combo_events([key]))
     except OSError:
         return "error: Windows didn't take the media key"
     return WIN_MEDIA_DONE[key]
+
+
+def win_media(action: str, send: Callable | None = None) -> str:
+    """Through Windows' media sessions (the media flyout's): exact play and pause, and what plays. Without the
+    windows extra's winrt, or when the sessions don't answer, the media keys, which only toggle."""
+    if action not in WIN_MEDIA and action != "status":
+        return f"error: action is one of {', '.join([*WIN_MEDIA, 'status'])}"
+    try:
+        playing = media_session()
+    except ImportError:
+        if action == "status":
+            return 'error: saying what is playing needs the windows extra: pip install -e ".[windows]"'
+        return _media_key(action, send)
+    except OSError as exc:
+        return f"error: {exc}" if action == "status" else _media_key(action, send)
+    if playing is None:
+        return "error: nothing is playing music or video"
+    if action == "status":
+        what = " - ".join(part for part in (playing.artist, playing.title) if part)
+        return f"{playing.app} is {playing.status}" + (f": {what}" if what else "")
+    # An open palm while paused would start the music again with a toggle: a play or pause that already is, isn't sent.
+    if (action, playing.status) in (("play", "playing"), ("pause", "paused")):
+        return f"{playing.app} is already {playing.status}"
+    try:
+        taken = media_command(action)
+    except (ImportError, OSError):
+        return _media_key(action, send)
+    if not taken:
+        return f"error: {playing.app} didn't take {action}"
+    return f"{SESSION_DONE[action]} {playing.app}"
+
+
+# ---------------------------------------------------------------------- media sessions (Windows)
+
+@dataclass(frozen=True)
+class Playing:
+    app: str
+    status: str                  # playing, paused, stopped, ...
+    title: str = ""
+    artist: str = ""
+
+
+# GlobalSystemMediaTransportControlsSessionPlaybackStatus
+SESSION_STATUS = {0: "closed", 1: "opened", 2: "changing", 3: "stopped", 4: "playing", 5: "paused"}
+SESSION_COMMANDS = {"play": "try_play_async", "pause": "try_pause_async", "toggle": "try_toggle_play_pause_async",
+                    "next": "try_skip_next_async", "previous": "try_skip_previous_async", "stop": "try_stop_async"}
+SESSION_DONE = {"play": "playing", "pause": "paused", "toggle": "toggled", "next": "skipped to the next on",
+                "previous": "went back on", "stop": "stopped"}
+# Apps by the name Windows gives their session (an app ID, an .exe, or Firefox's hash of its install folder).
+SESSION_APPS = {"spotify": "Spotify", "msedge": "Edge", "chrome": "Chrome", "firefox": "Firefox",
+                "308046b0af4a39cb": "Firefox", "zunemusic": "Media Player", "vlc": "VLC", "brave": "Brave",
+                "opera": "Opera", "deezer": "Deezer", "applemusic": "Apple Music"}
+SESSION_SECONDS = 5              # Windows answers at once; a hung session never holds Rafiq's loop longer
+TITLE_CHARS = 120
+
+
+def app_name(aumid: str) -> str:
+    """ "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic" is Media Player, "Spotify.exe" is Spotify."""
+    name = aumid.rsplit("!", 1)[-1].replace("/", "\\").rsplit("\\", 1)[-1]
+    if name.lower().endswith(".exe"):
+        name = name[:-4]
+    name = name.rsplit(".", 1)[-1]
+    return SESSION_APPS.get(name.lower(), name)
+
+
+def _clean(text) -> str:
+    """A title or artist as the model reads it: an app or a page sets it, so no control or format characters (a
+    right-to-left override would reorder it), on one line, cut short."""
+    import unicodedata
+
+    text = "".join(" " if unicodedata.category(c) in ("Cc", "Cf") else c for c in str(text or ""))
+    return " ".join(text.split())[:TITLE_CHARS]
+
+
+def _pick(manager):
+    """The session that plays, else the one paused, else Windows' current one: as playerctl's active player."""
+    sessions = list(manager.get_sessions() or [])
+    states = [(s, SESSION_STATUS.get(int(s.get_playback_info().playback_status), "")) for s in sessions]
+    for wanted in ("playing", "paused"):
+        for session, status in states:
+            if status == wanted:
+                return session, status
+    current = manager.get_current_session()
+    if current is None:
+        return None
+    return current, SESSION_STATUS.get(int(current.get_playback_info().playback_status), "stopped")
+
+
+def _sessions(work):
+    """Runs `await work(manager)` on its own thread and event loop, so Rafiq's thread never needs one, and gives up
+    after SESSION_SECONDS. ImportError without the windows extra; OSError when Windows doesn't answer."""
+    import asyncio
+    import threading
+
+    from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as Manager
+
+    async def main():
+        return await work(await Manager.request_async())
+
+    done: list = []
+
+    def run() -> None:
+        try:
+            done.append((True, asyncio.run(main())))
+        except Exception as exc:                 # WinRT raises its own errors: said as Windows' answer
+            done.append((False, exc))
+
+    thread = threading.Thread(target=run, name="rafiq-media", daemon=True)
+    thread.start()
+    thread.join(SESSION_SECONDS)
+    if not done:
+        raise OSError("Windows' media sessions didn't answer")
+    ok, value = done[0]
+    if not ok:
+        raise OSError(f"Windows' media sessions failed ({type(value).__name__})")
+    return value
+
+
+def media_session() -> Playing | None:
+    async def work(manager):
+        found = _pick(manager)
+        if found is None:
+            return None
+        session, status = found
+        props = await session.try_get_media_properties_async()
+        return Playing(app_name(session.source_app_user_model_id or ""), status,
+                       _clean(getattr(props, "title", "")), _clean(getattr(props, "artist", "")))
+
+    return _sessions(work)
+
+
+def media_command(action: str) -> bool:
+    async def work(manager):
+        found = _pick(manager)
+        if found is None:
+            return False
+        return bool(await getattr(found[0], SESSION_COMMANDS[action])())
+
+    return _sessions(work)
 
 
 # ---------------------------------------------------------------------- the screen and the mouse (Windows)

@@ -33,7 +33,8 @@ nvidia = ["nvidia-ml-py>=12"]
 kokoro = ["kokoro-onnx>=0.4"]
 pdf = ["pypdf>=4"]
 windows = ["pycaw>=20230407",          # the volume through Core Audio (#193); comtypes comes with it
-           "soundcard>=0.4.3"]         # what the computer plays, through WASAPI's loopback (#242)
+           "soundcard>=0.4.3",         # what the computer plays, through WASAPI's loopback (#242)
+           "winrt-Windows.Media.Control>=3"]   # what plays, and exact play and pause, by media session (#242)
 dev = ["pytest>=8", "pytest-xdist>=3.5", "ruff>=0.5"]
 
 [project.scripts]
