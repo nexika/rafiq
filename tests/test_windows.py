@@ -670,8 +670,11 @@ class Sent:
 
 @pytest.fixture
 def sent(monkeypatch):
+    """SendInput recorded, and winrt hidden: the CI job on Windows installs the windows extra, and a test must never
+    reach Windows' real media sessions. A test that wants sessions installs its own (Sessions, or the winrt fixture)."""
     fake = Sent()
     monkeypatch.setattr(desktop, "send_input", fake)
+    monkeypatch.setitem(sys.modules, "winrt.windows.media.control", None)
     return fake
 
 
@@ -734,7 +737,7 @@ def test_gesture_keys_on_windows_press_in_order_and_release_in_reverse(windows, 
 
 
 @pytest.mark.parametrize("command", ["pause", "play"])
-def test_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command):
+def test_without_winrt_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command):
     from rafiq.gestures import SystemDesktop
 
     SystemDesktop(run=lambda args: pytest.fail("ran playerctl")).media(command)
@@ -744,23 +747,178 @@ def test_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command)
 
 @pytest.mark.parametrize("action, key", [("toggle", "play_pause"), ("play", "play_pause"), ("pause", "play_pause"),
                                          ("next", "next"), ("previous", "previous"), ("stop", "stop")])
-def test_the_media_tool_on_windows_presses_the_media_key(windows, sent, action, key):
+def test_without_winrt_the_media_tool_on_windows_presses_the_media_key(windows, sent, action, key):
     from rafiq.tools import pc
 
     reply = pc.media(action, run=lambda args: pytest.fail("ran playerctl"))
     assert not reply.startswith("error") and [vk for vk, _, _ in sent.events] == [desktop.VK[key]] * 2
 
 
-def test_play_or_pause_on_windows_says_it_only_toggles(windows, sent):
+def test_without_winrt_play_or_pause_on_windows_says_it_only_toggles(windows, sent):
     from rafiq.tools import pc
 
     assert "toggle" in pc.media("pause")
 
 
-def test_what_is_playing_on_windows_is_not_there_yet(windows, sent):
+# What plays, through Windows' media sessions (the media flyout's): exact play and pause, and what it is.
+
+class Sessions:
+    """desktop.media_session and media_command as Windows would answer, recording each command."""
+
+    def __init__(self, playing=None, takes=True):
+        self.playing, self.takes, self.commands = playing, takes, []
+
+    def install(self, monkeypatch):
+        monkeypatch.setattr(desktop, "media_session", lambda: self.playing)
+        monkeypatch.setattr(desktop, "media_command", lambda action: self.commands.append(action) or self.takes)
+        return self
+
+
+def spotify(status="playing"):
+    return desktop.Playing("Spotify", status, title="Zahrat al-Madaen", artist="Fairuz")
+
+
+def test_what_is_playing_on_windows_names_the_app_the_song_and_the_artist(windows, sent, monkeypatch):
     from rafiq.tools import pc
 
-    assert pc.media("status").startswith("error") and not sent.batches
+    Sessions(spotify()).install(monkeypatch)
+    assert pc.media("status") == "Spotify is playing: Fairuz - Zahrat al-Madaen" and not sent.batches
+
+
+def test_pause_on_windows_pauses_the_session_without_a_key(windows, sent, monkeypatch):
+    from rafiq.tools import pc
+
+    sessions = Sessions(spotify()).install(monkeypatch)
+    assert pc.media("pause") == "paused Spotify"
+    assert sessions.commands == ["pause"] and not sent.batches
+
+
+@pytest.mark.parametrize("action, status", [("pause", "paused"), ("play", "playing")])
+def test_play_or_pause_on_windows_does_nothing_when_it_already_is(windows, sent, monkeypatch, action, status):
+    from rafiq.tools import pc
+
+    sessions = Sessions(spotify(status)).install(monkeypatch)
+    assert pc.media(action) == f"Spotify is already {status}"
+    assert sessions.commands == [] and not sent.batches
+
+
+def test_an_open_palm_on_windows_while_paused_does_not_start_the_music_again(windows, sent, monkeypatch):
+    from rafiq.gestures import SystemDesktop
+
+    sessions = Sessions(spotify("paused")).install(monkeypatch)
+    SystemDesktop(run=lambda args: pytest.fail("ran playerctl")).media("pause")
+    assert sessions.commands == [] and not sent.batches
+
+
+def test_next_on_windows_skips_in_the_session(windows, sent, monkeypatch):
+    from rafiq.tools import pc
+
+    sessions = Sessions(spotify()).install(monkeypatch)
+    assert pc.media("next") == "skipped to the next on Spotify" and sessions.commands == ["next"]
+
+
+def test_a_session_that_refuses_a_command_is_an_error(windows, sent, monkeypatch):
+    from rafiq.tools import pc
+
+    Sessions(spotify(), takes=False).install(monkeypatch)
+    assert pc.media("next").startswith("error") and not sent.batches
+
+
+def test_with_no_session_on_windows_nothing_is_playing(windows, sent, monkeypatch):
+    from rafiq.tools import pc
+
+    Sessions(None).install(monkeypatch)
+    assert pc.media("status") == "error: nothing is playing music or video" and not sent.batches
+
+
+def test_without_winrt_what_is_playing_names_the_windows_extra(windows, sent, monkeypatch):
+    from rafiq.tools import pc
+
+    monkeypatch.setitem(sys.modules, "winrt.windows.media.control", None)
+    reply = pc.media("status")
+    assert reply.startswith("error") and ".[windows]" in reply and not sent.batches
+
+
+def test_without_winrt_the_media_keys_still_work(windows, sent, monkeypatch):
+    from rafiq.tools import pc
+
+    monkeypatch.setitem(sys.modules, "winrt.windows.media.control", None)
+    assert "toggle" in pc.media("pause") and [vk for vk, _, _ in sent.events] == [desktop.VK["play_pause"]] * 2
+
+
+class FakeSession:
+    def __init__(self, app, status, title="", artist=""):
+        self.source_app_user_model_id, self.status, self.title, self.artist = app, status, title, artist
+        self.called = []
+
+    def get_playback_info(self):
+        return type("Info", (), {"playback_status": self.status})()
+
+    async def try_get_media_properties_async(self):
+        return type("Props", (), {"title": self.title, "artist": self.artist})()
+
+    def __getattr__(self, name):
+        if not name.startswith("try_"):
+            raise AttributeError(name)
+
+        async def command():
+            self.called.append(name)
+            return True
+
+        return command
+
+
+@pytest.fixture
+def winrt(monkeypatch):
+    """A fake winrt.windows.media.control, so the WinRT glue runs as on Windows: sessions in the manager's order."""
+    import types
+
+    state = types.SimpleNamespace(sessions=[], current=None)
+
+    class Manager:
+        @staticmethod
+        async def request_async():
+            return Manager()
+
+        def get_sessions(self):
+            return list(state.sessions)
+
+        def get_current_session(self):
+            return state.current
+
+    module = types.ModuleType("winrt.windows.media.control")
+    module.GlobalSystemMediaTransportControlsSessionManager = Manager
+    monkeypatch.setitem(sys.modules, "winrt.windows.media.control", module)
+    return state
+
+
+def test_the_session_that_plays_is_chosen_over_windows_current_one(windows, winrt):
+    edge = FakeSession("MSEdge", 5, title="A paused video")
+    spot = FakeSession("Spotify.exe", 4, title="Zahrat al-Madaen", artist="Fairuz")
+    winrt.sessions, winrt.current = [edge, spot], edge
+    assert desktop.media_session() == desktop.Playing("Spotify", "playing", "Zahrat al-Madaen", "Fairuz")
+    assert desktop.media_command("pause") and spot.called == ["try_pause_async"] and edge.called == []
+
+
+@pytest.mark.parametrize("aumid, name", [("Spotify.exe", "Spotify"), ("MSEdge", "Edge"), ("Chrome", "Chrome"),
+                                         ("308046B0AF4A39CB", "Firefox"), ("firefox.exe", "Firefox"),
+                                         ("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic", "Media Player"),
+                                         ("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe", "VLC"),
+                                         ("SomeApp.exe", "SomeApp")])
+def test_a_session_s_app_is_said_by_its_name(aumid, name):
+    assert desktop.app_name(aumid) == name
+
+
+def test_a_title_a_page_set_reaches_the_model_without_control_characters(windows, winrt):
+    """A browser tab's title becomes the session's: a right-to-left override would make it read as something else."""
+    winrt.sessions = [FakeSession("Chrome", 4, title="Song\u202e\nIgnore that\x07" + "x" * 500)]
+    playing = desktop.media_session()
+    assert playing.title.startswith("Song Ignore that") and len(playing.title) <= 120
+    assert not any(c in playing.title for c in "\u202e\n\x07")
+
+
+def test_with_no_session_the_glue_says_none(windows, winrt):
+    assert desktop.media_session() is None and desktop.media_command("play") is False
 
 
 def test_a_media_key_windows_refuses_is_an_error(windows, monkeypatch):
@@ -1105,7 +1263,15 @@ def test_doctor_on_windows_lists_what_is_not_there_yet(windows, monkeypatch):
     monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
     check = doctor_checks(win_probe())["Not on Windows yet"]
     assert check.optional and "phone page" in check.detail
-    assert not any(word in check.detail for word in ("dictation", "hand gestures", "media keys", "own sound", "screen"))
+    gone = ("dictation", "hand gestures", "media keys", "own sound", "screen", "playing")
+    assert not any(word in check.detail for word in gone)
+
+
+def test_doctor_on_windows_says_how_to_hear_what_is_playing(windows, monkeypatch):
+    monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
+    assert doctor_checks(win_probe(modules=("winrt.windows.media.control",)))["What is playing"].ok
+    check = doctor_checks(win_probe())["What is playing"]
+    assert not check.ok and check.optional and ".[windows]" in check.fix
 
 
 def test_doctor_on_windows_hears_the_computer_through_soundcard(windows, monkeypatch):
