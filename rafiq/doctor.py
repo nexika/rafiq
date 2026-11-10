@@ -407,7 +407,7 @@ def _desktop(probe: Probe) -> list[Check]:
     return checks
 
 
-NOT_ON_WINDOWS = "switching outputs, saying what is playing, presence and the phone page"
+NOT_ON_WINDOWS = "switching outputs, saying what is playing and the phone page"
 
 
 def _windows_desktop(probe: Probe) -> list[Check]:

@@ -2,7 +2,8 @@
 it comes back, the "welcome home" scene.
 
 The phone is looked for by its fixed IP: a ping, and when that gets no answer, the kernel's neighbour
-(ARP) table, because a sleeping phone often ignores pings but still answers ARP. A phone that drops
+(ARP) table, because a sleeping phone often ignores pings but still answers ARP. On Windows, Get-NetNeighbor
+reads that table with each entry's state (#242). A phone that drops
 off for a few minutes while asleep is still home; only a long absence counts.
 
 When Rafiq starts, the first checks only learn where the phone is: no scene plays for a change that
@@ -11,6 +12,7 @@ happened while Rafiq was off. Turning it off by voice is saved, so it stays off 
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import subprocess
@@ -25,20 +27,44 @@ _PRESENT_STATES = {"REACHABLE"}
 
 
 def _run(args: list[str], timeout: float = 5) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+    # errors="replace": Windows' ping writes in the console's OEM code page, not the locale's.
+    return subprocess.run(args, capture_output=True, text=True, errors="replace", timeout=timeout, check=False)
 
 
 def ping_command(ip: str) -> list[str]:
-    """One ping waiting a second: -W is in seconds on Linux, in milliseconds on macOS."""
+    """One ping waiting a second: -W is in seconds on Linux, in milliseconds on macOS; Windows has -n and -w (ms)."""
     from . import desktop
 
+    if desktop.system() == "windows":
+        return ["ping", "-n", "1", "-w", "1000", ip]
     return ["ping", "-c", "1", "-W", "1000" if desktop.system() == "mac" else "1", ip]
 
 
-def neighbour_command(ip: str) -> list[str]:
+def ping_answered(done: subprocess.CompletedProcess) -> bool:
+    """Windows' ping exits with 0 when this computer itself replies that the phone can't be reached: only a reply
+    with a TTL is the phone's. "TTL=" is the same in every language Windows speaks."""
     from . import desktop
 
+    if desktop.system() == "windows":
+        return done.returncode == 0 and "ttl=" in (done.stdout or "").lower()
+    return done.returncode == 0
+
+
+def neighbour_command(ip: str) -> list[str]:
+    """On Windows, Get-NetNeighbor with each entry's state by its English name, whatever Windows' language. The IP is
+    checked as an address first (ValueError otherwise), since it goes into a PowerShell command."""
+    from . import desktop
+
+    if desktop.system() == "windows":
+        address = ipaddress.ip_address(ip.strip())
+        return ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                f"Get-NetNeighbor -IPAddress '{address}' -ErrorAction SilentlyContinue | "
+                "ForEach-Object { $_.State.ToString() + ' ' + $_.LinkLayerAddress }"]
     return ["arp", "-n", ip] if desktop.system() == "mac" else ["ip", "neigh", "show", ip]
+
+
+NEIGHBOUR_SECONDS = 3
+WINDOWS_NEIGHBOUR_SECONDS = 10    # PowerShell itself can take a few seconds to start
 
 
 _ARP_ADDRESS = re.compile(r"\bat\s+([0-9a-f]{1,2}(?::[0-9a-f]{1,2}){5})\b", re.IGNORECASE)
@@ -54,6 +80,14 @@ def neighbour_present(table: str, mac: str = "") -> bool:
     if given)."""
     from . import desktop
 
+    if desktop.system() == "windows":             # "Reachable AA-BB-CC-DD-EE-FF", one line per entry
+        for line in table.splitlines():
+            words = line.split()
+            if words and words[0] == "Reachable":
+                found = words[1].replace("-", ":") if len(words) > 1 else ""
+                if not mac or _same_mac(found, mac):
+                    return True
+        return False
     if desktop.system() == "mac":
         for line in table.splitlines():
             found = _ARP_ADDRESS.search(line)
@@ -72,12 +106,15 @@ def neighbour_present(table: str, mac: str = "") -> bool:
 
 def phone_seen(ip: str, mac: str = "", run=_run) -> bool:
     """Is the phone on the network now? A missing command or a timeout counts as not seen."""
+    from . import desktop
+
+    wait = WINDOWS_NEIGHBOUR_SECONDS if desktop.system() == "windows" else NEIGHBOUR_SECONDS
     try:
-        if run(ping_command(ip), timeout=3).returncode == 0:
+        if ping_answered(run(ping_command(ip), timeout=3)):
             return True
         # The ping made the kernel ask for the phone by ARP; a sleeping phone answers that.
-        return neighbour_present(run(neighbour_command(ip), timeout=3).stdout, mac)
-    except (OSError, subprocess.SubprocessError):
+        return neighbour_present(run(neighbour_command(ip), timeout=wait).stdout or "", mac)
+    except (OSError, subprocess.SubprocessError, ValueError):     # ValueError: a phone_ip that isn't an address
         return False
 
 
