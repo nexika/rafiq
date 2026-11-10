@@ -1,0 +1,214 @@
+# Sentences for Rafiq's own English voice (#250). One per line; lines starting with # are skipped.
+# Numbers, times and abbreviations are written as they are said, so the voice learns to say them.
+# Rafiq's own phrases (lang.PHRASES) are added after these by `rafiq record-voice en`.
+
+Good morning. It's seven thirty, and the sun is already out.
+It's twenty two degrees in Cairo right now, with a light breeze from the north.
+Tomorrow looks cloudy in the morning, with rain likely after four in the afternoon.
+Take an umbrella today. There's an eighty percent chance of showers.
+The high today is thirty one, and tonight it drops to nineteen.
+It's a quarter past nine on Tuesday, the eleventh of November.
+Your timer for ten minutes is done.
+I've set a timer for twenty five minutes. I'll tell you when it ends.
+I'll remind you to call your mother at six this evening.
+You have three meetings today. The first one starts at ten.
+Your next event is the design review, in forty minutes, on the second floor.
+There's nothing on your calendar for Friday.
+I've added dinner with Sara to Saturday at eight.
+You have two new emails. One is from your bank, and one is from Omar.
+Omar writes: the files are ready, and he'll send the rest tomorrow.
+Should I read the whole message, or just the summary?
+Here's the short version: the meeting moved to Thursday morning.
+I couldn't find anything about that. Could you say it another way?
+Sorry, I didn't catch that. Could you say it again, a little slower?
+One moment, I'm looking that up.
+Let me check the latest news for you.
+Here are today's top stories.
+The first story is about the new metro line, which opens next month.
+That's all for the headlines. Do you want more on any of them?
+Playing your morning playlist on Spotify.
+Pausing the music.
+Here's the next song.
+The volume is at forty percent.
+I've turned the volume down a little.
+I've muted the speakers. Say my name when you need me.
+That song is called Blue in Green, by Miles Davis.
+I'm listening to the song. Give me a few seconds.
+I couldn't recognise that song. Maybe play it a bit louder?
+The lights in the living room are off now.
+I've set the bedroom lights to warm and dim.
+The front door is locked.
+Your package from the bookshop is out for delivery and should arrive before noon.
+The dollar is at forty eight pounds and sixty piastres today.
+Gold went up by one and a half percent this week.
+Your battery is at fifteen percent. You may want to plug in the charger.
+The computer is running hot. Something is using most of the processor.
+I've opened the browser for you.
+I've copied that to the clipboard.
+Here's what I wrote down: buy milk, eggs, and fresh bread.
+Your shopping list has six things on it.
+I've added tomatoes to the shopping list.
+I've saved that note under work ideas.
+Do you want me to send it now? Say yes or no.
+Okay, I won't send it.
+Done. The message is on its way.
+I've cancelled that. Nothing was changed.
+Are you sure you want to shut down the computer?
+I can't do that without asking you first.
+That page asked me to do something, but I only follow your instructions.
+I won't open pages on this computer's own network.
+I'm not sure about that, so I'd rather not guess.
+I think so, but you should check the official website to be certain.
+That's a great question. Let me explain it step by step.
+First, water boils at a lower temperature on top of a mountain.
+That's because the air pressure up there is lower.
+In short, less pressure means the water needs less heat to boil.
+Photosynthesis is how plants turn sunlight, water and air into sugar.
+The capital of Australia is Canberra, not Sydney.
+The Nile is about six thousand six hundred kilometres long.
+Light from the sun takes a little over eight minutes to reach us.
+A year on Mars lasts six hundred and eighty seven days.
+Three times seven is twenty one.
+Fifteen percent of two hundred is thirty.
+The square root of one hundred and forty four is twelve.
+Half past three in the afternoon is fifteen thirty.
+It's nine hundred and fifty kilometres from Cairo to Aswan.
+Your flight leaves at six forty in the morning from terminal three.
+The trip takes about two hours and ten minutes by car.
+Traffic is heavy on the ring road. Leaving now, you'd arrive at nine fifteen.
+Turn left in two hundred metres, then keep right.
+The nearest pharmacy is open until midnight.
+The restaurant is open today from noon to eleven at night.
+I've booked a table for four at eight o'clock.
+Would you like me to read the reviews?
+Most people say the food is good but the service is slow.
+Hello! How can I help you today?
+Good evening. How was your day?
+You're welcome. Anything else?
+I'm here. What do you need?
+Of course. Give me a second.
+No problem at all.
+Sure thing.
+I'm afraid I can't reach the internet right now.
+I'm working offline, so I can only do things on this computer.
+The internet is back. I can look things up again.
+Claude isn't answering, so I'm using the local model for now.
+That took longer than usual. Sorry for the wait.
+I'm still working on it. It's a long page.
+Here's a summary of the article in three points.
+The author argues that cities should plan for heat, not just for rain.
+The video explains how vaccines train the immune system.
+In this part, the teacher solves the equation by moving everything to one side.
+Would you like me to explain that more simply?
+Let's try a practice question. What is the past tense of the verb to go?
+Exactly right. Well done!
+Not quite. The answer is went, not goed.
+Let's review what we covered yesterday before we start.
+You've studied for forty minutes. Maybe take a short break?
+Your focus session is over. Stretch, drink some water, and come back in five.
+It's time for your medicine.
+Don't forget, your appointment with the dentist is tomorrow at eleven.
+Happy birthday! I hope it's a wonderful year.
+It's raining heavily in Alexandria, so the coastal road may be closed.
+There's a sandstorm warning for the western desert this afternoon.
+Air quality is poor today. Keep the windows closed if you can.
+Sunrise is at six twelve, and sunset at five oh three.
+The moon is full tonight.
+The match starts at nine. Al Ahly is playing Zamalek.
+The final score was two to one.
+Your phone is on the desk, connected to the same network.
+I can't find the printer. Is it turned on?
+The morning paper is printed and waiting for you.
+I've scheduled the paper for six thirty every weekday.
+The backup finished without errors.
+There's an update for Rafiq. Do you want to install it now?
+Rafiq is up to date.
+Your microphone sounds clear.
+I hear an echo. Headphones might help.
+I only answer to your voice for things that need a yes.
+I didn't recognise your voice, so I can't confirm that.
+Please say yes or no.
+I'll take that as a no.
+Let's start again from the beginning.
+Is there anything else I can help with?
+Goodnight. Sleep well.
+See you tomorrow.
+Wait, let me think about that.
+Hmm, that's interesting.
+Really? I didn't know that.
+Wow, that's a lot of messages!
+Oh no, it looks like the file is empty.
+Well, it depends on what you mean.
+Actually, there's a faster way to do that.
+By the way, your coffee has been ready for ten minutes.
+Honestly, I'd wait until the price drops.
+To be fair, both options have their good points.
+On the one hand it's cheaper; on the other, it's much slower.
+Which one would you prefer, the red or the blue?
+Do you mean this week, or next week?
+Should I play it from the beginning?
+Would you like the recipe in grams or in cups?
+For the sauce, you'll need two cloves of garlic, olive oil and a pinch of salt.
+Bake it for thirty five minutes, until the top is golden.
+Stir gently, and let it rest for five minutes before serving.
+The word freedom has seven letters.
+Quickly, quietly, and quite carefully, the fox jumped over the fence.
+She sells seashells by the seashore, but nobody buys them.
+The thirty three thieves thought that they thrilled the throne throughout Thursday.
+Whether the weather is warm or cold, we'll go out anyway.
+Peter's pepper pot was pushed past the pantry door.
+Your judgement was right; the jury agreed.
+Measure the leisure you treasure, then pleasure follows.
+Choose the cheese, chop the chives, and check the chicken.
+Zero, one, two, three, four, five, six, seven, eight, nine, ten.
+Eleven, twelve, thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen, twenty.
+Thirty, forty, fifty, sixty, seventy, eighty, ninety, one hundred.
+One thousand, ten thousand, one million.
+Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.
+January, February, March, April, May, June.
+July, August, September, October, November, December.
+The first, the second, the third, the fourth, and the fifth.
+Spring, summer, autumn and winter.
+North, south, east and west.
+Red, orange, yellow, green, blue and violet.
+The meeting is on the twenty first of March, at two in the afternoon.
+It costs one hundred and twenty nine pounds and ninety nine piastres.
+Call me at zero one zero, five five five, one two three four.
+The code is seven, four, nine, two.
+The year two thousand and twenty six was a busy one.
+In nineteen sixty nine, people walked on the moon for the first time.
+Version two point one is out now.
+The file is about three and a half megabytes.
+Your password should be at least twelve characters long.
+Wi-Fi is connected, but the signal is weak.
+Bluetooth headphones are connected.
+The screen brightness is at seventy percent.
+I've taken a screenshot and saved it to your pictures folder.
+Clicking the blue button on the top right.
+I'm about to type your email address. Is that okay?
+I've stopped. Nothing else will be clicked.
+Here's what I see on the screen: a form with three empty fields.
+The error says the disk is full.
+Try closing some programs and then open it again.
+Restarting usually fixes it. Should I restart now?
+I've found three files with that name. Which one did you mean?
+The newest one is from yesterday evening.
+Let me read the first paragraph.
+That's the end of the document.
+Chapter one. The house by the river.
+It was late in the evening when the rain finally stopped.
+The old man opened the window and listened to the city.
+Somewhere far away, a dog was barking at the moon.
+Nobody knew where the letter had come from.
+She smiled, folded the map, and walked towards the station.
+The train was late, as always, but nobody seemed to mind.
+They talked for hours about everything and nothing.
+In the morning, the street was quiet and clean.
+Every journey begins with a single step.
+Learning a language takes patience, practice and a little courage.
+Good habits are easier to keep than to start.
+If you don't ask, the answer is always no.
+Thank you for your patience.
+I hope that helps.
+That's everything I found.
+I'll be right here if you need me.

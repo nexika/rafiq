@@ -1,0 +1,240 @@
+# Sätze für Rafiqs deutsche Stimme (#250). Ein Satz pro Zeile; Zeilen, die mit # beginnen, werden übersprungen.
+# Zahlen, Uhrzeiten und Abkürzungen stehen so da, wie man sie spricht, damit die Stimme sie lernt.
+# Rafiqs eigene Sätze (lang.PHRASES) hängt `rafiq record-voice de` an diese an.
+
+Guten Morgen. Es ist halb acht, und die Sonne ist schon aufgegangen.
+In Berlin sind es gerade zweiundzwanzig Grad, mit einem leichten Wind aus Norden.
+Morgen früh wird es bewölkt, am späten Nachmittag regnet es wahrscheinlich.
+Nimm heute einen Schirm mit, die Regenwahrscheinlichkeit liegt bei achtzig Prozent.
+Die Höchsttemperatur liegt heute bei einunddreißig Grad, nachts sind es neunzehn.
+Es ist Viertel nach neun, heute ist Dienstag, der elfte November.
+Dein Timer für zehn Minuten ist abgelaufen.
+Ich habe einen Timer für fünfundzwanzig Minuten gestellt und sage dir Bescheid.
+Ich erinnere dich um achtzehn Uhr daran, deine Mutter anzurufen.
+Du hast heute drei Besprechungen. Die erste beginnt um zehn.
+Dein nächster Termin ist in vierzig Minuten, im zweiten Stock.
+Am Freitag steht nichts in deinem Kalender.
+Ich habe das Abendessen mit Anna am Samstag um acht eingetragen.
+Du hast zwei neue E-Mails, eine von deiner Bank und eine von Jonas.
+Jonas schreibt, dass die Dateien fertig sind und er den Rest morgen schickt.
+Soll ich dir die ganze Nachricht vorlesen oder nur die Zusammenfassung?
+Kurz gesagt: Die Besprechung ist auf Donnerstagvormittag verschoben.
+Dazu habe ich nichts gefunden. Kannst du es anders formulieren?
+Entschuldigung, das habe ich nicht verstanden. Kannst du es etwas langsamer wiederholen?
+Einen Moment, ich schaue nach.
+Ich hole dir die neuesten Nachrichten.
+Hier sind die wichtigsten Meldungen des Tages.
+Die erste Meldung handelt von der neuen Straßenbahnlinie, die nächsten Monat eröffnet.
+Das waren die Schlagzeilen. Möchtest du zu einer mehr hören?
+Ich spiele deine Morgen-Playlist auf Spotify.
+Ich halte die Musik an.
+Hier ist das nächste Lied.
+Die Lautstärke steht auf vierzig Prozent.
+Ich habe etwas leiser gemacht.
+Ich habe den Ton ausgeschaltet. Ruf mich, wenn du mich brauchst.
+Das Lied heißt Über den Wolken, von Reinhard Mey.
+Ich höre mir das Lied an, gib mir ein paar Sekunden.
+Ich habe das Lied nicht erkannt. Kannst du es etwas lauter spielen?
+Das Licht im Wohnzimmer ist jetzt aus.
+Ich habe das Schlafzimmer auf warmes, gedimmtes Licht gestellt.
+Die Haustür ist abgeschlossen.
+Dein Paket von der Buchhandlung ist in der Zustellung und kommt vor Mittag.
+Der Euro steht heute bei einem Dollar und acht Cent.
+Gold ist diese Woche um eineinhalb Prozent gestiegen.
+Dein Akku steht bei fünfzehn Prozent. Schließ am besten das Ladegerät an.
+Der Computer wird sehr warm, ein Programm belegt fast den ganzen Prozessor.
+Ich habe den Browser geöffnet.
+Ich habe das in die Zwischenablage kopiert.
+Ich habe notiert: Milch, Eier und frisches Brot.
+Auf deiner Einkaufsliste stehen sechs Dinge.
+Ich habe Tomaten auf die Einkaufsliste gesetzt.
+Ich habe die Notiz unter Arbeitsideen gespeichert.
+Soll ich sie jetzt senden? Sag ja oder nein.
+In Ordnung, ich sende sie nicht.
+Erledigt, die Nachricht ist unterwegs.
+Ich habe es abgebrochen. Es wurde nichts geändert.
+Bist du sicher, dass ich den Computer herunterfahren soll?
+Das kann ich nicht tun, ohne dich vorher zu fragen.
+Diese Seite wollte etwas von mir, aber ich folge nur deinen Anweisungen.
+Seiten aus dem Netzwerk dieses Computers öffne ich nicht.
+Da bin ich mir nicht sicher, deshalb rate ich lieber nicht.
+Ich glaube schon, aber prüf es zur Sicherheit auf der offiziellen Webseite.
+Gute Frage. Gehen wir sie Schritt für Schritt durch.
+Erstens: Auf einem Berg kocht Wasser bei einer niedrigeren Temperatur.
+Das liegt daran, dass der Luftdruck dort oben geringer ist.
+Kurz gesagt: Weniger Druck, und das Wasser braucht weniger Wärme zum Kochen.
+Bei der Fotosynthese machen Pflanzen aus Licht, Wasser und Luft Zucker.
+Die Hauptstadt von Australien ist Canberra, nicht Sydney.
+Der Rhein ist ungefähr zwölfhundertdreißig Kilometer lang.
+Das Licht der Sonne braucht etwas mehr als acht Minuten bis zu uns.
+Ein Jahr auf dem Mars dauert sechshundertsiebenundachtzig Tage.
+Drei mal sieben ist einundzwanzig.
+Fünfzehn Prozent von zweihundert sind dreißig.
+Die Wurzel aus hundertvierundvierzig ist zwölf.
+Fünfzehn Uhr dreißig ist halb vier am Nachmittag.
+Von Hamburg nach München sind es ungefähr achthundert Kilometer.
+Dein Flug geht um sechs Uhr vierzig ab Terminal drei.
+Mit dem Auto dauert die Fahrt ungefähr zwei Stunden und zehn Minuten.
+Auf der Autobahn ist viel Verkehr. Wenn du jetzt losfährst, bist du um Viertel nach neun da.
+In zweihundert Metern links abbiegen, dann rechts halten.
+Die nächste Apotheke hat bis Mitternacht geöffnet.
+Das Restaurant hat heute von zwölf bis dreiundzwanzig Uhr geöffnet.
+Ich habe einen Tisch für vier Personen um acht reserviert.
+Soll ich dir die Bewertungen vorlesen?
+Die meisten sagen, das Essen ist gut, aber der Service langsam.
+Hallo! Wie kann ich dir heute helfen?
+Guten Abend. Wie war dein Tag?
+Gern geschehen. Sonst noch etwas?
+Ich bin da. Was brauchst du?
+Natürlich, einen Augenblick.
+Kein Problem.
+Mach ich gern.
+Ich komme gerade nicht ins Internet.
+Ich bin offline und kann nur Dinge auf diesem Computer erledigen.
+Das Internet ist wieder da, ich kann wieder suchen.
+Claude antwortet nicht, deshalb nehme ich vorerst das lokale Modell.
+Das hat länger gedauert als sonst, entschuldige die Wartezeit.
+Ich bin noch dran, die Seite ist lang.
+Hier ist die Zusammenfassung des Artikels in drei Punkten.
+Der Autor meint, Städte sollten sich auf Hitze vorbereiten, nicht nur auf Regen.
+Das Video erklärt, wie Impfungen das Immunsystem trainieren.
+In diesem Teil löst die Lehrerin die Gleichung, indem sie alles auf eine Seite bringt.
+Soll ich es einfacher erklären?
+Probieren wir eine Übungsfrage. Wie lautet das Perfekt von gehen?
+Genau richtig. Gut gemacht!
+Nicht ganz. Es heißt ich bin gegangen, nicht ich habe gegangen.
+Wiederholen wir kurz, was wir gestern gelernt haben.
+Du lernst seit vierzig Minuten. Wie wäre es mit einer kurzen Pause?
+Die Konzentrationsphase ist vorbei. Streck dich, trink etwas Wasser und komm in fünf Minuten wieder.
+Es ist Zeit für deine Medizin.
+Vergiss nicht deinen Zahnarzttermin morgen um elf.
+Alles Gute zum Geburtstag! Ich wünsche dir ein wunderbares Jahr.
+In Hamburg regnet es stark, die Elbchaussee könnte gesperrt werden.
+Für die Nordseeküste gibt es heute Nachmittag eine Sturmwarnung.
+Die Luftqualität ist heute schlecht. Lass die Fenster lieber zu.
+Die Sonne geht um sechs Uhr zwölf auf und um siebzehn Uhr drei unter.
+Heute Nacht ist Vollmond.
+Das Spiel beginnt um einundzwanzig Uhr, Dortmund gegen Bayern.
+Das Endergebnis war zwei zu eins.
+Dein Handy liegt auf dem Schreibtisch und ist im selben Netzwerk.
+Ich finde den Drucker nicht. Ist er eingeschaltet?
+Die Morgenzeitung ist gedruckt und wartet auf dich.
+Ich habe die Zeitung für halb sieben an jedem Werktag eingeplant.
+Die Sicherung ist ohne Fehler durchgelaufen.
+Es gibt ein Update für Rafiq. Soll ich es jetzt installieren?
+Rafiq ist auf dem neuesten Stand.
+Dein Mikrofon klingt klar.
+Ich höre ein Echo. Kopfhörer könnten helfen.
+Bei allem, was ein Ja braucht, höre ich nur auf deine Stimme.
+Ich habe deine Stimme nicht erkannt, deshalb kann ich das nicht bestätigen.
+Bitte sag ja oder nein.
+Ich nehme das als Nein.
+Fangen wir noch einmal von vorne an.
+Kann ich dir sonst noch helfen?
+Gute Nacht, schlaf gut.
+Bis morgen.
+Warte, lass mich kurz nachdenken.
+Hm, das ist interessant.
+Wirklich? Das wusste ich nicht.
+Oh, das sind aber viele Nachrichten!
+Oje, die Datei scheint leer zu sein.
+Na ja, das kommt darauf an, was du meinst.
+Eigentlich gibt es dafür einen schnelleren Weg.
+Übrigens, dein Kaffee ist seit zehn Minuten fertig.
+Ehrlich gesagt würde ich warten, bis der Preis fällt.
+Fairerweise muss man sagen, dass beide Möglichkeiten ihre Vorteile haben.
+Einerseits ist es billiger, andererseits viel langsamer.
+Welches gefällt dir besser, das rote oder das blaue?
+Meinst du diese Woche oder nächste Woche?
+Soll ich es von vorne abspielen?
+Möchtest du das Rezept in Gramm oder in Tassen?
+Für die Soße brauchst du zwei Knoblauchzehen, Olivenöl und eine Prise Salz.
+Back es fünfunddreißig Minuten, bis die Oberfläche goldbraun ist.
+Vorsichtig umrühren und vor dem Servieren fünf Minuten ruhen lassen.
+Fischers Fritz fischt frische Fische, frische Fische fischt Fischers Fritz.
+Blaukraut bleibt Blaukraut, und Brautkleid bleibt Brautkleid.
+Zwischen zwei Zwetschgenzweigen sitzen zwei zwitschernde Schwalben.
+Der Cottbuser Postkutscher putzt den Cottbuser Postkutschkasten.
+Acht alte Ameisen aßen am Abend Ananas.
+Null, eins, zwei, drei, vier, fünf, sechs, sieben, acht, neun, zehn.
+Elf, zwölf, dreizehn, vierzehn, fünfzehn, sechzehn, siebzehn, achtzehn, neunzehn, zwanzig.
+Dreißig, vierzig, fünfzig, sechzig, siebzig, achtzig, neunzig, hundert.
+Tausend, zehntausend, eine Million.
+Montag, Dienstag, Mittwoch, Donnerstag, Freitag, Samstag, Sonntag.
+Januar, Februar, März, April, Mai, Juni.
+Juli, August, September, Oktober, November, Dezember.
+Der erste, der zweite, der dritte, der vierte und der fünfte.
+Frühling, Sommer, Herbst und Winter.
+Norden, Süden, Osten und Westen.
+Rot, Orange, Gelb, Grün, Blau und Violett.
+Die Besprechung ist am einundzwanzigsten März um vierzehn Uhr.
+Das kostet hundertneunundzwanzig Euro neunundneunzig.
+Ruf mich an unter null eins fünf eins, zwei drei, vier fünf, sechs sieben.
+Der Code lautet sieben, vier, neun, zwei.
+Das Jahr zweitausendsechsundzwanzig war ein volles Jahr.
+Neunzehnhundertneunundsechzig liefen zum ersten Mal Menschen auf dem Mond.
+Version zwei Punkt eins ist jetzt verfügbar.
+Die Datei ist etwa dreieinhalb Megabyte groß.
+Dein Passwort sollte mindestens zwölf Zeichen lang sein.
+Das WLAN ist verbunden, aber das Signal ist schwach.
+Die Bluetooth-Kopfhörer sind verbunden.
+Die Bildschirmhelligkeit steht auf siebzig Prozent.
+Ich habe ein Bildschirmfoto gemacht und in deinen Bildern gespeichert.
+Ich klicke auf den blauen Knopf oben rechts.
+Ich tippe jetzt deine E-Mail-Adresse ein. Ist das in Ordnung?
+Ich habe aufgehört. Es wird nichts mehr angeklickt.
+Auf dem Bildschirm sehe ich ein Formular mit drei leeren Feldern.
+Die Fehlermeldung sagt, dass die Festplatte voll ist.
+Schließ ein paar Programme und öffne es dann noch einmal.
+Ein Neustart hilft meistens. Soll ich jetzt neu starten?
+Ich habe drei Dateien mit diesem Namen gefunden. Welche meinst du?
+Die neueste ist von gestern Abend.
+Ich lese dir den ersten Absatz vor.
+Das ist das Ende des Dokuments.
+Kapitel eins. Das Haus am Fluss.
+Es war schon spät, als der Regen endlich aufhörte.
+Der alte Mann öffnete das Fenster und lauschte der Stadt.
+Irgendwo in der Ferne bellte ein Hund den Mond an.
+Niemand wusste, woher der Brief gekommen war.
+Sie lächelte, faltete die Karte zusammen und ging zum Bahnhof.
+Der Zug hatte wie immer Verspätung, aber das schien niemanden zu stören.
+Sie redeten stundenlang über Gott und die Welt.
+Am Morgen war die Straße still und sauber.
+Aller Anfang ist schwer.
+Eine Sprache zu lernen braucht Geduld, Übung und ein bisschen Mut.
+Gute Gewohnheiten zu behalten ist leichter, als sie anzufangen.
+Wer nicht fragt, bleibt dumm.
+Danke für deine Geduld.
+Ich hoffe, das hilft dir.
+Das ist alles, was ich gefunden habe.
+Ich bin hier, falls du mich brauchst.
+Hallo! Wie geht's?
+Gut, danke, und dir?
+Was gibt's Neues?
+Abgemacht, so machen wir es.
+Halb so schlimm, wir finden eine Lösung.
+Super, die Idee gefällt mir!
+Nein, nein, so ist das überhaupt nicht.
+Moment, ich erkläre es dir.
+Herzlichen Glückwunsch! Das hast du dir verdient.
+Pass auf dich auf.
+Alles ist bereit, wir können los.
+Ich bin Rafiq, dein Assistent am Computer.
+Frag mich nach dem Wetter, deinen Terminen oder allem, was du wissen willst.
+Auf dem Wochenmarkt gibt es heute frische Erdbeeren und Spargel.
+Der Bäcker an der Ecke backt die besten Brezeln im ganzen Viertel.
+Dieses Jahr fahren wir im Juli an den Bodensee.
+Das Museum ist montags geschlossen, aber donnerstags bis spät abends geöffnet.
+Vergiss nicht, die Fahrkarte vor der Fahrt zu entwerten.
+In der Stadtbibliothek kann man auch Brettspiele ausleihen.
+Mein Großvater erzählte immer dieselbe Geschichte, und wir lachten jedes Mal.
+Der Nebel ist so dicht, dass man das andere Ufer nicht sieht.
+Eine Stunde Spazierengehen am Tag tut der Gesundheit schon sehr gut.
+Die Kinder spielen im Hof, während die Eltern sich unterhalten.
+Hör gut zu: Die Antwort steckt schon in der Frage.
+Warum nicht? Versuchen wir es einfach.
+Der neue Film soll ausgezeichnet sein.
+Was für ein schöner Tag für einen Spaziergang am Wasser!
+Gemütlichkeit, Fernweh und Schadenfreude sind schwer zu übersetzen.
+Die Straßenbahnhaltestelle liegt gleich gegenüber der Bäckerei.
+Grüß dich! Schön, dass du wieder da bist.

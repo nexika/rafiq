@@ -27,7 +27,8 @@ asks for install help gets [INSTALL_WITH_AI.md](INSTALL_WITH_AI.md).
 - `rafiq/audio.py` (16 kHz mono, 512-sample frames, Silero VAD), `rafiq/stt.py` (faster-whisper),
   `rafiq/kws.py` and `rafiq/enroll.py` (wake word by DTW against the user's recordings),
   `rafiq/wake.py` (fallback: the name in a tiny Whisper transcript), `rafiq/tts.py` (Azure, Piper,
-  Edge), `rafiq/scheduler.py` (timers and reminders saved to disk), `rafiq/panel.py` (local page).
+  Edge), `rafiq/scheduler.py` (timers and reminders saved to disk), `rafiq/panel.py` (local page),
+  `rafiq/voicedata.py` (recording a speaker to train Rafiq's own Piper voice, [docs/voice.md](docs/voice.md)).
 - `rafiq/config.py`: `~/.config/rafiq/config.toml` (`RAFIQ_HOME` moves it) merged over `DEFAULTS`;
   keys from the environment first. `config.example.toml` documents the user-facing settings.
 

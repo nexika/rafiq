@@ -1,0 +1,237 @@
+# Phrases pour la voix française de Rafiq (#250). Une par ligne ; les lignes qui commencent par # sont ignorées.
+# Les nombres, les heures et les abréviations sont écrits comme on les dit, pour que la voix apprenne à les dire.
+# Les phrases de Rafiq lui-même (lang.PHRASES) sont ajoutées après celles-ci par `rafiq record-voice fr`.
+
+Bonjour. Il est sept heures et demie, et le soleil est déjà levé.
+Il fait vingt-deux degrés à Paris en ce moment, avec un petit vent du nord.
+Demain matin, le ciel sera nuageux, avec de la pluie probable en fin d'après-midi.
+Prends un parapluie aujourd'hui, il y a quatre-vingts pour cent de risque d'averses.
+Il fera trente et un degrés au plus chaud, et dix-neuf cette nuit.
+Il est neuf heures et quart, nous sommes mardi onze novembre.
+Ton minuteur de dix minutes est terminé.
+J'ai lancé un minuteur de vingt-cinq minutes. Je te préviens quand il sonne.
+Je te rappellerai d'appeler ta mère à dix-huit heures.
+Tu as trois réunions aujourd'hui. La première commence à dix heures.
+Ton prochain rendez-vous est dans quarante minutes, au deuxième étage.
+Il n'y a rien dans ton agenda vendredi.
+J'ai ajouté le dîner avec Claire samedi à vingt heures.
+Tu as deux nouveaux courriels, un de ta banque et un de Julien.
+Julien écrit que les fichiers sont prêts et qu'il enverra le reste demain.
+Je te lis tout le message, ou seulement le résumé ?
+En bref, la réunion est déplacée à jeudi matin.
+Je n'ai rien trouvé là-dessus. Tu peux le dire autrement ?
+Désolé, je n'ai pas bien entendu. Tu peux répéter un peu plus lentement ?
+Un instant, je cherche.
+Je regarde les dernières nouvelles pour toi.
+Voici les titres du jour.
+Le premier article parle de la nouvelle ligne de tramway, qui ouvre le mois prochain.
+C'est tout pour les titres. Tu veux en savoir plus sur l'un d'eux ?
+Je lance ta playlist du matin sur Spotify.
+Je mets la musique en pause.
+Voici la chanson suivante.
+Le volume est à quarante pour cent.
+J'ai baissé un peu le son.
+J'ai coupé le son. Appelle-moi quand tu as besoin de moi.
+Cette chanson s'appelle La Vie en rose, d'Édith Piaf.
+J'écoute la chanson, donne-moi quelques secondes.
+Je n'ai pas reconnu la chanson. Tu peux monter un peu le son ?
+Les lumières du salon sont éteintes.
+J'ai réglé la chambre sur une lumière douce et chaude.
+La porte d'entrée est verrouillée.
+Ton colis de la librairie est en cours de livraison et devrait arriver avant midi.
+L'euro est à un dollar et huit centimes aujourd'hui.
+L'or a pris un virgule cinq pour cent cette semaine.
+Ta batterie est à quinze pour cent. Tu devrais brancher le chargeur.
+L'ordinateur chauffe beaucoup, un programme utilise presque tout le processeur.
+J'ai ouvert le navigateur.
+J'ai copié ça dans le presse-papiers.
+Voici ce que j'ai noté : du lait, des œufs et du pain frais.
+Ta liste de courses contient six articles.
+J'ai ajouté des tomates à la liste de courses.
+J'ai enregistré cette note dans tes idées de travail.
+Je l'envoie maintenant ? Dis oui ou non.
+D'accord, je ne l'envoie pas.
+C'est fait, le message est parti.
+J'ai annulé. Rien n'a été modifié.
+Tu es sûr de vouloir éteindre l'ordinateur ?
+Je ne peux pas faire ça sans te demander d'abord.
+Cette page m'a demandé quelque chose, mais je n'obéis qu'à toi.
+Je n'ouvre pas les pages du réseau de cet ordinateur.
+Je n'en suis pas sûr, alors je préfère ne pas deviner.
+Je crois que oui, mais vérifie sur le site officiel pour en être certain.
+Bonne question. Voyons ça étape par étape.
+D'abord, l'eau bout à une température plus basse en haut d'une montagne.
+C'est parce que la pression de l'air y est plus faible.
+En résumé, moins de pression, et l'eau a besoin de moins de chaleur pour bouillir.
+La photosynthèse, c'est la façon dont les plantes transforment la lumière, l'eau et l'air en sucre.
+La capitale de l'Australie est Canberra, pas Sydney.
+La Seine mesure environ sept cent soixante-dix-sept kilomètres.
+La lumière du soleil met un peu plus de huit minutes à nous parvenir.
+Une année sur Mars dure six cent quatre-vingt-sept jours.
+Trois fois sept, vingt et un.
+Quinze pour cent de deux cents, ça fait trente.
+La racine carrée de cent quarante-quatre est douze.
+Quinze heures trente, c'est trois heures et demie de l'après-midi.
+Il y a environ quatre cent soixante-dix kilomètres de Paris à Lyon.
+Ton vol part à six heures quarante du terminal trois.
+Le trajet dure environ deux heures dix en voiture.
+Il y a beaucoup de circulation sur le périphérique. En partant maintenant, tu arrives à neuf heures et quart.
+Dans deux cents mètres, tourne à gauche, puis reste à droite.
+La pharmacie la plus proche est ouverte jusqu'à minuit.
+Le restaurant est ouvert aujourd'hui de midi à vingt-trois heures.
+J'ai réservé une table pour quatre à vingt heures.
+Tu veux que je te lise les avis ?
+La plupart des gens disent que la cuisine est bonne, mais le service lent.
+Bonjour ! Qu'est-ce que je peux faire pour toi ?
+Bonsoir. Ta journée s'est bien passée ?
+De rien. Autre chose ?
+Je suis là. De quoi as-tu besoin ?
+Bien sûr, une seconde.
+Pas de problème.
+Avec plaisir.
+Je n'arrive pas à me connecter à Internet pour le moment.
+Je suis hors ligne, donc je ne peux agir que sur cet ordinateur.
+Internet est revenu, je peux de nouveau chercher.
+Claude ne répond pas, alors j'utilise le modèle local pour l'instant.
+Ça a pris plus de temps que d'habitude, désolé pour l'attente.
+J'y travaille encore, la page est longue.
+Voici le résumé de l'article en trois points.
+L'auteur explique que les villes doivent se préparer à la chaleur, pas seulement à la pluie.
+La vidéo explique comment les vaccins entraînent le système immunitaire.
+Dans cette partie, le professeur résout l'équation en mettant tout du même côté.
+Tu veux que je l'explique plus simplement ?
+Essayons une question. Quel est le passé composé du verbe aller ?
+Exactement. Bravo !
+Pas tout à fait. On dit je suis allé, pas j'ai allé.
+Revoyons ce qu'on a vu hier avant de commencer.
+Tu travailles depuis quarante minutes. Une petite pause ?
+La séance de concentration est finie. Étire-toi, bois un verre d'eau, et reviens dans cinq minutes.
+C'est l'heure de ton médicament.
+N'oublie pas ton rendez-vous chez le dentiste demain à onze heures.
+Joyeux anniversaire ! Je te souhaite une très belle année.
+Il pleut fort à Marseille, la route du littoral pourrait être fermée.
+Alerte au vent violent sur la Bretagne cet après-midi.
+La qualité de l'air est mauvaise aujourd'hui, garde les fenêtres fermées si tu peux.
+Le soleil se lève à six heures douze et se couche à dix-sept heures trois.
+C'est la pleine lune ce soir.
+Le match commence à vingt et une heures, Paris contre Marseille.
+Le score final est de deux à un.
+Ton téléphone est sur le bureau, connecté au même réseau.
+Je ne trouve pas l'imprimante. Elle est allumée ?
+Le journal du matin est imprimé, il t'attend.
+J'ai programmé le journal à six heures et demie, du lundi au vendredi.
+La sauvegarde s'est terminée sans erreur.
+Une mise à jour de Rafiq est disponible. Je l'installe maintenant ?
+Rafiq est à jour.
+Ton micro est clair.
+J'entends de l'écho. Un casque pourrait aider.
+Pour ce qui demande un oui, je ne réponds qu'à ta voix.
+Je n'ai pas reconnu ta voix, donc je ne peux pas confirmer.
+Dis oui ou non, s'il te plaît.
+Je considère que c'est non.
+Reprenons depuis le début.
+Je peux t'aider pour autre chose ?
+Bonne nuit, dors bien.
+À demain.
+Attends, laisse-moi réfléchir.
+Hum, c'est intéressant.
+Ah bon ? Je ne savais pas.
+Oh là là, ça fait beaucoup de messages !
+Oh non, on dirait que le fichier est vide.
+Eh bien, ça dépend de ce que tu veux dire.
+En fait, il y a une façon plus rapide de faire ça.
+Au fait, ton café est prêt depuis dix minutes.
+Franchement, j'attendrais que le prix baisse.
+Pour être honnête, les deux options ont leurs avantages.
+D'un côté c'est moins cher, de l'autre c'est beaucoup plus lent.
+Lequel tu préfères, le rouge ou le bleu ?
+Tu veux dire cette semaine ou la semaine prochaine ?
+Je le relance depuis le début ?
+Tu veux la recette en grammes ou en tasses ?
+Pour la sauce, il te faut deux gousses d'ail, de l'huile d'olive et une pincée de sel.
+Fais cuire trente-cinq minutes, jusqu'à ce que le dessus soit doré.
+Remue doucement, et laisse reposer cinq minutes avant de servir.
+Les chaussettes de l'archiduchesse sont-elles sèches, archi-sèches ?
+Un chasseur sachant chasser doit savoir chasser sans son chien.
+Si six scies scient six cyprès, six cent six scies scient six cent six cyprès.
+Ton thé t'a-t-il ôté ta toux ?
+Je veux et j'exige d'exquises excuses.
+Zéro, un, deux, trois, quatre, cinq, six, sept, huit, neuf, dix.
+Onze, douze, treize, quatorze, quinze, seize, dix-sept, dix-huit, dix-neuf, vingt.
+Trente, quarante, cinquante, soixante, soixante-dix, quatre-vingts, quatre-vingt-dix, cent.
+Mille, dix mille, un million.
+Lundi, mardi, mercredi, jeudi, vendredi, samedi, dimanche.
+Janvier, février, mars, avril, mai, juin.
+Juillet, août, septembre, octobre, novembre, décembre.
+Le premier, le deuxième, le troisième, le quatrième et le cinquième.
+Le printemps, l'été, l'automne et l'hiver.
+Le nord, le sud, l'est et l'ouest.
+Rouge, orange, jaune, vert, bleu et violet.
+La réunion est le vingt et un mars, à quatorze heures.
+Ça coûte cent vingt-neuf euros quatre-vingt-dix-neuf.
+Appelle-moi au zéro six, douze, trente-quatre, cinquante-six, soixante-dix-huit.
+Le code est sept, quatre, neuf, deux.
+L'année deux mille vingt-six a été bien remplie.
+En mille neuf cent soixante-neuf, l'homme a marché sur la Lune pour la première fois.
+La version deux point un est sortie.
+Le fichier fait environ trois mégaoctets et demi.
+Ton mot de passe doit contenir au moins douze caractères.
+Le wifi est connecté, mais le signal est faible.
+Le casque Bluetooth est connecté.
+La luminosité de l'écran est à soixante-dix pour cent.
+J'ai fait une capture d'écran et je l'ai enregistrée dans tes images.
+Je clique sur le bouton bleu en haut à droite.
+Je vais taper ton adresse électronique. C'est d'accord ?
+J'ai arrêté. Je ne clique plus sur rien.
+Voici ce que je vois à l'écran : un formulaire avec trois champs vides.
+L'erreur indique que le disque est plein.
+Ferme quelques programmes, puis rouvre-le.
+Un redémarrage règle souvent le problème. Je redémarre maintenant ?
+J'ai trouvé trois fichiers avec ce nom. Lequel veux-tu ?
+Le plus récent date d'hier soir.
+Je te lis le premier paragraphe.
+C'est la fin du document.
+Chapitre un. La maison au bord de la rivière.
+Il était tard quand la pluie s'arrêta enfin.
+Le vieil homme ouvrit la fenêtre et écouta la ville.
+Quelque part au loin, un chien aboyait à la lune.
+Personne ne savait d'où venait cette lettre.
+Elle sourit, plia la carte et marcha vers la gare.
+Le train était en retard, comme toujours, mais personne ne semblait s'en soucier.
+Ils parlèrent pendant des heures, de tout et de rien.
+Le matin, la rue était calme et propre.
+Petit à petit, l'oiseau fait son nid.
+Apprendre une langue demande de la patience, de la pratique et un peu de courage.
+Les bonnes habitudes sont plus faciles à garder qu'à prendre.
+Qui ne demande rien n'obtient rien.
+Merci de ta patience.
+J'espère que ça t'aide.
+C'est tout ce que j'ai trouvé.
+Je reste là si tu as besoin de moi.
+Salut ! Ça va ?
+Très bien, merci, et toi ?
+Quoi de neuf aujourd'hui ?
+Ça marche, on fait comme ça.
+Ce n'est pas grave, on va trouver une solution.
+Génial, j'adore cette idée !
+Non, non, ce n'est pas du tout ça.
+Attends, je vais t'expliquer.
+Félicitations ! Tu l'as bien mérité.
+Prends soin de toi.
+Tout est prêt, on peut y aller.
+Je suis Rafiq, ton assistant sur l'ordinateur.
+Demande-moi la météo, ton agenda, ou tout ce que tu veux savoir.
+Il y a des fraises, des framboises et des groseilles au marché ce matin.
+Le boulanger du coin fait les meilleurs croissants du quartier.
+Cette année, nous partons en vacances en Provence, au mois de juillet.
+Le musée est fermé le mardi, mais ouvert tard le jeudi soir.
+Il faut composter son billet avant de monter dans le train.
+La bibliothèque municipale prête aussi des jeux de société.
+Mon grand-père racontait toujours la même histoire, et on riait à chaque fois.
+Le brouillard est si épais qu'on ne voit pas l'autre rive.
+Une heure de marche par jour, c'est déjà beaucoup pour la santé.
+Les enfants jouent dans la cour pendant que les parents bavardent.
+Écoute bien : la réponse est cachée dans la question.
+Pourquoi pas ? Essayons, on verra bien.
+Il paraît que le nouveau film est excellent.
+Quelle belle journée pour une promenade au bord de l'eau !
