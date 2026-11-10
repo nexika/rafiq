@@ -547,7 +547,7 @@ def test_a_flatpak_on_windows_is_refused(windows):
 def test_the_tools_with_no_windows_version_do_not_load(windows):
     from rafiq.tools import not_here
 
-    assert {"gpu_status", "audio_output", "presence"} <= not_here()
+    assert {"gpu_status", "audio_output"} <= not_here() and "presence" not in not_here()
 
 
 def test_media_hand_gestures_and_the_screen_load_on_windows(windows):
@@ -1223,6 +1223,70 @@ def test_an_escape_already_held_when_a_run_starts_does_not_stop_it(windows, monk
     assert not watch.pressed.is_set()
 
 
+# ---------------------------------------------------------------------- presence: is the phone home? (#242)
+
+PING_REPLY = ("Pinging 192.168.1.20 with 32 bytes of data:\r\n"
+              "Reply from 192.168.1.20: bytes=32 time=4ms TTL=64\r\n")
+# Windows' ping exits with 0 when this computer itself answers that the phone can't be reached.
+PING_UNREACHABLE = ("Pinging 192.168.1.20 with 32 bytes of data:\r\n"
+                    "Reply from 192.168.1.10: Destination host unreachable.\r\n")
+
+
+def test_presence_on_windows_pings_once_for_a_second(windows):
+    from rafiq import presence
+
+    calls = []
+    assert presence.phone_seen("192.168.1.20", run=lambda args, timeout: calls.append(args) or
+                               subprocess.CompletedProcess(args, 0, PING_REPLY, ""))
+    assert calls == [["ping", "-n", "1", "-w", "1000", "192.168.1.20"]]
+
+
+@pytest.mark.parametrize("table, mac, seen", [
+    ("Reachable AA-BB-CC-DD-EE-FF\r\n", "", True),
+    ("Reachable AA-BB-CC-DD-EE-FF\r\n", "aa:bb:cc:dd:ee:ff", True),
+    ("Reachable 11-22-33-44-55-66\r\n", "aa:bb:cc:dd:ee:ff", False),
+    ("Stale AA-BB-CC-DD-EE-FF\r\n", "", False),              # answered once, maybe hours ago
+    ("Unreachable 00-00-00-00-00-00\r\n", "", False),
+    ("", "", False),
+])
+def test_a_sleeping_phone_on_windows_is_seen_by_get_netneighbor(windows, table, mac, seen):
+    from rafiq import presence
+
+    calls = []
+
+    def run(args, timeout):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, PING_UNREACHABLE if args[0] == "ping" else table, "")
+
+    assert presence.phone_seen("192.168.1.20", mac, run=run) is seen
+    assert calls[1][0] == "powershell.exe" and "Get-NetNeighbor -IPAddress '192.168.1.20'" in calls[1][-1]
+
+
+def test_a_phone_ip_that_is_not_an_address_never_reaches_powershell(windows):
+    from rafiq import presence
+
+    calls = []
+
+    def run(args, timeout):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 1, "", "")
+
+    assert presence.phone_seen("1.2.3.4'; Remove-Item ~ -Recurse; '", run=run) is False
+    assert not any(a[0] == "powershell.exe" for a in calls)
+
+
+def test_ping_output_windows_writes_in_its_own_code_page_is_read_without_failing(monkeypatch):
+    """ping writes in the console's OEM code page, which isn't the locale's: an undecodable byte must not count as
+    the phone being gone."""
+    from rafiq import presence
+
+    seen = {}
+    monkeypatch.setattr(presence.subprocess, "run", lambda args, **kw: seen.update(kw) or
+                        subprocess.CompletedProcess(args, 0, "", ""))
+    presence._run(["ping"])
+    assert seen.get("errors") == "replace"
+
+
 # ---------------------------------------------------------------------- rafiq doctor
 
 def win_probe(programs=(), modules=()):
@@ -1263,7 +1327,7 @@ def test_doctor_on_windows_lists_what_is_not_there_yet(windows, monkeypatch):
     monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
     check = doctor_checks(win_probe())["Not on Windows yet"]
     assert check.optional and "phone page" in check.detail
-    gone = ("dictation", "hand gestures", "media keys", "own sound", "screen", "playing")
+    gone = ("dictation", "hand gestures", "media keys", "own sound", "screen", "presence", "playing")
     assert not any(word in check.detail for word in gone)
 
 

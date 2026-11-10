@@ -139,8 +139,7 @@ def not_here() -> set[str]:
 
     if desktop.system() == "windows":         # #193: each waits for its Windows version
         return {"gpu_status",
-                "audio_output",                  # outputs through Core Audio's policy config
-                "presence"}                      # ping and the neighbour table, Linux's
+                "audio_output"}                  # outputs through Core Audio's policy config
     if desktop.system() != "mac":
         return set()
     missing = {"gpu_status",                     # reads AMD and NVIDIA cards through Linux's /sys and NVML
