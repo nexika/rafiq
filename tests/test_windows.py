@@ -670,8 +670,11 @@ class Sent:
 
 @pytest.fixture
 def sent(monkeypatch):
+    """SendInput recorded, and winrt hidden: the CI job on Windows installs the windows extra, and a test must never
+    reach Windows' real media sessions. A test that wants sessions installs its own (Sessions, or the winrt fixture)."""
     fake = Sent()
     monkeypatch.setattr(desktop, "send_input", fake)
+    monkeypatch.setitem(sys.modules, "winrt.windows.media.control", None)
     return fake
 
 
@@ -734,7 +737,7 @@ def test_gesture_keys_on_windows_press_in_order_and_release_in_reverse(windows, 
 
 
 @pytest.mark.parametrize("command", ["pause", "play"])
-def test_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command):
+def test_without_winrt_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command):
     from rafiq.gestures import SystemDesktop
 
     SystemDesktop(run=lambda args: pytest.fail("ran playerctl")).media(command)
@@ -744,14 +747,14 @@ def test_a_palm_or_a_thumb_on_windows_presses_play_pause(windows, sent, command)
 
 @pytest.mark.parametrize("action, key", [("toggle", "play_pause"), ("play", "play_pause"), ("pause", "play_pause"),
                                          ("next", "next"), ("previous", "previous"), ("stop", "stop")])
-def test_the_media_tool_on_windows_presses_the_media_key(windows, sent, action, key):
+def test_without_winrt_the_media_tool_on_windows_presses_the_media_key(windows, sent, action, key):
     from rafiq.tools import pc
 
     reply = pc.media(action, run=lambda args: pytest.fail("ran playerctl"))
     assert not reply.startswith("error") and [vk for vk, _, _ in sent.events] == [desktop.VK[key]] * 2
 
 
-def test_play_or_pause_on_windows_says_it_only_toggles(windows, sent):
+def test_without_winrt_play_or_pause_on_windows_says_it_only_toggles(windows, sent):
     from rafiq.tools import pc
 
     assert "toggle" in pc.media("pause")
