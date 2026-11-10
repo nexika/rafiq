@@ -10,7 +10,8 @@ screenshot each thing it names is, and the widget draws numbered circles there (
 kept in memory only, the latest one, and served to this computer's panel with its token; it never goes
 into the event stream or the logs.
 
-On Wayland the screenshot comes from the XDG desktop portal (GNOME asks the user to allow it); where
+On Windows the screenshot comes from Pillow's ImageGrab, every monitor in physical pixels. On Wayland it comes
+from the XDG desktop portal (GNOME asks the user to allow it); where
 there is no portal, from grim, gnome-screenshot or spectacle. Commands run as argument lists, with a
 timeout.
 """
@@ -182,6 +183,13 @@ run_command = subprocess.run     # the screenshot commands' runner, replaced in 
 def capture(portal: Callable[[], bytes] | None = None, run=None) -> bytes:
     """A PNG of the screen: the portal first, then the first screenshot command that works. Both are looked up
     when called, not bound as defaults, so replacing portal_screenshot (as the tests do) reaches every caller."""
+    from .. import desktop
+
+    if desktop.system() == "windows":          # no portal or screenshot program: Pillow's ImageGrab (#242)
+        try:
+            return desktop.win_screenshot()
+        except (OSError, ValueError) as exc:
+            raise ScreenError(f"could not take a screenshot ({exc})") from exc
     portal, run = portal or portal_screenshot, run or run_command
     errors = []
     try:

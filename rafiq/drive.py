@@ -113,8 +113,19 @@ _WORDS_WITH_ARGS = (r"(?:sh|bash|zsh|fish|python[\d.]*|perl|ruby|node|kill(?:all
 _SHELL = re.compile(
     rf"{_START}(?:{_COMMANDS})(?=\s|$)|{_START}{_WORDS_WITH_ARGS}"
     r"|(?:^|\s)(?:/usr)?/s?bin/\w|(?:^|\s)\\\w|\$\(|`|&&|\|\||\|\s*(?:sh|bash|zsh)\b|>\s*[/~]", re.IGNORECASE)
-# Typing a terminal's name means opening one, from the Activities search or an app launcher.
-_TERMINALS = re.compile(r"\b(?:terminal|console|konsole|ptyxis|xterm|kitty|alacritty|tilix|guake|wezterm|kgx)\b"
+# Windows (#242): commands of cmd and PowerShell, with the same rule for words that are also ordinary words (del,
+# start, format, reg, rd only with a /flag, a -flag, a drive or reg's own verbs after them), cmd's %VARIABLES%, the
+# registry's paths and the system folder.
+_WIN_COMMANDS = (r"diskpart|bcdedit|takeown|i?cacls|schtasks|runas|msiexec|winget|choco|scoop|wmic|certutil|"
+                 r"bitsadmin|mshta|rundll32|regsvr32|[cw]script|regedit|iwr|iex|irm|"
+                 r"(?:invoke|start|stop|restart|remove|set|new)-[a-z]+")
+_WIN_WITH_ARGS = r"(?:del|erase|rd|rmdir|format|start|reg|sc|attrib|copy|move|xcopy|robocopy|net)\s+(?:/|-|[a-z]:)"
+_WIN_SHELL = re.compile(rf"{_START}(?:{_WIN_COMMANDS})(?=\s|$)|{_START}{_WIN_WITH_ARGS}"
+                        rf"|{_START}reg\s+(?:add|delete|import|load|unload|save|restore|copy|export)\b"
+                        r"|%\w+%|\b[a-z]:\\windows\\|\bHK(?:CU|LM|CR|CC|U|EY_\w+)\\", re.IGNORECASE)
+# Typing a terminal's name means opening one, from the Activities search, an app launcher or the Start menu.
+_TERMINALS = re.compile(r"\b(?:terminal|console|konsole|ptyxis|xterm|kitty|alacritty|tilix|guake|wezterm|kgx|"
+                        r"powershell|pwsh|cmd(?:\.exe)?(?!\s+key)|command\s+prompt|conhost)\b"
                         r"|طرفية|الطرفية", re.IGNORECASE)
 
 
@@ -160,7 +171,7 @@ def guard(action: Action, typed: str = "") -> str | None:
             return f"typing more than {MAX_TYPED} characters at once"
         if _TERMINALS.search(action.text):
             return "typing a terminal's name, which opens one"
-        if _SHELL.search(typed + action.text):
+        if _SHELL.search(typed + action.text) or _WIN_SHELL.search(typed + action.text):
             return "typing what looks like a command for a terminal"
     return None
 

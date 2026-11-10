@@ -547,14 +547,13 @@ def test_a_flatpak_on_windows_is_refused(windows):
 def test_the_tools_with_no_windows_version_do_not_load(windows):
     from rafiq.tools import not_here
 
-    assert {"gpu_status", "click_on_screen", "operate_computer", "look_at_screen", "audio_output",
-            "presence"} <= not_here()
+    assert {"gpu_status", "audio_output", "presence"} <= not_here()
 
 
-def test_media_and_hand_gestures_load_on_windows(windows):
+def test_media_hand_gestures_and_the_screen_load_on_windows(windows):
     from rafiq.tools import not_here
 
-    assert not {"media", "hand_gestures"} & not_here()
+    assert not {"media", "hand_gestures", "look_at_screen", "click_on_screen", "operate_computer"} & not_here()
 
 
 # ---------------------------------------------------------------------- Rafiq's own programs, through its pipe (#242)
@@ -838,6 +837,234 @@ def test_a_windows_without_an_output_device_says_so_rather_than_to_install_sound
         audio.system_audio(1)
 
 
+# ---------------------------------------------------------------------- the screen: looking and clicking (#242)
+
+class Desk:
+    """The Win32 calls behind the screen, recorded: the virtual screen's place and size, the cursor, mouse and keys."""
+
+    def __init__(self, screen=(0, 0, 1920, 1080)):
+        self.screen, self.calls = screen, []
+
+    def install(self, monkeypatch):
+        self.at = None
+        monkeypatch.setattr(desktop, "virtual_screen", lambda: self.screen)
+        monkeypatch.setattr(desktop, "set_cursor", self.set_cursor)
+        monkeypatch.setattr(desktop, "cursor_position", lambda: self.at)
+        monkeypatch.setattr(desktop, "send_mouse", lambda events: self.calls.append(("mouse", list(events))))
+        monkeypatch.setattr(desktop, "send_input", lambda events: self.calls.append(("keys", list(events))))
+        return self
+
+    def set_cursor(self, x, y):
+        """Windows moves a point on no monitor to the nearest one: `gaps` are the points it moves elsewhere."""
+        self.calls.append(("cursor", x, y))
+        self.at = getattr(self, "gaps", {}).get((x, y), (x, y))
+
+
+UP = desktop.KEYEVENTF_KEYUP
+
+
+def test_the_screenshot_on_windows_comes_from_imagegrab_not_the_portal(windows, monkeypatch):
+    from rafiq.tools import screen
+
+    monkeypatch.setattr(desktop, "win_screenshot", lambda: b"\x89PNG fake")
+    out = screen.capture(portal=lambda: pytest.fail("asked the portal"),
+                         run=lambda *a, **k: pytest.fail("ran a screenshot command"))
+    assert out == b"\x89PNG fake"
+
+
+def test_a_screenshot_windows_refuses_says_why(windows, monkeypatch):
+    from rafiq.tools import screen
+
+    def denied():
+        raise OSError("screen grab failed")
+
+    monkeypatch.setattr(desktop, "win_screenshot", denied)
+    with pytest.raises(screen.ScreenError, match="screen grab failed"):
+        screen.capture(portal=lambda: pytest.fail("asked the portal"))
+
+
+def test_a_click_on_windows_lands_on_the_screenshot_s_point_of_the_virtual_screen(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk(screen=(-1920, 0, 3840, 1080)).install(monkeypatch)     # a second monitor on the left
+    pointer.click(2000.4, 500.6, 3840, 1080, env={})
+    assert desk.calls == [("cursor", 80, 501), ("mouse", [(desktop.MOUSEEVENTF_LEFTDOWN, 0),
+                                                          (desktop.MOUSEEVENTF_LEFTUP, 0)])]
+
+
+def test_no_click_on_windows_when_the_screen_changed_before_it(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pytest.raises(pointer.NotReady):
+        pointer.click(10, 10, 1920, 1080, env={}, ready=lambda: False)
+    assert desk.calls == []
+
+
+def test_no_click_on_windows_when_the_desktop_is_not_the_screenshot_s_size(windows, monkeypatch):
+    """A screenshot of another size (a monitor plugged in, a scale changed) could put the click off what was circled."""
+    from rafiq import pointer
+
+    desk = Desk(screen=(0, 0, 2560, 1440)).install(monkeypatch)
+    with pytest.raises(pointer.PointerError, match="size"):
+        pointer.click(10, 10, 1920, 1080, env={})
+    assert desk.calls == []
+
+
+def test_the_operator_on_windows_allows_the_pixel_its_shrunk_screenshot_rounds_off(windows, monkeypatch):
+    """drive.py rebuilds the size from the shrunk screenshot, which can round a pixel off: scaled, not refused."""
+    from rafiq import pointer
+
+    desk = Desk(screen=(0, 0, 1920, 1200)).install(monkeypatch)
+    with pointer.open_remote(1920, 1199, env={}) as remote:
+        remote.move(960, 1198)
+    assert desk.calls == [("cursor", 960, 1199)]
+
+
+def test_no_click_on_windows_off_the_screenshot(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pytest.raises(pointer.PointerError):
+        pointer.click(1920, 10, 1920, 1080, env={})
+    assert desk.calls == []
+
+
+def test_the_operator_on_windows_holds_modifiers_around_a_double_right_click(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote:
+        remote.click(100, 200, button="right", count=2, mods=("ctrl",))
+    right = [(desktop.MOUSEEVENTF_RIGHTDOWN, 0), (desktop.MOUSEEVENTF_RIGHTUP, 0)]
+    assert desk.calls == [("keys", [(0x11, 0, 0)]), ("cursor", 100, 200), ("mouse", right * 2),
+                          ("keys", [(0x11, 0, UP)])]
+
+
+def test_a_drag_on_windows_with_a_point_off_the_screen_presses_nothing(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote, pytest.raises(pointer.PointerError):
+        remote.drag([(10, 10), (5000, 10)])
+    assert desk.calls == []
+
+
+def test_a_ctrl_drag_on_windows_holds_ctrl_so_explorer_copies_rather_than_moves(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote:
+        remote.drag([(10, 10), (300, 40)], mods=("ctrl",))
+    assert desk.calls == [("keys", [(0x11, 0, 0)]), ("cursor", 10, 10), ("mouse", [(desktop.MOUSEEVENTF_LEFTDOWN, 0)]),
+                          ("cursor", 300, 40), ("mouse", [(desktop.MOUSEEVENTF_LEFTUP, 0)]), ("keys", [(0x11, 0, UP)])]
+
+
+def test_a_click_on_windows_between_monitors_of_different_sizes_is_refused(windows, monkeypatch):
+    """The screenshot is the monitors' bounding box; Windows moves a point in the black strip to the nearest monitor,
+    often onto its taskbar."""
+    from rafiq import pointer
+
+    desk = Desk(screen=(0, 0, 4480, 1440)).install(monkeypatch)
+    desk.gaps = {(500, 1300): (500, 1079)}
+    with pointer.open_remote(4480, 1440, env={}) as remote, pytest.raises(pointer.PointerError, match="no monitor"):
+        remote.click(500, 1300)
+    assert not [c for c in desk.calls if c[0] == "mouse"]
+
+
+def test_a_single_printable_key_on_windows_is_typed_as_itself_whatever_the_layout(windows, monkeypatch):
+    """VK_OEM_PLUS without Shift is "=", and VK_OEM_2 is "#" on a German keyboard."""
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote:
+        remote.key("plus")
+        remote.key("slash", repeat=2)
+    assert desk.calls == [("keys", desktop.text_events("+")), ("keys", desktop.text_events("//"))]
+
+
+def test_the_operator_on_windows_scrolls_down_and_right_by_notches(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote:
+        remote.scroll(50, 60, dx=2, dy=3)
+    # A positive wheel is up on Windows, and xdotool's dy > 0 is down; 120 is one notch.
+    assert desk.calls == [("cursor", 50, 60), ("mouse", [(desktop.MOUSEEVENTF_WHEEL, -360)]),
+                          ("mouse", [(desktop.MOUSEEVENTF_HWHEEL, 240)])]
+
+
+def test_the_operator_on_windows_presses_keys_by_their_virtual_key(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote:
+        remote.key("ctrl+shift+Tab")
+        remote.key("ctrl+L")
+        remote.key("Page_Down", repeat=2)
+    ext = desktop.KEYEVENTF_EXTENDEDKEY
+    assert desk.calls == [
+        ("keys", [(0x11, 0, 0), (0x10, 0, 0), (0x09, 0, 0), (0x09, 0, UP), (0x10, 0, UP), (0x11, 0, UP)]),
+        ("keys", [(0x11, 0, 0), (0x4C, 0, 0), (0x4C, 0, UP), (0x11, 0, UP)]),
+        ("keys", [(0x22, 0, ext), (0x22, 0, ext | UP)] * 2)]
+
+
+def test_a_key_windows_has_no_virtual_key_for_is_refused_before_anything_is_pressed(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote, pytest.raises(pointer.PointerError):
+        remote.key("ctrl+ش")
+    assert desk.calls == []
+
+
+def test_the_operator_on_windows_types_arabic_as_unicode_without_the_clipboard(windows, monkeypatch):
+    from rafiq import pointer
+
+    desk = Desk().install(monkeypatch)
+    with pointer.open_remote(1920, 1080, env={}) as remote:
+        assert remote.type("سلام") is None
+    assert desk.calls == [("keys", desktop.text_events("سلام"))]
+
+
+def test_doctor_on_windows_says_clicks_go_through_sendinput(windows, monkeypatch):
+    monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
+    check = doctor_checks(win_probe())["Click on screen"]
+    assert check.ok and "SendInput" in check.detail
+
+
+def test_escape_stops_an_operator_run_on_windows(windows, monkeypatch):
+    import threading
+
+    from rafiq import shortcuts
+
+    states = iter([False, False, True])
+    monkeypatch.setattr(desktop, "escape_down", lambda: next(states, True))
+    monkeypatch.setattr(shortcuts, "POLL_SECONDS", 0.001)
+    watch = shortcuts.EscapeWatch(bus_factory=lambda: pytest.fail("used D-Bus"))
+    assert watch.start()
+    assert watch.pressed.wait(2)
+    watch.stop()
+    assert not any(t.name == "rafiq-escape" for t in threading.enumerate())
+
+
+def test_an_escape_already_held_when_a_run_starts_does_not_stop_it(windows, monkeypatch):
+    from rafiq import shortcuts
+
+    seen = []
+    monkeypatch.setattr(desktop, "escape_down", lambda: seen.append(1) or True)
+    monkeypatch.setattr(shortcuts, "POLL_SECONDS", 0.001)
+    watch = shortcuts.EscapeWatch()
+    assert watch.start()
+    import time
+
+    deadline = time.monotonic() + 2
+    while len(seen) < 20 and time.monotonic() < deadline:
+        time.sleep(0.001)
+    watch.stop()
+    assert not watch.pressed.is_set()
+
+
 # ---------------------------------------------------------------------- rafiq doctor
 
 def win_probe(programs=(), modules=()):
@@ -878,7 +1105,7 @@ def test_doctor_on_windows_lists_what_is_not_there_yet(windows, monkeypatch):
     monkeypatch.setattr(desktop, "is_private", lambda folder, run=None: True)
     check = doctor_checks(win_probe())["Not on Windows yet"]
     assert check.optional and "phone page" in check.detail
-    assert not any(word in check.detail for word in ("dictation", "hand gestures", "media keys", "own sound"))
+    assert not any(word in check.detail for word in ("dictation", "hand gestures", "media keys", "own sound", "screen"))
 
 
 def test_doctor_on_windows_hears_the_computer_through_soundcard(windows, monkeypatch):

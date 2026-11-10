@@ -138,7 +138,7 @@ def not_here() -> set[str]:
     from .. import desktop
 
     if desktop.system() == "windows":         # #193: each waits for its Windows version
-        return {"gpu_status", "click_on_screen", "operate_computer", "look_at_screen",
+        return {"gpu_status",
                 "audio_output",                  # outputs through Core Audio's policy config
                 "presence"}                      # ping and the neighbour table, Linux's
     if desktop.system() != "mac":

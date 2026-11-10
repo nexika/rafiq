@@ -347,8 +347,8 @@ def text_events(text: str) -> list[tuple[int, int, int]]:
     return events
 
 
-def send_input(events: list[tuple[int, int, int]]) -> int:
-    """user32's SendInput, the one Win32 call behind typing and keys; OSError when Windows takes fewer than all."""
+def _win_input():
+    """user32 and SendInput's INPUT structure, built when first needed (ctypes.WinDLL exists only on Windows)."""
     import ctypes
 
     if not hasattr(ctypes, "WinDLL"):
@@ -372,12 +372,21 @@ def send_input(events: list[tuple[int, int, int]]) -> int:
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     user32.SendInput.argtypes = [w.UINT, ctypes.POINTER(Input), ctypes.c_int]
     user32.SendInput.restype = w.UINT
-    batch = (Input * len(events))(*[Input(1, Union(ki=KeybdInput(vk, scan, flags, 0, 0)))   # 1: INPUT_KEYBOARD
-                                    for vk, scan, flags in events])
-    sent = user32.SendInput(len(events), batch, ctypes.sizeof(Input))
-    if sent != len(events):
+    return ctypes, user32, Input, Union, KeybdInput, MouseInput
+
+
+def _send(user32, ctypes, Input, batch: list) -> int:
+    sent = user32.SendInput(len(batch), (Input * len(batch))(*batch), ctypes.sizeof(Input))
+    if sent != len(batch):
         raise ctypes.WinError(ctypes.get_last_error())
     return sent
+
+
+def send_input(events: list[tuple[int, int, int]]) -> int:
+    """user32's SendInput, the one Win32 call behind typing and keys; OSError when Windows takes fewer than all."""
+    ctypes, user32, Input, Union, KeybdInput, _ = _win_input()
+    return _send(user32, ctypes, Input, [Input(1, Union(ki=KeybdInput(vk, scan, flags, 0, 0)))   # 1: INPUT_KEYBOARD
+                                         for vk, scan, flags in events])
 
 
 def _sender(given: Callable | None) -> Callable:
@@ -407,6 +416,104 @@ def win_media(action: str, send: Callable | None = None) -> str:
     except OSError:
         return "error: Windows didn't take the media key"
     return WIN_MEDIA_DONE[key]
+
+
+# ---------------------------------------------------------------------- the screen and the mouse (Windows)
+
+# SendInput's mouse events, each (flags, data). The pointer is put in place with SetCursorPos first, so no event
+# carries coordinates; a wheel's data is notches of 120, positive up (or right).
+MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
+MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP = 0x0008, 0x0010
+MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP = 0x0020, 0x0040
+MOUSEEVENTF_WHEEL, MOUSEEVENTF_HWHEEL = 0x0800, 0x1000
+WHEEL_DELTA = 120
+VK_ESCAPE = 0x1B
+# Per-monitor DPI awareness (v2) for the calling thread: the screenshot, the virtual screen and the cursor are then
+# all in physical pixels. Without it, a screen at 150 % is scaled for Rafiq and a click lands off what was circled.
+DPI_PER_MONITOR_V2 = -4
+DPI_PER_MONITOR = -3           # Windows 10 1607 has the call but not v2; Pillow's grab uses this one
+
+
+class _PhysicalPixels:
+    """The calling thread in physical pixels while inside, as it was afterwards. Windows 10 before 1607 lacks the
+    call: the thread stays as it is, and the size check in pointer.WinRemote still refuses a mismatched click."""
+
+    def __enter__(self):
+        import ctypes
+
+        self.user32, self.before = ctypes.WinDLL("user32", use_last_error=True), None
+        setter = getattr(self.user32, "SetThreadDpiAwarenessContext", None)
+        if setter is not None:
+            setter.restype = ctypes.c_void_p
+            setter.argtypes = [ctypes.c_void_p]
+            self.before = setter(DPI_PER_MONITOR_V2) or setter(DPI_PER_MONITOR)
+        return self.user32
+
+    def __exit__(self, *exc) -> None:
+        if self.before:
+            self.user32.SetThreadDpiAwarenessContext(self.before)
+
+
+def _physical() -> _PhysicalPixels:
+    import ctypes
+
+    if not hasattr(ctypes, "WinDLL"):
+        raise OSError("the screen's Win32 calls are only on Windows")
+    return _PhysicalPixels()
+
+
+def win_screenshot() -> bytes:
+    """A PNG of every monitor (the virtual screen), in physical pixels, through Pillow's ImageGrab."""
+    import io
+
+    from PIL import ImageGrab
+
+    with _physical():
+        image = ImageGrab.grab(all_screens=True)
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def virtual_screen() -> tuple[int, int, int, int]:
+    """The virtual screen's left, top, width and height in physical pixels: every monitor, as the screenshot has it."""
+    with _physical() as user32:
+        return tuple(user32.GetSystemMetrics(i) for i in (76, 77, 78, 79))   # SM_XVIRTUALSCREEN ... SM_CYVIRTUALSCREEN
+
+
+def set_cursor(x: int, y: int) -> None:
+    import ctypes
+
+    with _physical() as user32:
+        if not user32.SetCursorPos(int(x), int(y)):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
+def cursor_position() -> tuple[int, int]:
+    """Where the cursor really is, in physical pixels: SetCursorPos moves a point on no monitor to the nearest one."""
+    import ctypes
+    from ctypes import wintypes
+
+    point = wintypes.POINT()
+    with _physical() as user32:
+        if not user32.GetCursorPos(ctypes.byref(point)):
+            raise ctypes.WinError(ctypes.get_last_error())
+    return point.x, point.y
+
+
+def send_mouse(events: list[tuple[int, int]]) -> int:
+    """SendInput's mouse events where the cursor is; OSError when Windows takes fewer than all (UIPI keeps them out of
+    a window running as administrator)."""
+    ctypes, user32, Input, Union, _, MouseInput = _win_input()
+    return _send(user32, ctypes, Input, [Input(0, Union(mi=MouseInput(0, 0, data & 0xFFFFFFFF, flags, 0, 0)))
+                                         for flags, data in events])                  # 0: INPUT_MOUSE
+
+
+def escape_down() -> bool:
+    """Whether Escape is held now, in any window: Windows lets a program read the keyboard's state."""
+    import ctypes
+
+    return bool(ctypes.WinDLL("user32").GetAsyncKeyState(VK_ESCAPE) & 0x8000)
 
 
 # ---------------------------------------------------------------------- apps (macOS)
